@@ -6,7 +6,7 @@ from models import User, FinancialData
 from auth import auth_bp, init_admin
 from datetime import datetime, timedelta
 import logging
-from sqlalchemy import func, case, and_, or_
+from sqlalchemy import func, case, and_, or_, extract
 import traceback
 
 # Настройка логирования
@@ -93,7 +93,7 @@ def get_projects():
         logger.error(f"Error in get_projects: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# API: Данные для отчета 1 (Эффективность проектов)
+# API: Данные для отчета 1
 @app.route('/api/report1/data', methods=['POST'])
 @login_required
 def get_report1_data():
@@ -116,11 +116,10 @@ def get_report1_data():
             date_to = datetime(today.year, today.month, 1) + timedelta(days=32)
             date_to = datetime(date_to.year, date_to.month, 1) - timedelta(days=1)
         
-        # Сохраняем период в сессии для других запросов
         session['report1_period_from'] = period_from
         session['report1_period_to'] = period_to
         
-        # Запрос данных по иерархии статей
+        # 1. Иерархия статей (БЕЗ фильтра распределения!)
         query = db.session.query(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
@@ -129,8 +128,8 @@ def get_report1_data():
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
             FinancialData.Проект.in_(projects),
-            FinancialData.Период.between(date_from, date_to),
-            FinancialData.Распределение == 'распределение'
+            FinancialData.Период.between(date_from, date_to)
+            # НЕТ фильтра по Распределению!
         ).group_by(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
@@ -140,7 +139,6 @@ def get_report1_data():
         
         results = query.all()
         
-        # Преобразуем в иерархическую структуру
         hierarchy = {}
         for row in results:
             level1 = row.СтатьяУровень1 or 'Без категории'
@@ -158,57 +156,43 @@ def get_report1_data():
             
             hierarchy[level1][level2][level4][row.Проект] = float(row.total or 0)
         
-        # Рассчитываем метрики ROI и маржинальность
-        # Для вашей структуры используем поле "Поток" для определения доходов/расходов
-        metrics_query = db.session.query(
-            FinancialData.Проект,
-            func.sum(
-                case(
-                    (FinancialData.Поток == 'Поступления', FinancialData.Сумма),
-                    else_=0
-                )
-            ).label('income'),
-            func.sum(
-                case(
-                    (FinancialData.Поток == 'Отток', FinancialData.Сумма),
-                    else_=0
-                )
-            ).label('expense')
-        ).filter(
-            FinancialData.Проект.in_(projects),
-            FinancialData.Период.between(date_from, date_to),
-            FinancialData.Распределение == 'распределение'
-        ).group_by(FinancialData.Проект)
-        
-        metrics_results = metrics_query.all()
-        
+        # 2. Метрики по проектам
+        # Вариант 1: По полю "Поток" (если оно правильно заполнено)
         metrics = {}
-        for row in metrics_results:
-            income = float(row.income or 0)
-            expense = float(row.expense or 0)
+        
+        for project in projects:
+            # Доходы (Поступления)
+            income_result = db.session.query(
+                func.sum(FinancialData.Сумма).label('total')
+            ).filter(
+                FinancialData.Проект == project,
+                FinancialData.Период.between(date_from, date_to),
+                FinancialData.Поток == 'Поступления'  # ИЛИ FinancialData.Сумма > 0
+            ).first()
+            
+            # Расходы (Отток)
+            expense_result = db.session.query(
+                func.sum(FinancialData.Сумма).label('total')
+            ).filter(
+                FinancialData.Проект == project,
+                FinancialData.Период.between(date_from, date_to),
+                FinancialData.Поток == 'Отток'  # ИЛИ FinancialData.Сумма < 0
+            ).first()
+            
+            income = float(income_result.total or 0) if income_result else 0
+            expense = abs(float(expense_result.total or 0)) if expense_result else 0
             net = income - expense
             
             margin = ((income - expense) / income * 100) if income > 0 else 0
             roi = ((income - expense) / expense * 100) if expense > 0 else 0
             
-            metrics[row.Проект] = {
+            metrics[project] = {
                 'margin': round(margin, 2),
                 'roi': round(roi, 2),
                 'income': round(income, 2),
                 'expense': round(expense, 2),
                 'net': round(net, 2)
             }
-        
-        # Добавляем проекты без данных
-        for project in projects:
-            if project not in metrics:
-                metrics[project] = {
-                    'margin': 0,
-                    'roi': 0,
-                    'income': 0,
-                    'expense': 0,
-                    'net': 0
-                }
         
         return jsonify({
             'success': True,
@@ -225,7 +209,6 @@ def get_report1_data():
 @login_required
 def get_top_expenses(project):
     try:
-        # Получаем период из сессии
         period_from = session.get('report1_period_from')
         period_to = session.get('report1_period_to')
         
@@ -238,19 +221,19 @@ def get_top_expenses(project):
             period_from = datetime.strptime(period_from, '%Y-%m-%d')
             period_to = datetime.strptime(period_to, '%Y-%m-%d')
         
+        # Расходы: Поток == 'Отток' ИЛИ Сумма < 0
         query = db.session.query(
             FinancialData.СтатьяУровень4,
             FinancialData.СтатьяУровень2,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
             FinancialData.Проект == project,
-            FinancialData.Поток == 'Отток',  # Только оттоки (расходы)
-            FinancialData.Распределение == 'распределение',
-            FinancialData.Период.between(period_from, period_to)
+            FinancialData.Период.between(period_from, period_to),
+            FinancialData.Поток == 'Отток'  # Только оттоки
         ).group_by(
             FinancialData.СтатьяУровень4,
             FinancialData.СтатьяУровень2
-        ).order_by(func.sum(FinancialData.Сумма).desc()).limit(10)
+        ).order_by(func.sum(FinancialData.Сумма).asc()).limit(10)  # ASC потому что отрицательные
         
         results = query.all()
         
@@ -259,7 +242,7 @@ def get_top_expenses(project):
             expenses.append({
                 'level4': row.СтатьяУровень4 or 'Без статьи',
                 'level2': row.СтатьяУровень2 or 'Без категории',
-                'total': round(abs(float(row.total or 0)), 2)
+                'total': round(abs(float(row.total or 0)), 2)  # Берем модуль
             })
         
         return jsonify({'success': True, 'expenses': expenses})
@@ -268,12 +251,12 @@ def get_top_expenses(project):
         logger.error(f"Error getting top expenses: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 2 (Сводная таблица)
+# API: Данные для отчета 2
 @app.route('/api/report2/data')
 @login_required
 def get_report2_data():
     try:
-        # Рассчитываем метрики для всех проектов
+        # Расчет по полю "Поток"
         query = db.session.query(
             FinancialData.Проект,
             func.sum(
@@ -290,8 +273,7 @@ def get_report2_data():
             ).label('expense')
         ).filter(
             FinancialData.Проект.isnot(None),
-            FinancialData.Проект != '',
-            FinancialData.Распределение == 'распределение'
+            FinancialData.Проект != ''
         ).group_by(FinancialData.Проект)
         
         results = query.all()
@@ -300,7 +282,7 @@ def get_report2_data():
         for row in results:
             project = row.Проект
             income = float(row.income or 0)
-            expense = float(row.expense or 0)
+            expense = abs(float(row.expense or 0))  # Расходы отрицательные
             net = income - expense
             
             # Определяем группу
@@ -335,19 +317,19 @@ def get_report2_data():
         logger.error(f"Error in report2: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 3 (Анализ статей)
+# API: Данные для отчета 3
 @app.route('/api/report3/data')
 @login_required
 def get_report3_data():
     try:
-        # Получаем данные для солнечной диаграммы
+        # Все статьи (БЕЗ фильтра распределения!)
         query = db.session.query(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
             FinancialData.СтатьяУровень4,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.Распределение == 'распределение'
+            FinancialData.СтатьяУровень1.isnot(None)
         ).group_by(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
@@ -360,31 +342,33 @@ def get_report3_data():
         sunburst_data = []
         for row in results:
             if row.СтатьяУровень1 and row.СтатьяУровень2 and row.СтатьяУровень4:
+                total = float(row.total or 0)
+                # Определяем тип по знаку суммы
+                article_type = 'income' if total >= 0 else 'expense'
+                
                 sunburst_data.append({
                     'ids': f"{row.СтатьяУровень1}/{row.СтатьяУровень2}/{row.СтатьяУровень4}",
                     'labels': row.СтатьяУровень4,
                     'parents': f"{row.СтатьяУровень1}/{row.СтатьяУровень2}",
-                    'values': abs(float(row.total or 0)),
-                    'type': 'income' if float(row.total or 0) >= 0 else 'expense'
+                    'values': abs(total),
+                    'type': article_type
                 })
         
-        # Топ-5 расходов
+        # Топ-5 расходов (отрицательные суммы)
         top_expenses = db.session.query(
             FinancialData.СтатьяУровень4,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.Поток == 'Отток',
-            FinancialData.Распределение == 'распределение'
+            FinancialData.Поток == 'Отток'  # или FinancialData.Сумма < 0
         ).group_by(FinancialData.СтатьяУровень4
-        ).order_by(func.sum(FinancialData.Сумма).desc()).limit(5).all()
+        ).order_by(func.sum(FinancialData.Сумма)).limit(5).all()
         
-        # Топ-5 доходов
+        # Топ-5 доходов (положительные суммы)
         top_incomes = db.session.query(
             FinancialData.СтатьяУровень4,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.Поток == 'Поступления',
-            FinancialData.Распределение == 'распределение'
+            FinancialData.Поток == 'Поступления'  # или FinancialData.Сумма > 0
         ).group_by(FinancialData.СтатьяУровень4
         ).order_by(func.sum(FinancialData.Сумма).desc()).limit(5).all()
         
@@ -405,13 +389,13 @@ def get_report3_data():
         logger.error(f"Error in report3: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 4 (Анализ ФОТ)
+# API: Данные для отчета 4
 @app.route('/api/report4/data')
 @login_required
 def get_report4_data():
     try:
-        # Получаем данные о ФОТ (ищем статьи связанные с ФОТ)
-        query = db.session.query(
+        # ФОТ статьи (ищем по ключевым словам)
+        fot_query = db.session.query(
             FinancialData.Проект,
             func.sum(FinancialData.Сумма).label('fot_total')
         ).filter(
@@ -421,21 +405,19 @@ def get_report4_data():
                 FinancialData.СтатьяУровень4.ilike('%сотрудник%'),
                 FinancialData.СтатьяУровень4.ilike('%персонал%')
             ),
-            FinancialData.Распределение == 'распределение',
             FinancialData.Поток == 'Отток'  # ФОТ - это расход
         ).group_by(FinancialData.Проект)
         
-        results = query.all()
+        results = fot_query.all()
         
-        # Рассчитываем общий ФОТ
-        total_fot = sum(float(row.fot_total or 0) for row in results)
+        total_fot = sum(abs(float(row.fot_total or 0)) for row in results)
         
         projects_fot = []
         for row in results:
             project = row.Проект
-            fot_total = float(row.fot_total or 0)
+            fot_total = abs(float(row.fot_total or 0))  # Берем модуль
             
-            # Оценка количества сотрудников (по среднему ФОТ 70к)
+            # Оценка количества сотрудников
             employees = max(1, int(fot_total / 70000))
             
             fot_per_employee = fot_total / employees if employees > 0 else 0
@@ -485,51 +467,72 @@ def get_report4_data():
         logger.error(f"Error in report4: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Проверка подключения и данных
-@app.route('/check-db')
-def check_db():
+# Отладка: посмотреть реальные данные
+@app.route('/debug/data-stats')
+def debug_data_stats():
     try:
-        # Проверка подключения
-        db.session.execute('SELECT 1')
+        # Проверяем структуру данных
+        stats = db.session.query(
+            FinancialData.Поток,
+            func.count('*').label('count'),
+            func.sum(FinancialData.Сумма).label('sum'),
+            func.avg(FinancialData.Сумма).label('avg')
+        ).group_by(FinancialData.Поток).all()
         
-        # Получаем статистику
-        total_records = db.session.query(func.count(FinancialData.id)).scalar()
-        total_projects = db.session.query(FinancialData.Проект).distinct().count()
-        date_range = db.session.query(
-            func.min(FinancialData.Период),
-            func.max(FinancialData.Период)
-        ).first()
+        # Проверяем поля распределения
+        dist_stats = db.session.query(
+            FinancialData.Распределение,
+            func.count('*').label('count')
+        ).group_by(FinancialData.Распределение).all()
+        
+        # Примеры данных
+        samples = db.session.query(
+            FinancialData.Проект,
+            FinancialData.Поток,
+            FinancialData.Сумма,
+            FinancialData.СтатьяУровень4,
+            FinancialData.Период
+        ).limit(10).all()
         
         return jsonify({
             'success': True,
-            'database_connected': True,
-            'records_count': total_records,
-            'projects_count': total_projects,
-            'date_range': {
-                'min': date_range[0].strftime('%Y-%m-%d') if date_range[0] else None,
-                'max': date_range[1].strftime('%Y-%m-%d') if date_range[1] else None
-            }
+            'flow_stats': [
+                {
+                    'flow': s.Поток,
+                    'count': s.count,
+                    'sum': s.sum,
+                    'avg': s.avg
+                }
+                for s in stats
+            ],
+            'distribution_stats': [
+                {
+                    'distribution': d.Распределение,
+                    'count': d.count
+                }
+                for d in dist_stats
+            ],
+            'samples': [
+                {
+                    'project': sample.Проект,
+                    'flow': sample.Поток,
+                    'amount': sample.Сумма,
+                    'article': sample.СтатьяУровень4,
+                    'period': sample.Период.strftime('%Y-%m-%d') if sample.Период else None
+                }
+                for sample in samples
+            ]
         })
+        
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Создание таблиц и инициализация админа
 with app.app_context():
     try:
-        # Создаем только таблицу users (FinancialData уже существует)
         db.create_all()
-        print('✅ Таблица users создана')
-        
         init_admin()
-        print('✅ Администратор инициализирован')
-        
-        # Проверяем подключение к базе
-        db.session.execute('SELECT 1')
-        print('✅ Подключение к базе установлено')
-        
+        print('✅ Приложение инициализировано')
     except Exception as e:
         print(f'❌ Ошибка инициализации: {e}')
 
