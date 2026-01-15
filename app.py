@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request, session
-from flask_login import login_required, current_user
+from flask_login import LoginManager, login_required, current_user  # Добавьте LoginManager
 from config import Config
 from database import db
 from models import FinancialData, User
@@ -18,6 +18,15 @@ app.config.from_object(Config)
 
 # Инициализация базы данных
 db.init_app(app)
+
+# Инициализация Flask-Login (ДОБАВЬТЕ ЭТОТ БЛОК)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'  # указываем endpoint для страницы входа
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 # Регистрация blueprint
 app.register_blueprint(auth_bp)
