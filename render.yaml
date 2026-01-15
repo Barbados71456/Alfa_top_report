@@ -5,19 +5,22 @@ services:
     plan: free
     region: frankfurt
     buildCommand: |
+      pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: finance_db
+          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: FLASK_ENV
         value: production
+      - key: PYTHON_VERSION
+        value: 3.11.6
 
 databases:
   - name: finance_db
     plan: free
     region: frankfurt
-    databaseName: finance_db
-    user: finance_user
