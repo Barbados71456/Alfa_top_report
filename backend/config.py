@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
-    POSTGRES_HOST: str = "localhost"
+    POSTGRES_HOST: str = "dpg-d4im0jh5pdvs73834210-a.oregon-postgres.render.com"
     POSTGRES_PORT: str = "5432"
-    POSTGRES_DB: str = "finance_db"
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = ""
+    POSTGRES_DB: str = "alfa_collection"
+    POSTGRES_USER: str = "alfa_collection_user"
+    POSTGRES_PASSWORD: str = "VpjoxZ45dhe6wxXicJEHLMySD6og4loj"
     
     SECRET_KEY: str = "your-secret-key-change-this"
     ALGORITHM: str = "HS256"
