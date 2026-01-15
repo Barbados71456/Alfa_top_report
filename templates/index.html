@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}Главная - Аналитика финансов{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1><i class="fas fa-tachometer-alt"></i> Панель управления</h1>
+        <p class="subtitle">Мониторинг эффективности проектов в реальном времени</p>
+    </div>
+
+    <div class="quick-stats">
+        <div class="stat-card">
+            <div class="stat-icon income">
+                <i class="fas fa-arrow-up"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Общие поступления</h3>
+                <p class="stat-value" id="total-income">Загрузка...</p>
+                <p class="stat-change" id="income-change">по сравнению с прошлым месяцем</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon expense">
+                <i class="fas fa-arrow-down"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Общий отток</h3>
+                <p class="stat-value" id="total-expense">Загрузка...</p>
+                <p class="stat-change" id="expense-change">по сравнению с прошлым месяцем</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon profit">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Чистая прибыль</h3>
+                <p class="stat-value" id="total-profit">Загрузка...</p>
+                <p class="stat-change" id="profit-change">по сравнению с прошлым месяцем</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon projects">
+                <i class="fas fa-project-diagram"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Активных проектов</h3>
+                <p class="stat-value" id="active-projects">Загрузка...</p>
+                <p class="stat-change" id="projects-change">всего в системе</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Проблемные проекты</h3>
+                <a href="{{ url_for('report1') }}" class="card-link">Подробнее →</a>
+            </div>
+            <div class="card-content">
+                <div id="problem-projects" class="loading">
+                    <div class="spinner"></div>
+                    <p>Загрузка данных...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3><i class="fas fa-star"></i> Топ-5 по ROI</h3>
+                <a href="{{ url_for('report2') }}" class="card-link">Подробнее →</a>
+            </div>
+            <div class="card-content">
+                <div id="top-roi" class="loading">
+                    <div class="spinner"></div>
+                    <p>Загрузка данных...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card full-width">
+            <div class="card-header">
+                <h3><i class="fas fa-chart-bar"></i> Динамика за 6 месяцев</h3>
+                <div class="period-selector">
+                    <select id="period-select">
+                        <option value="6">6 месяцев</option>
+                        <option value="3">3 месяца</option>
+                        <option value="12">12 месяцев</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-content">
+                <canvas id="trend-chart" height="250"></canvas>
+            </div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3><i class="fas fa-users"></i> Распределение по группам</h3>
+                <a href="{{ url_for('report4') }}" class="card-link">Подробнее →</a>
+            </div>
+            <div class="card-content">
+                <canvas id="group-chart" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3><i class="fas fa-clock"></i> Последние действия</h3>
+            </div>
+            <div class="card-content">
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <div class="activity-icon success">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="activity-details">
+                            <p>Данные обновлены</p>
+                            <span class="activity-time">Сегодня, 00:00</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon warning">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div class="activity-details">
+                            <p>Проект "Alpha DCA" требует внимания</p>
+                            <span class="activity-time">Вчера, 18:30</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon info">
+                            <i class="fas fa-user-plus"></i>
+                        </div>
+                        <div class="activity-details">
+                            <p>Новый пользователь добавлен</p>
+                            <span class="activity-time">2 дня назад</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <h3>Быстрые действия</h3>
+        <div class="actions-grid">
+            <a href="{{ url_for('report1') }}" class="action-btn">
+                <i class="fas fa-chart-pie"></i>
+                <span>Анализ эффективности</span>
+            </a>
+            <a href="{{ url_for('report2') }}" class="action-btn">
+                <i class="fas fa-file-export"></i>
+                <span>Экспорт данных</span>
+            </a>
+            <a href="{{ url_for('report3') }}" class="action-btn">
+                <i class="fas fa-search-dollar"></i>
+                <span>Детальный анализ</span>
+            </a>
+            <button class="action-btn" onclick="location.reload()">
+                <i class="fas fa-sync-alt"></i>
+                <span>Обновить данные</span>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardData();
+    
+    // Обновляем данные каждые 5 минут
+    setInterval(loadDashboardData, 300000);
+});
+
+function loadDashboardData() {
+    fetch('/api/report2/data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateDashboardStats(data.projects);
+                updateProblemProjects(data.projects);
+                updateTopROI(data.projects);
+                updateCharts(data.projects);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function updateDashboardStats(projects) {
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let positiveProjects = 0;
+    
+    projects.forEach(project => {
+        totalIncome += project.income;
+        totalExpense += project.expense;
+        if (project.net > 0) positiveProjects++;
+    });
+    
+    const totalProfit = totalIncome - totalExpense;
+    const profitMargin = totalIncome > 0 ? (totalProfit / totalIncome * 100) : 0;
+    
+    document.getElementById('total-income').textContent = formatCurrency(totalIncome);
+    document.getElementById('total-expense').textContent = formatCurrency(totalExpense);
+    document.getElementById('total-profit').textContent = formatCurrency(totalProfit);
+    document.getElementById('active-projects').textContent = projects.length;
+    
+    // Добавляем индикаторы
+    const profitChange = document.getElementById('profit-change');
+    if (profitMargin > 0) {
+        profitChange.innerHTML = `<span class="positive">+${profitMargin.toFixed(1)}% рентабельность</span>`;
+    } else {
+        profitChange.innerHTML = `<span class="negative">${profitMargin.toFixed(1)}% убыточность</span>`;
+    }
+}
+
+function updateProblemProjects(projects) {
+    const problemContainer = document.getElementById('problem-projects');
+    const negativeProjects = projects.filter(p => p.net < 0);
+    
+    if (negativeProjects.length === 0) {
+        problemContainer.innerHTML = '<p class="no-problems">Все проекты прибыльны 🎉</p>';
+        return;
+    }
+    
+    let html = '<div class="problem-list">';
+    negativeProjects.slice(0, 5).forEach(project => {
+        html += `
+            <div class="problem-item">
+                <span class="project-name">${project.project}</span>
+                <span class="project-loss">${formatCurrency(project.net)}</span>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    if (negativeProjects.length > 5) {
+        html += `<p class="more-problems">...и еще ${negativeProjects.length - 5} проектов</p>`;
+    }
+    
+    problemContainer.innerHTML = html;
+}
+
+function updateTopROI(projects) {
+    const topROIContainer = document.getElementById('top-roi');
+    const sortedByROI = [...projects].sort((a, b) => b.roi - a.roi);
+    
+    let html = '<div class="roi-list">';
+    sortedByROI.slice(0, 5).forEach(project => {
+        const roiClass = project.roi > 0 ? 'positive' : 'negative';
+        html += `
+            <div class="roi-item">
+                <span class="project-name">${project.project}</span>
+                <span class="roi-value ${roiClass}">${project.roi.toFixed(1)}%</span>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    topROIContainer.innerHTML = html;
+}
+
+function updateCharts(projects) {
+    // Группируем проекты по группам
+    const groups = {};
+    projects.forEach(project => {
+        if (!groups[project.group]) {
+            groups[project.group] = {
+                count: 0,
+                income: 0,
+                expense: 0
+            };
+        }
+        groups[project.group].count++;
+        groups[project.group].income += project.income;
+        groups[project.group].expense += project.expense;
+    });
+    
+    // Круговая диаграмма групп
+    const groupCtx = document.getElementById('group-chart').getContext('2d');
+    new Chart(groupCtx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(groups),
+            datasets: [{
+                data: Object.values(groups).map(g => g.count),
+                backgroundColor: [
+                    'rgba(0, 122, 255, 0.8)',
+                    'rgba(52, 199, 89, 0.8)',
+                    'rgba(255, 149, 0, 0.8)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(value);
+}
+</script>
+{% endblock %}

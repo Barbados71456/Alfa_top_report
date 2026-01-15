@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Отчет 1: Эффективность проектов{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="report-container">
+    <div class="report-header">
+        <h1><i class="fas fa-project-diagram"></i> Эффективность выбранных проектов</h1>
+        <p class="subtitle">Детальный анализ эффективности с иерархическим представлением данных</p>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="filters-card">
+        <div class="filter-section">
+            <div class="filter-group">
+                <label for="period-range">
+                    <i class="fas fa-calendar-alt"></i> Период
+                </label>
+                <div class="date-range">
+                    <input type="text" id="period-from" class="date-input" placeholder="От" readonly>
+                    <span class="date-separator">—</span>
+                    <input type="text" id="period-to" class="date-input" placeholder="До" readonly>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="project-groups">
+                    <i class="fas fa-layer-group"></i> Группы проектов
+                </label>
+                <div class="group-selector">
+                    <button type="button" class="group-btn active" data-group="all">Все</button>
+                    <button type="button" class="group-btn" data-group="DCA">DCA</button>
+                    <button type="button" class="group-btn" data-group="DP">DP</button>
+                    <button type="button" class="group-btn" data-group="Прочие">Прочие</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-section">
+            <div class="filter-group full-width">
+                <label>
+                    <i class="fas fa-check-circle"></i> Выбор проектов
+                </label>
+                <div class="projects-selector">
+                    <div class="projects-column">
+                        <h4>Доступные проекты</h4>
+                        <div class="projects-list" id="available-projects">
+                            <div class="loading-projects">
+                                <div class="spinner small"></div>
+                                <span>Загрузка проектов...</span>
+                            </div>
+                        </div>
+                        <div class="projects-search">
+                            <input type="text" id="search-projects" placeholder="Поиск проектов...">
+                        </div>
+                    </div>
+                    <div class="projects-actions">
+                        <button id="select-all" class="action-btn" title="Выбрать все">
+                            <i class="fas fa-angle-double-right"></i>
+                        </button>
+                        <button id="deselect-all" class="action-btn" title="Убрать все">
+                            <i class="fas fa-angle-double-left"></i>
+                        </button>
+                    </div>
+                    <div class="projects-column">
+                        <h4>Выбранные проекты (<span id="selected-count">0</span>)</h4>
+                        <div class="projects-list selected" id="selected-projects">
+                            <div class="empty-selection">
+                                <i class="fas fa-hand-pointer"></i>
+                                <p>Выберите проекты из списка слева</p>
+                            </div>
+                        </div>
+                        <div class="selected-actions">
+                            <button id="clear-selected" class="btn-secondary">
+                                <i class="fas fa-trash"></i> Очистить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button id="apply-filters" class="btn-primary">
+                <i class="fas fa-play"></i> Применить фильтры
+            </button>
+            <button id="reset-filters" class="btn-secondary">
+                <i class="fas fa-redo"></i> Сбросить
+            </button>
+            <button id="export-data" class="btn-success">
+                <i class="fas fa-file-export"></i> Экспорт Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Основное содержимое -->
+    <div class="content-grid">
+        <!-- Иерархическая таблица -->
+        <div class="main-content-card">
+            <div class="card-header">
+                <h3><i class="fas fa-sitemap"></i> Иерархия статей</h3>
+                <div class="card-actions">
+                    <button id="expand-all" class="btn-icon" title="Развернуть все">
+                        <i class="fas fa-expand-alt"></i>
+                    </button>
+                    <button id="collapse-all" class="btn-icon" title="Свернуть все">
+                        <i class="fas fa-compress-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div class="table-container">
+                    <div id="hierarchy-table" class="hierarchy-container">
+                        <div class="loading-data">
+                            <div class="spinner"></div>
+                            <p>Выберите проекты и нажмите "Применить фильтры"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Метрики и детализация -->
+        <div class="sidebar">
+            <!-- Метрики эффективности -->
+            <div class="metrics-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line"></i> Метрики эффективности</h3>
+                </div>
+                <div class="card-content">
+                    <div id="metrics-container">
+                        <div class="metrics-placeholder">
+                            <i class="fas fa-calculator"></i>
+                            <p>Метрики появятся после выбора проектов</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Детализация проекта -->
+            <div class="details-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-info-circle"></i> Детализация</h3>
+                </div>
+                <div class="card-content">
+                    <div id="project-details">
+                        <div class="details-placeholder">
+                            <i class="fas fa-mouse-pointer"></i>
+                            <p>Кликните на проект для детализации</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ТОП расходов (появится при клике на отрицательный проект) -->
+            <div class="top-expenses-card" style="display: none;">
+                <div class="card-header">
+                    <h3><i class="fas fa-exclamation-triangle"></i> ТОП-10 расходов</h3>
+                    <button id="close-expenses" class="btn-icon">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div id="top-expenses-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно с комментариями -->
+    <div class="modal" id="comments-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Комментарии</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="comments-content"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+<script src="{{ url_for('static', filename='js/report1.js') }}"></script>
+{% endblock %}

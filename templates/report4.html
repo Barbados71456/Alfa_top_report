@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Отчет 4: Анализ ФОТ и сотрудников{% endblock %}
+
+{% block content %}
+<div class="report-container">
+    <div class="report-header">
+        <h1><i class="fas fa-users"></i> Анализ ФОТ и распределения сотрудников</h1>
+        <p class="subtitle">Мониторинг затрат на персонал и эффективности сотрудников по проектам</p>
+    </div>
+
+    <!-- Сводная статистика -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <div class="summary-icon employees">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <div class="summary-content">
+                <h3>Всего сотрудников</h3>
+                <div class="summary-value" id="total-employees">0</div>
+                <div class="summary-change" id="employees-change">за весь период</div>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-icon fot">
+                <i class="fas fa-money-bill-wave"></i>
+            </div>
+            <div class="summary-content">
+                <h3>Общий ФОТ</h3>
+                <div class="summary-value" id="total-fot">0 ₽</div>
+                <div class="summary-change" id="fot-change">за весь период</div>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-icon avg">
+                <i class="fas fa-calculator"></i>
+            </div>
+            <div class="summary-content">
+                <h3>Средний ФОТ</h3>
+                <div class="summary-value" id="avg-fot">0 ₽</div>
+                <div class="summary-change" id="avg-fot-change">на сотрудника</div>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-icon projects">
+                <i class="fas fa-project-diagram"></i>
+            </div>
+            <div class="summary-content">
+                <h3>Проектов с ФОТ</h3>
+                <div class="summary-value" id="projects-count">0</div>
+                <div class="summary-change" id="projects-change">активных</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основное содержимое -->
+    <div class="content-grid">
+        <!-- Таблица ФОТ по проектам -->
+        <div class="main-content-card">
+            <div class="card-header">
+                <h3><i class="fas fa-table"></i> Распределение ФОТ по проектам</h3>
+                <div class="card-actions">
+                    <button id="refresh-fot" class="btn-icon" title="Обновить данные">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button id="export-fot" class="btn-success">
+                        <i class="fas fa-file-excel"></i> Экспорт
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div class="table-responsive">
+                    <table id="fot-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Проект</th>
+                                <th>Группа</th>
+                                <th>Сотрудников</th>
+                                <th>Сумма ФОТ</th>
+                                <th>ФОТ на сотрудника</th>
+                                <th>% от общего ФОТ</th>
+                                <th>Эффективность</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fot-table-body">
+                            <tr>
+                                <td colspan="8" class="loading-cell">
+                                    <div class="spinner"></div>
+                                    <span>Загрузка данных...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="2">Итого:</th>
+                                <th id="total-employees-footer">0</th>
+                                <th id="total-fot-footer">0 ₽</th>
+                                <th id="avg-fot-footer">0 ₽</th>
+                                <th>100%</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Графики -->
+        <div class="sidebar">
+            <!-- Распределение сотрудников по проектам -->
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-pie"></i> Сотрудники по группам</h3>
+                    <select id="employees-chart-type" class="chart-select">
+                        <option value="pie">Круговая</option>
+                        <option value="doughnut">Кольцевая</option>
+                        <option value="bar">Столбчатая</option>
+                    </select>
+                </div>
+                <div class="card-content">
+                    <canvas id="employees-chart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Соотношение ФОТ/Результат -->
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-balance-scale"></i> ФОТ vs Результат</h3>
+                </div>
+                <div class="card-content">
+                    <canvas id="fot-result-chart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Динамика ФОТ -->
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line"></i> Динамика ФОТ</h3>
+                    <select id="trend-period" class="chart-select">
+                        <option value="6">6 месяцев</option>
+                        <option value="12">12 месяцев</option>
+                    </select>
+                </div>
+                <div class="card-content">
+                    <canvas id="fot-trend-chart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Детализация проекта -->
+    <div class="details-section" id="project-details-section" style="display: none;">
+        <div class="details-header">
+            <h3 id="details-project-name">Детали проекта</h3>
+            <button class="btn-icon" onclick="hideProjectDetails()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="details-grid">
+            <!-- Информация о сотрудниках -->
+            <div class="details-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-user-tie"></i> Информация о сотрудниках</h4>
+                </div>
+                <div class="card-content">
+                    <div class="employees-info" id="project-employees"></div>
+                </div>
+            </div>
+
+            <!-- Детализация ФОТ -->
+            <div class="details-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-money-check-alt"></i> Детализация ФОТ</h4>
+                </div>
+                <div class="card-content">
+                    <div class="fot-details" id="project-fot-details"></div>
+                </div>
+            </div>
+
+            <!-- Эффективность -->
+            <div class="details-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-chart-line"></i> Эффективность</h4>
+                </div>
+                <div class="card-content">
+                    <div class="efficiency-metrics" id="project-efficiency"></div>
+                </div>
+            </div>
+
+            <!-- История ФОТ -->
+            <div class="details-card full-width">
+                <div class="card-header">
+                    <h4><i class="fas fa-history"></i> История изменений ФОТ</h4>
+                </div>
+                <div class="card-content">
+                    <canvas id="project-history-chart" height="150"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Аналитика эффективности -->
+    <div class="analytics-section">
+        <div class="section-header">
+            <h3><i class="fas fa-chart-bar"></i> Аналитика эффективности ФОТ</h3>
+        </div>
+        
+        <div class="analytics-grid">
+            <!-- Топ проектов по эффективности ФОТ -->
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-trophy"></i> Топ-5 по эффективности ФОТ</h4>
+                </div>
+                <div class="card-content">
+                    <div class="top-list" id="top-fot-efficiency"></div>
+                </div>
+            </div>
+
+            <!-- Проблемные проекты -->
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-exclamation-triangle"></i> Высокие затраты на ФОТ</h4>
+                </div>
+                <div class="card-content">
+                    <div class="warning-list" id="high-fot-projects"></div>
+                </div>
+            </div>
+
+            <!-- Рекомендации -->
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-lightbulb"></i> Рекомендации</h4>
+                </div>
+                <div class="card-content">
+                    <div class="recommendations" id="fot-recommendations">
+                        <div class="recommendation">
+                            <i class="fas fa-check-circle positive"></i>
+                            <span>Оптимизируйте распределение сотрудников между проектами</span>
+                        </div>
+                        <div class="recommendation">
+                            <i class="fas fa-check-circle positive"></i>
+                            <span>Рассмотрите возможность аутсорсинга для проектов с низкой эффективностью</span>
+                        </div>
+                        <div class="recommendation">
+                            <i class="fas fa-check-circle positive"></i>
+                            <span>Внедрите систему KPI для повышения эффективности сотрудников</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно с деталями сотрудника -->
+    <div class="modal" id="employee-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="employee-name">Информация о сотруднике</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="employee-details">
+                    <div class="employee-photo">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="employee-info">
+                        <div class="info-row">
+                            <span class="info-label">Проект:</span>
+                            <span class="info-value" id="modal-project"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Группа:</span>
+                            <span class="info-value" id="modal-group"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ФОТ:</span>
+                            <span class="info-value" id="modal-fot"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Период работы:</span>
+                            <span class="info-value" id="modal-period"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Комментарии:</span>
+                            <span class="info-value" id="modal-comments"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="employee-activity">
+                    <h4>Активность по проекту</h4>
+                    <canvas id="employee-activity-chart" height="100"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeEmployeeModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/report4.js') }}"></script>
+{% endblock %}

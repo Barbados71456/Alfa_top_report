@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Отчет 3: Анализ статей расходов/доходов{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="report-container">
+    <div class="report-header">
+        <h1><i class="fas fa-sun"></i> Анализ статей расходов и доходов</h1>
+        <p class="subtitle">Визуализация структуры доходов и расходов по иерархии статей</p>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="filters-card">
+        <div class="filter-row">
+            <div class="filter-group">
+                <label><i class="fas fa-calendar"></i> Период</label>
+                <input type="text" id="report3-period" class="date-range-input" placeholder="Выберите период">
+            </div>
+            
+            <div class="filter-group">
+                <label><i class="fas fa-filter"></i> Тип операции</label>
+                <select id="operation-type" class="select-input">
+                    <option value="all">Все операции</option>
+                    <option value="income">Только доходы</option>
+                    <option value="expense">Только расходы</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label><i class="fas fa-project-diagram"></i> Уровень детализации</label>
+                <select id="detail-level" class="select-input">
+                    <option value="1">Уровень 1 (Основные категории)</option>
+                    <option value="2">Уровень 2 (Подкатегории)</option>
+                    <option value="4">Уровень 4 (Детальные статьи)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="filter-row">
+            <div class="filter-group full-width">
+                <label><i class="fas fa-tags"></i> Статьи для анализа</label>
+                <div class="tags-container">
+                    <div class="tags-list" id="selected-articles">
+                        <span class="tag">Все статьи</span>
+                    </div>
+                    <button class="btn-icon" id="edit-articles">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="filter-actions">
+            <button id="apply-analysis" class="btn-primary">
+                <i class="fas fa-play"></i> Применить анализ
+            </button>
+            <button id="reset-analysis" class="btn-secondary">
+                <i class="fas fa-redo"></i> Сбросить
+            </button>
+        </div>
+    </div>
+
+    <!-- Основное содержимое -->
+    <div class="content-grid">
+        <!-- Солнечная диаграмма -->
+        <div class="main-content-card">
+            <div class="card-header">
+                <h3><i class="fas fa-sun"></i> Солнечная диаграмма (Sunburst)</h3>
+                <div class="card-actions">
+                    <button id="zoom-in" class="btn-icon" title="Увеличить">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button id="zoom-out" class="btn-icon" title="Уменьшить">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <button id="reset-zoom" class="btn-icon" title="Сбросить масштаб">
+                        <i class="fas fa-expand-arrows-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div id="sunburst-container">
+                    <div class="chart-container">
+                        <canvas id="sunburst-chart" width="800" height="600"></canvas>
+                    </div>
+                    <div class="sunburst-legend" id="sunburst-legend"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Боковая панель с аналитикой -->
+        <div class="sidebar">
+            <!-- Топ-5 расходов -->
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-arrow-down"></i> Топ-5 расходных статей</h3>
+                </div>
+                <div class="card-content">
+                    <div id="top-expenses-list" class="analytics-list">
+                        <div class="loading-analytics">
+                            <div class="spinner small"></div>
+                            <span>Загрузка данных...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Топ-5 доходов -->
+            <div class="analytics-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-arrow-up"></i> Топ-5 доходных статей</h3>
+                </div>
+                <div class="card-content">
+                    <div id="top-incomes-list" class="analytics-list">
+                        <div class="loading-analytics">
+                            <div class="spinner small"></div>
+                            <span>Загрузка данных...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Статистика -->
+            <div class="stats-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Статистика</h3>
+                </div>
+                <div class="card-content">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">Всего статей</div>
+                            <div class="stat-value" id="total-articles">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Статей доходов</div>
+                            <div class="stat-value positive" id="income-articles">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Статей расходов</div>
+                            <div class="stat-value negative" id="expense-articles">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Общая сумма</div>
+                            <div class="stat-value" id="total-amount">0 ₽</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Детализация статьи -->
+            <div class="details-card" id="article-details" style="display: none;">
+                <div class="card-header">
+                    <h3 id="article-title">Детали статьи</h3>
+                    <button class="btn-icon" onclick="hideArticleDetails()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="card-content">
+                    <div class="article-info">
+                        <div class="info-item">
+                            <span class="info-label">Уровень 1:</span>
+                            <span class="info-value" id="detail-level1"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Уровень 2:</span>
+                            <span class="info-value" id="detail-level2"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Уровень 4:</span>
+                            <span class="info-value" id="detail-level4"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Сумма:</span>
+                            <span class="info-value" id="detail-amount"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Тип:</span>
+                            <span class="info-value" id="detail-type"></span>
+                        </div>
+                    </div>
+                    <div class="article-chart">
+                        <canvas id="article-trend-chart" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица данных -->
+    <div class="data-table-card">
+        <div class="card-header">
+            <h3><i class="fas fa-table"></i> Табличное представление</h3>
+            <div class="table-actions">
+                <button id="export-table" class="btn-success">
+                    <i class="fas fa-file-excel"></i> Экспорт
+                </button>
+            </div>
+        </div>
+        <div class="card-content">
+            <div class="table-responsive">
+                <table id="articles-table" class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>Уровень 1</th>
+                            <th>Уровень 2</th>
+                            <th>Уровень 4</th>
+                            <th>Тип</th>
+                            <th>Сумма</th>
+                            <th>% от общего</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="articles-table-body">
+                        <!-- Данные загружаются через JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно выбора статей -->
+<div class="modal" id="articles-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Выбор статей для анализа</h3>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-search">
+                <input type="text" id="search-articles" placeholder="Поиск статей...">
+            </div>
+            <div class="articles-list-container">
+                <div class="articles-column">
+                    <h4>Доходные статьи</h4>
+                    <div class="articles-list" id="income-articles-list"></div>
+                </div>
+                <div class="articles-column">
+                    <h4>Расходные статьи</h4>
+                    <div class="articles-list" id="expense-articles-list"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeArticlesModal()">Отмена</button>
+            <button class="btn-primary" onclick="saveArticlesSelection()">Сохранить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="{{ url_for('static', filename='js/report3.js') }}"></script>
+{% endblock %}
