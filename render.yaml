@@ -1,8 +1,9 @@
 services:
-  # Бэкенд на Python
   - type: web
     name: alfa-report-backend
     env: python
+    runtime: python
+    pythonVersion: "3.11.0"  # Явно указываем версию
     buildCommand: |
       pip install -r backend/requirements.txt
     startCommand: |
@@ -14,20 +15,7 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
-    healthCheckPath: /docs
     autoDeploy: true
-
-  # Фронтенд (статический)
-  - type: web
-    name: alfa-report-frontend
-    env: static
-    buildCommand: |
-      echo "Building static frontend..."
-    staticPublishPath: ./frontend
-    routes:
-      - type: rewrite
-        source: /api/*
-        destination: https://alfa-report-backend.onrender.com/api/*
 
 databases:
   - name: alfa-report-db
