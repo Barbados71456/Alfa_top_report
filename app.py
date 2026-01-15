@@ -267,7 +267,7 @@ def get_top_expenses(project):
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
             FinancialData.Проект == project,
-            FinancialData.Период.between(date_from, date_to),
+            
             FinancialData.СтатьяУровень1 == 'Отток по ОД'  # ТОЛЬКО РАСХОДЫ!
         ).group_by(
             FinancialData.СтатьяУровень4,
