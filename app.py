@@ -165,8 +165,8 @@ def get_report1_data():
             FinancialData.Проект,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.Проект.in_(projects),
-            FinancialData.Период.between(date_from, date_to)
+            FinancialData.Проект.in_(projects)
+
         ).group_by(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
