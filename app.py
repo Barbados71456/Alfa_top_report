@@ -6,7 +6,7 @@ from models import User, FinancialData
 from auth import auth_bp, init_admin
 from datetime import datetime, timedelta
 import logging
-from sqlalchemy import func, case, and_
+from sqlalchemy import func, case, and_, or_
 import traceback
 
 # Настройка логирования
@@ -37,25 +37,21 @@ app.register_blueprint(auth_bp, url_prefix='/auth')
 def index():
     return render_template('index.html')
 
-# Отчет 1: Эффективность выбранных проектов
 @app.route('/report1')
 @login_required
 def report1():
     return render_template('report1.html')
 
-# Отчет 2: Сводная таблица всех проектов
 @app.route('/report2')
 @login_required
 def report2():
     return render_template('report2.html')
 
-# Отчет 3: Анализ статей расходов/доходов
 @app.route('/report3')
 @login_required
 def report3():
     return render_template('report3.html')
 
-# Отчет 4: Анализ ФОТ и сотрудников
 @app.route('/report4')
 @login_required
 def report4():
@@ -97,7 +93,7 @@ def get_projects():
         logger.error(f"Error in get_projects: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# API: Данные для отчета 1
+# API: Данные для отчета 1 (Эффективность проектов)
 @app.route('/api/report1/data', methods=['POST'])
 @login_required
 def get_report1_data():
@@ -120,7 +116,11 @@ def get_report1_data():
             date_to = datetime(today.year, today.month, 1) + timedelta(days=32)
             date_to = datetime(date_to.year, date_to.month, 1) - timedelta(days=1)
         
-        # Запрос данных
+        # Сохраняем период в сессии для других запросов
+        session['report1_period_from'] = period_from
+        session['report1_period_to'] = period_to
+        
+        # Запрос данных по иерархии статей
         query = db.session.query(
             FinancialData.СтатьяУровень1,
             FinancialData.СтатьяУровень2,
@@ -158,30 +158,26 @@ def get_report1_data():
             
             hierarchy[level1][level2][level4][row.Проект] = float(row.total or 0)
         
-        # Рассчитываем метрики
+        # Рассчитываем метрики ROI и маржинальность
+        # Для вашей структуры используем поле "Поток" для определения доходов/расходов
         metrics_query = db.session.query(
             FinancialData.Проект,
             func.sum(
                 case(
-                    (and_(
-                        FinancialData.СтатьяУровень1 == 'Поступления по ОД',
-                        FinancialData.Распределение == 'распределение'
-                    ), FinancialData.Сумма),
+                    (FinancialData.Поток == 'Поступления', FinancialData.Сумма),
                     else_=0
                 )
             ).label('income'),
             func.sum(
                 case(
-                    (and_(
-                        FinancialData.СтатьяУровень1 == 'Отток по ОД',
-                        FinancialData.Распределение == 'распределение'
-                    ), FinancialData.Сумма),
+                    (FinancialData.Поток == 'Отток', FinancialData.Сумма),
                     else_=0
                 )
             ).label('expense')
         ).filter(
             FinancialData.Проект.in_(projects),
-            FinancialData.Период.between(date_from, date_to)
+            FinancialData.Период.between(date_from, date_to),
+            FinancialData.Распределение == 'распределение'
         ).group_by(FinancialData.Проект)
         
         metrics_results = metrics_query.all()
@@ -203,6 +199,17 @@ def get_report1_data():
                 'net': round(net, 2)
             }
         
+        # Добавляем проекты без данных
+        for project in projects:
+            if project not in metrics:
+                metrics[project] = {
+                    'margin': 0,
+                    'roi': 0,
+                    'income': 0,
+                    'expense': 0,
+                    'net': 0
+                }
+        
         return jsonify({
             'success': True,
             'hierarchy': hierarchy,
@@ -210,7 +217,7 @@ def get_report1_data():
         })
         
     except Exception as e:
-        logger.error(f"Error in report1: {str(e)}")
+        logger.error(f"Error in report1: {str(e)}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # API: ТОП-10 расходов для проекта
@@ -218,7 +225,7 @@ def get_report1_data():
 @login_required
 def get_top_expenses(project):
     try:
-        # Получаем период
+        # Получаем период из сессии
         period_from = session.get('report1_period_from')
         period_to = session.get('report1_period_to')
         
@@ -237,7 +244,7 @@ def get_top_expenses(project):
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
             FinancialData.Проект == project,
-            FinancialData.СтатьяУровень1 == 'Отток по ОД',
+            FinancialData.Поток == 'Отток',  # Только оттоки (расходы)
             FinancialData.Распределение == 'распределение',
             FinancialData.Период.between(period_from, period_to)
         ).group_by(
@@ -261,7 +268,7 @@ def get_top_expenses(project):
         logger.error(f"Error getting top expenses: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 2
+# API: Данные для отчета 2 (Сводная таблица)
 @app.route('/api/report2/data')
 @login_required
 def get_report2_data():
@@ -271,25 +278,20 @@ def get_report2_data():
             FinancialData.Проект,
             func.sum(
                 case(
-                    (and_(
-                        FinancialData.СтатьяУровень1 == 'Поступления по ОД',
-                        FinancialData.Распределение == 'распределение'
-                    ), FinancialData.Сумма),
+                    (FinancialData.Поток == 'Поступления', FinancialData.Сумма),
                     else_=0
                 )
             ).label('income'),
             func.sum(
                 case(
-                    (and_(
-                        FinancialData.СтатьяУровень1 == 'Отток по ОД',
-                        FinancialData.Распределение == 'распределение'
-                    ), FinancialData.Сумма),
+                    (FinancialData.Поток == 'Отток', FinancialData.Сумма),
                     else_=0
                 )
             ).label('expense')
         ).filter(
             FinancialData.Проект.isnot(None),
-            FinancialData.Проект != ''
+            FinancialData.Проект != '',
+            FinancialData.Распределение == 'распределение'
         ).group_by(FinancialData.Проект)
         
         results = query.all()
@@ -333,7 +335,7 @@ def get_report2_data():
         logger.error(f"Error in report2: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 3
+# API: Данные для отчета 3 (Анализ статей)
 @app.route('/api/report3/data')
 @login_required
 def get_report3_data():
@@ -371,17 +373,17 @@ def get_report3_data():
             FinancialData.СтатьяУровень4,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.СтатьяУровень1 == 'Отток по ОД',
+            FinancialData.Поток == 'Отток',
             FinancialData.Распределение == 'распределение'
         ).group_by(FinancialData.СтатьяУровень4
-        ).order_by(func.sum(FinancialData.Сумма)).limit(5).all()
+        ).order_by(func.sum(FinancialData.Сумма).desc()).limit(5).all()
         
         # Топ-5 доходов
         top_incomes = db.session.query(
             FinancialData.СтатьяУровень4,
             func.sum(FinancialData.Сумма).label('total')
         ).filter(
-            FinancialData.СтатьяУровень1 == 'Поступления по ОД',
+            FinancialData.Поток == 'Поступления',
             FinancialData.Распределение == 'распределение'
         ).group_by(FinancialData.СтатьяУровень4
         ).order_by(func.sum(FinancialData.Сумма).desc()).limit(5).all()
@@ -403,18 +405,24 @@ def get_report3_data():
         logger.error(f"Error in report3: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Данные для отчета 4
+# API: Данные для отчета 4 (Анализ ФОТ)
 @app.route('/api/report4/data')
 @login_required
 def get_report4_data():
     try:
-        # Получаем данные о ФОТ
+        # Получаем данные о ФОТ (ищем статьи связанные с ФОТ)
         query = db.session.query(
             FinancialData.Проект,
             func.sum(FinancialData.Сумма).label('fot_total')
         ).filter(
-            FinancialData.СтатьяУровень4 == 'ФОТ_и_социальные_выплаты',
-            FinancialData.Распределение == 'распределение'
+            or_(
+                FinancialData.СтатьяУровень4.ilike('%ФОТ%'),
+                FinancialData.СтатьяУровень4.ilike('%зарплат%'),
+                FinancialData.СтатьяУровень4.ilike('%сотрудник%'),
+                FinancialData.СтатьяУровень4.ilike('%персонал%')
+            ),
+            FinancialData.Распределение == 'распределение',
+            FinancialData.Поток == 'Отток'  # ФОТ - это расход
         ).group_by(FinancialData.Проект)
         
         results = query.all()
@@ -424,11 +432,11 @@ def get_report4_data():
         
         projects_fot = []
         for row in results:
-            project = row.Проекt
+            project = row.Проект
             fot_total = float(row.fot_total or 0)
             
-            # Оценка количества сотрудников (простейшая)
-            employees = max(1, int(fot_total / 70000))  # ~70k на сотрудника
+            # Оценка количества сотрудников (по среднему ФОТ 70к)
+            employees = max(1, int(fot_total / 70000))
             
             fot_per_employee = fot_total / employees if employees > 0 else 0
             fot_percentage = (fot_total / total_fot * 100) if total_fot > 0 else 0
@@ -477,18 +485,30 @@ def get_report4_data():
         logger.error(f"Error in report4: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Проверка подключения к базе
+# Проверка подключения и данных
 @app.route('/check-db')
 def check_db():
     try:
         # Проверка подключения
         db.session.execute('SELECT 1')
-        count = db.session.query(func.count(FinancialData.id)).scalar()
+        
+        # Получаем статистику
+        total_records = db.session.query(func.count(FinancialData.id)).scalar()
+        total_projects = db.session.query(FinancialData.Проект).distinct().count()
+        date_range = db.session.query(
+            func.min(FinancialData.Период),
+            func.max(FinancialData.Период)
+        ).first()
         
         return jsonify({
             'success': True,
             'database_connected': True,
-            'records_count': count
+            'records_count': total_records,
+            'projects_count': total_projects,
+            'date_range': {
+                'min': date_range[0].strftime('%Y-%m-%d') if date_range[0] else None,
+                'max': date_range[1].strftime('%Y-%m-%d') if date_range[1] else None
+            }
         })
     except Exception as e:
         return jsonify({
@@ -498,10 +518,20 @@ def check_db():
 
 # Создание таблиц и инициализация админа
 with app.app_context():
-    db.create_all()
-    init_admin()
-    print('✅ Таблицы созданы')
-    print('✅ Администратор инициализирован')
+    try:
+        # Создаем только таблицу users (FinancialData уже существует)
+        db.create_all()
+        print('✅ Таблица users создана')
+        
+        init_admin()
+        print('✅ Администратор инициализирован')
+        
+        # Проверяем подключение к базе
+        db.session.execute('SELECT 1')
+        print('✅ Подключение к базе установлено')
+        
+    except Exception as e:
+        print(f'❌ Ошибка инициализации: {e}')
 
 if __name__ == '__main__':
     app.run(debug=app.config['FLASK_ENV'] == 'development', host='0.0.0.0', port=5000)
