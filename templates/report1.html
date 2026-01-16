@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Оценка эффективности по выбранным проектам</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         /* ====== GLOBAL STYLES ====== */
         :root {
@@ -322,26 +320,35 @@
         }
 
         /* ====== DISTRIBUTION STATS ====== */
+        .distribution-stats-container {
+            background: var(--apple-card);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+            box-shadow: var(--apple-shadow);
+            border: 1px solid var(--apple-border);
+        }
+
         .distribution-stats {
             background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
             border-radius: var(--radius-md);
             padding: var(--spacing-md);
-            margin-top: var(--spacing-md);
             border: 1px solid #bae6fd;
         }
 
         .distribution-stats h4 {
             color: var(--blue-dark);
-            margin-bottom: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
             display: flex;
             align-items: center;
             gap: var(--spacing-sm);
         }
 
-        .distribution-values {
+        .distribution-totals {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
         }
 
         .distribution-value {
@@ -358,6 +365,33 @@
         .distribution-amount {
             font-weight: 600;
             font-size: 1.1rem;
+        }
+
+        /* Таблица распределений */
+        .distribution-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--spacing-md);
+        }
+
+        .distribution-table th {
+            text-align: left;
+            padding: var(--spacing-sm);
+            background: var(--apple-bg);
+            border-bottom: 2px solid var(--apple-border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--apple-text);
+        }
+
+        .distribution-table td {
+            padding: var(--spacing-sm);
+            border-bottom: 1px solid var(--apple-border);
+            font-size: 0.9rem;
+        }
+
+        .distribution-table tr:hover {
+            background: rgba(0, 122, 255, 0.05);
         }
 
         /* ====== AGGREGATED TABLE ====== */
@@ -384,6 +418,18 @@
             border-bottom: 2px solid var(--apple-border);
             font-weight: 600;
             color: var(--apple-text);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .aggregated-table th:hover {
+            background: rgba(0, 122, 255, 0.1);
+        }
+
+        .aggregated-table th i {
+            margin-left: var(--spacing-xs);
+            font-size: 0.8rem;
+            opacity: 0.5;
         }
 
         .aggregated-table td {
@@ -599,10 +645,11 @@
             padding: var(--spacing-sm) var(--spacing-xs);
             border-bottom: 1px solid var(--apple-border);
             transition: var(--transition-fast);
+            cursor: pointer;
         }
 
         .analysis-item:hover {
-            background: rgba(0, 122, 255, 0.05);
+            background: rgba(0, 122, 255, 0.1);
         }
 
         .analysis-item:last-child {
@@ -620,8 +667,8 @@
             font-weight: 600;
         }
 
-        /* ====== CHART SECTION ====== */
-        .chart-container {
+        /* ====== MONTHLY COMPARISON TABLE ====== */
+        .monthly-comparison-container {
             background: var(--apple-card);
             border-radius: var(--radius-lg);
             padding: var(--spacing-lg);
@@ -630,56 +677,97 @@
             border: 1px solid var(--apple-border);
         }
 
-        .chart-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: var(--spacing-lg);
+        .monthly-table {
+            width: 100%;
+            border-collapse: collapse;
             margin-top: var(--spacing-md);
         }
 
-        .chart-main {
-            height: 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .monthly-table th {
+            text-align: center;
+            padding: var(--spacing-md);
             background: var(--apple-bg);
-            border-radius: var(--radius-md);
-            overflow: hidden;
+            border-bottom: 2px solid var(--apple-border);
+            font-weight: 600;
+            color: var(--apple-text);
+            cursor: pointer;
+            user-select: none;
         }
 
-        .chart-main img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+        .monthly-table th:hover {
+            background: rgba(0, 122, 255, 0.1);
         }
 
-        .chart-controls {
+        .monthly-table th i {
+            margin-left: var(--spacing-xs);
+            font-size: 0.8rem;
+            opacity: 0.5;
+        }
+
+        .monthly-table td {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-bottom: 1px solid var(--apple-border);
+            text-align: right;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+
+        .monthly-table tr:hover {
+            background: rgba(0, 122, 255, 0.05);
+        }
+
+        .monthly-table .month-name {
+            text-align: left;
+            font-weight: 500;
+            font-family: inherit;
+        }
+
+        .percentage-change {
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            display: inline-block;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .percentage-change.positive {
+            background: rgba(52, 199, 89, 0.1);
+            color: var(--apple-green);
+        }
+
+        .percentage-change.negative {
+            background: rgba(255, 59, 48, 0.1);
+            color: var(--apple-red);
+        }
+
+        .percentage-change.neutral {
+            background: rgba(134, 134, 139, 0.1);
+            color: var(--apple-text-secondary);
+        }
+
+        .indicator-selector {
             display: flex;
-            flex-direction: column;
-            gap: var(--spacing-md);
-        }
-
-        .chart-indicator-selector {
-            display: flex;
-            flex-direction: column;
+            flex-wrap: wrap;
             gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
         }
 
-        .chart-indicator-btn {
+        .indicator-btn {
             padding: var(--spacing-sm) var(--spacing-md);
             background: var(--apple-bg);
             border: 1px solid var(--apple-border);
             border-radius: var(--radius-sm);
             cursor: pointer;
-            text-align: left;
             transition: var(--transition-fast);
+            font-size: 0.9rem;
         }
 
-        .chart-indicator-btn:hover {
+        .indicator-btn:hover {
             background: rgba(0, 122, 255, 0.1);
         }
 
-        .chart-indicator-btn.active {
+        .indicator-btn.active {
             background: var(--apple-blue);
             color: white;
             border-color: var(--apple-blue);
@@ -1018,12 +1106,12 @@
                 min-width: auto;
             }
             
-            .chart-wrapper {
+            .analysis-levels {
                 grid-template-columns: 1fr;
             }
             
-            .analysis-levels {
-                grid-template-columns: 1fr;
+            .indicator-selector {
+                flex-direction: column;
             }
         }
     </style>
@@ -1126,25 +1214,6 @@
                 </div>
             </div>
 
-            <!-- Статистика распределений -->
-            <div id="distribution-stats" class="distribution-stats hidden">
-                <h4><i class="fas fa-chart-pie"></i> Статистика по распределениям</h4>
-                <div class="distribution-values">
-                    <div class="distribution-value">
-                        <span class="distribution-label">Сумма за {minYear} год</span>
-                        <span class="distribution-amount" id="dist-min-total">0 ₽</span>
-                    </div>
-                    <div class="distribution-value">
-                        <span class="distribution-label">Сумма за {maxYear} год</span>
-                        <span class="distribution-amount" id="dist-max-total">0 ₽</span>
-                    </div>
-                    <div class="distribution-value">
-                        <span class="distribution-label">Отклонение</span>
-                        <span class="distribution-amount" id="dist-deviation">0 ₽</span>
-                    </div>
-                </div>
-            </div>
-
             <!-- Кнопки действий -->
             <div class="filter-actions">
                 <button class="btn-primary" onclick="loadReportData()">
@@ -1159,6 +1228,56 @@
             </div>
         </div>
 
+        <!-- Статистика распределений -->
+        <div class="distribution-stats-container hidden" id="distribution-stats-container">
+            <h3 class="text-center"><i class="fas fa-chart-pie"></i> Статистика по распределениям</h3>
+            
+            <div id="distribution-loading" class="loading">
+                <div class="spinner"></div>
+                <p>Загрузка статистики...</p>
+            </div>
+            
+            <div id="distribution-content" class="hidden">
+                <div class="distribution-stats">
+                    <h4><i class="fas fa-chart-line"></i> Общая статистика</h4>
+                    <div class="distribution-totals">
+                        <div class="distribution-value">
+                            <span class="distribution-label">Сумма за <span id="dist-year-min"></span> год</span>
+                            <span class="distribution-amount" id="dist-min-total">0 ₽</span>
+                        </div>
+                        <div class="distribution-value">
+                            <span class="distribution-label">Сумма за <span id="dist-year-max"></span> год</span>
+                            <span class="distribution-amount" id="dist-max-total">0 ₽</span>
+                        </div>
+                        <div class="distribution-value">
+                            <span class="distribution-label">Отклонение</span>
+                            <span class="distribution-amount" id="dist-deviation">0 ₽</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: var(--spacing-lg);">
+                    <h4><i class="fas fa-table"></i> Детализация по распределениям</h4>
+                    <div style="overflow-x: auto;">
+                        <table class="distribution-table">
+                            <thead>
+                                <tr>
+                                    <th>Распределение</th>
+                                    <th class="text-right" id="dist-year-min-header">2023</th>
+                                    <th class="text-right" id="dist-year-max-header">2024</th>
+                                    <th class="text-right">Отклонение</th>
+                                    <th class="text-right">% от общей суммы</th>
+                                </tr>
+                            </thead>
+                            <tbody id="distribution-table-body">
+                                <!-- Данные будут загружены через JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Агрегированная таблица -->
         <div class="aggregated-table-container">
             <h3 class="text-center"><i class="fas fa-table"></i> Сводная таблица эффективности</h3>
@@ -1170,19 +1289,21 @@
                 <div class="spinner"></div>
                 <p>Загрузка данных...</p>
             </div>
-            <table class="aggregated-table hidden" id="aggregated-table">
-                <thead>
-                    <tr>
-                        <th>Показатель</th>
-                        <th class="text-right" id="min-year-header">2023</th>
-                        <th class="text-right" id="max-year-header">2024</th>
-                        <th class="text-right">Отклонение</th>
-                    </tr>
-                </thead>
-                <tbody id="table-body">
-                    <!-- Данные будут загружены через JavaScript -->
-                </tbody>
-            </table>
+            <div style="overflow-x: auto;">
+                <table class="aggregated-table hidden" id="aggregated-table">
+                    <thead>
+                        <tr>
+                            <th>Показатель</th>
+                            <th class="text-right" id="min-year-header">2023</th>
+                            <th class="text-right" id="max-year-header">2024</th>
+                            <th class="text-right">Отклонение</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Данные будут загружены через JavaScript -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Анализ отклонений по уровням -->
@@ -1219,48 +1340,69 @@
                     <button class="btn-secondary" onclick="showContragentAnalysisFromLevels()">
                         <i class="fas fa-users"></i> Показать контрагентов по выбранной статье
                     </button>
+                    <button class="btn-secondary" onclick="showFactorAnalysisFromCurrent()">
+                        <i class="fas fa-chart-pie"></i> Факторный анализ по статье
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Графики -->
-        <div class="chart-container hidden" id="chart-container">
-            <h3 class="text-center"><i class="fas fa-chart-bar"></i> Графический анализ отклонений</h3>
-            <p class="subtitle text-center">Сравнение по месяцам и визуализация изменений</p>
+        <!-- Сравнение по месяцам -->
+        <div class="monthly-comparison-container hidden" id="monthly-comparison">
+            <h3 class="text-center"><i class="fas fa-calendar-alt"></i> Сравнение по месяцам</h3>
+            <p class="subtitle text-center">Детальное сравнение данных по месяцам за оба года</p>
             
-            <div id="chart-loading" class="loading">
+            <div id="monthly-loading" class="loading">
                 <div class="spinner"></div>
-                <p>Загрузка графиков...</p>
+                <p>Загрузка данных по месяцам...</p>
             </div>
             
-            <div id="chart-content" class="hidden">
-                <div class="chart-wrapper">
-                    <div class="chart-main">
-                        <img id="chart-image" src="" alt="График сравнения">
-                    </div>
-                    <div class="chart-controls">
-                        <div class="chart-indicator-selector">
-                            <h5>Выберите показатель:</h5>
-                            <button class="chart-indicator-btn" data-key="net_cash_flow" onclick="changeChartIndicator('net_cash_flow')">
-                                Чистый денежный поток
-                            </button>
-                            <button class="chart-indicator-btn" data-key="od_result" onclick="changeChartIndicator('od_result')">
-                                Результат ОД
-                            </button>
-                            <button class="chart-indicator-btn" data-key="od_income" onclick="changeChartIndicator('od_income')">
-                                Поступления по ОД
-                            </button>
-                            <button class="chart-indicator-btn" data-key="od_expense" onclick="changeChartIndicator('od_expense')">
-                                Отток по ОД
-                            </button>
-                            <button class="chart-indicator-btn" data-key="variables" onclick="changeChartIndicator('variables')">
-                                Переменные расходы
-                            </button>
-                            <button class="chart-indicator-btn" data-key="constants" onclick="changeChartIndicator('constants')">
-                                Постоянные расходы
-                            </button>
-                        </div>
-                    </div>
+            <div id="monthly-content" class="hidden">
+                <div class="indicator-selector">
+                    <button class="indicator-btn active" data-key="net_cash_flow" onclick="changeMonthlyIndicator('net_cash_flow')">
+                        Чистый денежный поток
+                    </button>
+                    <button class="indicator-btn" data-key="od_result" onclick="changeMonthlyIndicator('od_result')">
+                        Результат ОД
+                    </button>
+                    <button class="indicator-btn" data-key="od_income" onclick="changeMonthlyIndicator('od_income')">
+                        Поступления по ОД
+                    </button>
+                    <button class="indicator-btn" data-key="od_expense" onclick="changeMonthlyIndicator('od_expense')">
+                        Отток по ОД
+                    </button>
+                    <button class="indicator-btn" data-key="variables" onclick="changeMonthlyIndicator('variables')">
+                        Переменные расходы
+                    </button>
+                    <button class="indicator-btn" data-key="constants" onclick="changeMonthlyIndicator('constants')">
+                        Постоянные расходы
+                    </button>
+                </div>
+                
+                <div style="overflow-x: auto;">
+                    <table class="monthly-table" id="monthly-table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortMonthlyTable(0)">Месяц <i class="fas fa-sort"></i></th>
+                                <th class="text-right" onclick="sortMonthlyTable(1)" id="monthly-year-min-header">2023 <i class="fas fa-sort"></i></th>
+                                <th class="text-right" onclick="sortMonthlyTable(2)" id="monthly-year-max-header">2024 <i class="fas fa-sort"></i></th>
+                                <th class="text-right" onclick="sortMonthlyTable(3)">Отклонение <i class="fas fa-sort"></i></th>
+                                <th class="text-right" onclick="sortMonthlyTable(4)">% Изменение <i class="fas fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody id="monthly-table-body">
+                            <!-- Данные будут загружены через JavaScript -->
+                        </tbody>
+                        <tfoot>
+                            <tr style="font-weight: 600; background: var(--apple-bg);">
+                                <td>ИТОГО</td>
+                                <td class="text-right" id="monthly-total-min">0</td>
+                                <td class="text-right" id="monthly-total-max">0</td>
+                                <td class="text-right" id="monthly-total-dev">0</td>
+                                <td class="text-right" id="monthly-total-percent">0%</td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1325,9 +1467,13 @@
             maxYear: 2025,
             availableYears: [2023, 2024, 2025],
             reportData: null,
+            distributionStats: null,
+            monthlyData: null,
             expandedRows: new Set(),
             currentAnalysisIndicator: null,
-            currentChartIndicator: 'net_cash_flow'
+            currentMonthlyIndicator: 'net_cash_flow',
+            monthlySortColumn: null,
+            monthlySortDirection: 'asc'
         };
 
         // ====== INITIALIZATION ======
@@ -1604,13 +1750,14 @@
             document.getElementById('table-loading').classList.remove('hidden');
             document.getElementById('aggregated-table').classList.add('hidden');
             document.getElementById('deviation-analysis').classList.add('hidden');
-            document.getElementById('chart-container').classList.add('hidden');
+            document.getElementById('monthly-comparison').classList.add('hidden');
             
             // Обновляем заголовки годов
             document.getElementById('min-year-header').textContent = state.minYear;
             document.getElementById('max-year-header').textContent = state.maxYear;
             
             try {
+                // Загружаем основные данные
                 const response = await fetch('/api/report1/aggregated', {
                     method: 'POST',
                     headers: {
@@ -1636,8 +1783,8 @@
                     // Загружаем статистику распределений
                     await loadDistributionStats();
                     
-                    // Загружаем графики
-                    await loadChartData();
+                    // Загружаем данные по месяцам
+                    await loadMonthlyData();
                     
                     showNotification('Отчет успешно загружен', 'success');
                 } else {
@@ -1745,37 +1892,77 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    const stats = data.distribution_stats;
-                    document.getElementById('dist-min-total').textContent = formatCurrency(stats.total_min);
-                    document.getElementById('dist-max-total').textContent = formatCurrency(stats.total_max);
-                    document.getElementById('dist-deviation').textContent = formatCurrency(stats.total_deviation, true);
-                    
-                    // Обновляем заголовки
-                    document.getElementById('distribution-stats').innerHTML = `
-                        <h4><i class="fas fa-chart-pie"></i> Статистика по распределениям</h4>
-                        <div class="distribution-values">
-                            <div class="distribution-value">
-                                <span class="distribution-label">Сумма за ${state.minYear} год</span>
-                                <span class="distribution-amount">${formatCurrency(stats.total_min)}</span>
-                            </div>
-                            <div class="distribution-value">
-                                <span class="distribution-label">Сумма за ${state.maxYear} год</span>
-                                <span class="distribution-amount">${formatCurrency(stats.total_max)}</span>
-                            </div>
-                            <div class="distribution-value">
-                                <span class="distribution-label">Отклонение</span>
-                                <span class="distribution-amount ${stats.total_deviation > 0 ? 'positive' : stats.total_deviation < 0 ? 'negative' : ''}">
-                                    ${formatCurrency(stats.total_deviation, true)}
-                                </span>
-                            </div>
-                        </div>
-                    `;
-                    
-                    document.getElementById('distribution-stats').classList.remove('hidden');
+                    state.distributionStats = data.distribution_stats;
+                    renderDistributionStats();
                 }
             } catch (error) {
                 console.error('Error loading distribution stats:', error);
+                document.getElementById('distribution-stats-container').classList.add('hidden');
             }
+        }
+
+        function renderDistributionStats() {
+            const container = document.getElementById('distribution-stats-container');
+            const loading = document.getElementById('distribution-loading');
+            const content = document.getElementById('distribution-content');
+            
+            container.classList.remove('hidden');
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+            
+            // Обновляем заголовки
+            document.getElementById('dist-year-min').textContent = state.minYear;
+            document.getElementById('dist-year-max').textContent = state.maxYear;
+            document.getElementById('dist-year-min-header').textContent = state.minYear;
+            document.getElementById('dist-year-max-header').textContent = state.maxYear;
+            
+            // Общая статистика
+            const stats = state.distributionStats;
+            const totalMin = stats.total_min || 0;
+            const totalMax = stats.total_max || 0;
+            const totalDeviation = totalMax - totalMin;
+            const deviationClass = totalDeviation > 0 ? 'positive' : totalDeviation < 0 ? 'negative' : 'neutral';
+            
+            document.getElementById('dist-min-total').textContent = formatCurrency(totalMin);
+            document.getElementById('dist-max-total').textContent = formatCurrency(totalMax);
+            document.getElementById('dist-deviation').textContent = formatCurrency(totalDeviation, true);
+            document.getElementById('dist-deviation').className = `distribution-amount ${deviationClass}`;
+            
+            // Таблица распределений
+            const tableBody = document.getElementById('distribution-table-body');
+            tableBody.innerHTML = '';
+            
+            const distributions = stats.distributions || [];
+            const totalSum = Math.max(Math.abs(totalMin), Math.abs(totalMax));
+            
+            distributions.forEach(dist => {
+                const deviation = dist.deviation || 0;
+                const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
+                const percentage = totalSum > 0 ? Math.round((Math.abs(dist.min_year) / totalSum) * 100) : 0;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${dist.distribution || 'Не указано'}</td>
+                    <td class="text-right">${formatCurrency(dist.min_year)}</td>
+                    <td class="text-right">${formatCurrency(dist.max_year)}</td>
+                    <td class="text-right ${deviationClass}">${formatCurrency(deviation, true)}</td>
+                    <td class="text-right">${percentage}%</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            // Добавляем строку итого
+            const totalRow = document.createElement('tr');
+            totalRow.style.fontWeight = '600';
+            totalRow.style.background = 'var(--apple-bg)';
+            totalRow.innerHTML = `
+                <td><strong>ИТОГО</strong></td>
+                <td class="text-right"><strong>${formatCurrency(totalMin)}</strong></td>
+                <td class="text-right"><strong>${formatCurrency(totalMax)}</strong></td>
+                <td class="text-right ${deviationClass}"><strong>${formatCurrency(totalDeviation, true)}</strong></td>
+                <td class="text-right"><strong>100%</strong></td>
+            `;
+            tableBody.appendChild(totalRow);
         }
 
         // ====== HIERARCHY FUNCTIONS ======
@@ -2001,11 +2188,8 @@
         }
 
         function showContragentAnalysisFromDeviation(level4Name) {
-            // Здесь нужно получить данные о статье для поиска контрагентов
-            // Пока просто показываем сообщение
             showNotification(`Загрузка контрагентов для статьи: ${level4Name}`, 'info');
-            
-            // В реальном приложении здесь будет запрос к API для получения контрагентов
+            // В реальном приложении здесь будет запрос к API
         }
 
         function showContragentAnalysisFromLevels() {
@@ -2014,47 +2198,40 @@
                 return;
             }
             
-            // Получаем первую статью из уровня 4 для анализа
-            const level4Items = document.querySelectorAll('#level4-analysis .analysis-item');
-            if (level4Items.length === 0) {
-                showNotification('Нет данных для анализа контрагентов', 'error');
+            showNotification('Загрузка контрагентов...', 'info');
+        }
+
+        function showFactorAnalysisFromCurrent() {
+            if (!state.currentAnalysisIndicator) {
+                showNotification('Сначала выберите статью для анализа', 'error');
                 return;
             }
             
-            const firstItem = level4Items[0];
-            const articleName = firstItem.querySelector('.analysis-name').textContent;
-            showContragentAnalysisFromDeviation(articleName);
+            const row = document.querySelector(`tr[data-key="${state.currentAnalysisIndicator}"]`);
+            const index = row ? parseInt(row.dataset.index) : 0;
+            showFactorAnalysis(index, null);
         }
 
-        // ====== CHART FUNCTIONS ======
-        async function loadChartData() {
-            document.getElementById('chart-container').classList.remove('hidden');
-            document.getElementById('chart-loading').classList.remove('hidden');
-            document.getElementById('chart-content').classList.add('hidden');
-            
-            // Активируем первую кнопку
-            document.querySelectorAll('.chart-indicator-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.querySelector(`.chart-indicator-btn[data-key="${state.currentChartIndicator}"]`).classList.add('active');
-            
-            await changeChartIndicator(state.currentChartIndicator);
+        // ====== MONTHLY COMPARISON ======
+        async function loadMonthlyData() {
+            document.getElementById('monthly-comparison').classList.remove('hidden');
+            await changeMonthlyIndicator(state.currentMonthlyIndicator);
         }
 
-        async function changeChartIndicator(indicatorKey) {
-            state.currentChartIndicator = indicatorKey;
+        async function changeMonthlyIndicator(indicatorKey) {
+            state.currentMonthlyIndicator = indicatorKey;
             
             // Обновляем активную кнопку
-            document.querySelectorAll('.chart-indicator-btn').forEach(btn => {
+            document.querySelectorAll('.indicator-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            document.querySelector(`.chart-indicator-btn[data-key="${indicatorKey}"]`).classList.add('active');
+            document.querySelector(`.indicator-btn[data-key="${indicatorKey}"]`).classList.add('active');
             
-            document.getElementById('chart-loading').classList.remove('hidden');
-            document.getElementById('chart-content').classList.add('hidden');
+            document.getElementById('monthly-loading').classList.remove('hidden');
+            document.getElementById('monthly-content').classList.add('hidden');
             
             try {
-                const response = await fetch('/api/report1/chart-data', {
+                const response = await fetch('/api/report1/monthly-data', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2069,25 +2246,142 @@
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
                 
-                if (data.success && data.chart_image) {
-                    document.getElementById('chart-image').src = data.chart_image;
-                    document.getElementById('chart-loading').classList.add('hidden');
-                    document.getElementById('chart-content').classList.remove('hidden');
+                if (data.success) {
+                    state.monthlyData = data.monthly_data;
+                    renderMonthlyTable();
+                    document.getElementById('monthly-loading').classList.add('hidden');
+                    document.getElementById('monthly-content').classList.remove('hidden');
                 } else {
-                    throw new Error('Ошибка загрузки графика');
+                    throw new Error(data.error || 'Ошибка загрузки данных');
                 }
                 
             } catch (error) {
-                console.error('Error loading chart:', error);
-                document.getElementById('chart-loading').innerHTML = `
+                console.error('Error loading monthly data:', error);
+                document.getElementById('monthly-loading').innerHTML = `
                     <div class="text-center">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка загрузки графика: ${error.message}</p>
+                        <p>Ошибка загрузки: ${error.message}</p>
                     </div>
                 `;
             }
+        }
+
+        function renderMonthlyTable() {
+            const tableBody = document.getElementById('monthly-table-body');
+            tableBody.innerHTML = '';
+            
+            // Обновляем заголовки
+            document.getElementById('monthly-year-min-header').textContent = state.minYear;
+            document.getElementById('monthly-year-max-header').textContent = state.maxYear;
+            
+            const monthlyData = state.monthlyData;
+            const months = [
+                { num: 1, name: 'Январь' }, { num: 2, name: 'Февраль' }, { num: 3, name: 'Март' },
+                { num: 4, name: 'Апрель' }, { num: 5, name: 'Май' }, { num: 6, name: 'Июнь' },
+                { num: 7, name: 'Июль' }, { num: 8, name: 'Август' }, { num: 9, name: 'Сентябрь' },
+                { num: 10, name: 'Октябрь' }, { num: 11, name: 'Ноябрь' }, { num: 12, name: 'Декабрь' }
+            ];
+            
+            let totalMin = 0;
+            let totalMax = 0;
+            
+            months.forEach(month => {
+                const minValue = monthlyData[state.minYear]?.[month.num] || 0;
+                const maxValue = monthlyData[state.maxYear]?.[month.num] || 0;
+                const deviation = maxValue - minValue;
+                const percentage = minValue !== 0 ? Math.round((deviation / Math.abs(minValue)) * 100) : 0;
+                
+                totalMin += minValue;
+                totalMax += maxValue;
+                
+                const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
+                const percentageClass = percentage > 0 ? 'positive' : percentage < 0 ? 'negative' : 'neutral';
+                const percentageDisplay = minValue !== 0 ? `${percentage > 0 ? '+' : ''}${percentage}%` : '—';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="month-name">${month.name}</td>
+                    <td>${formatCurrency(minValue)}</td>
+                    <td>${formatCurrency(maxValue)}</td>
+                    <td class="${deviationClass}">${formatCurrency(deviation, true)}</td>
+                    <td><span class="percentage-change ${percentageClass}">${percentageDisplay}</span></td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            // Итоги
+            const totalDeviation = totalMax - totalMin;
+            const totalPercentage = totalMin !== 0 ? Math.round((totalDeviation / Math.abs(totalMin)) * 100) : 0;
+            const totalDeviationClass = totalDeviation > 0 ? 'positive' : totalDeviation < 0 ? 'negative' : 'neutral';
+            
+            document.getElementById('monthly-total-min').textContent = formatCurrency(totalMin);
+            document.getElementById('monthly-total-max').textContent = formatCurrency(totalMax);
+            document.getElementById('monthly-total-dev').textContent = formatCurrency(totalDeviation, true);
+            document.getElementById('monthly-total-dev').className = `text-right ${totalDeviationClass}`;
+            document.getElementById('monthly-total-percent').textContent = `${totalPercentage > 0 ? '+' : ''}${totalPercentage}%`;
+            document.getElementById('monthly-total-percent').className = `text-right ${totalPercentage > 0 ? 'positive' : totalPercentage < 0 ? 'negative' : 'neutral'}`;
+        }
+
+        function sortMonthlyTable(column) {
+            const table = document.getElementById('monthly-table');
+            const tbody = document.getElementById('monthly-table-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            if (state.monthlySortColumn === column) {
+                state.monthlySortDirection = state.monthlySortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.monthlySortColumn = column;
+                state.monthlySortDirection = 'asc';
+            }
+            
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                if (column === 0) {
+                    // Сортировка по названию месяца
+                    aValue = a.cells[0].textContent;
+                    bValue = b.cells[0].textContent;
+                } else if (column === 4) {
+                    // Сортировка по процентному изменению
+                    aValue = parseFloat(a.cells[4].querySelector('.percentage-change').textContent.replace(/[^-\d.]/g, '')) || 0;
+                    bValue = parseFloat(b.cells[4].querySelector('.percentage-change').textContent.replace(/[^-\d.]/g, '')) || 0;
+                } else {
+                    // Сортировка по числовым значениям
+                    aValue = parseCurrency(a.cells[column].textContent);
+                    bValue = parseCurrency(b.cells[column].textContent);
+                }
+                
+                if (state.monthlySortDirection === 'asc') {
+                    return aValue > bValue ? 1 : -1;
+                } else {
+                    return aValue < bValue ? 1 : -1;
+                }
+            });
+            
+            // Очищаем и добавляем отсортированные строки
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // Обновляем иконки сортировки
+            document.querySelectorAll('#monthly-table th i').forEach(icon => {
+                icon.className = 'fas fa-sort';
+            });
+            
+            const currentHeader = table.rows[0].cells[column];
+            const icon = currentHeader.querySelector('i');
+            if (icon) {
+                icon.className = state.monthlySortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            }
+        }
+
+        function parseCurrency(value) {
+            return parseFloat(value.replace(/[^-\d.]/g, '')) || 0;
         }
 
         // ====== FACTOR ANALYSIS ======
@@ -2348,13 +2642,13 @@
             state.maxYear = maxYear;
             initializeYearSlider();
             
-            // Скрыть таблицу и дополнительные секции
+            // Скрыть все секции
             document.getElementById('table-placeholder').classList.remove('hidden');
             document.getElementById('aggregated-table').classList.add('hidden');
             document.getElementById('table-loading').classList.add('hidden');
             document.getElementById('deviation-analysis').classList.add('hidden');
-            document.getElementById('chart-container').classList.add('hidden');
-            document.getElementById('distribution-stats').classList.add('hidden');
+            document.getElementById('monthly-comparison').classList.add('hidden');
+            document.getElementById('distribution-stats-container').classList.add('hidden');
             
             showNotification('Фильтры сброшены', 'success');
         }

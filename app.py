@@ -9,12 +9,7 @@ import logging
 from sqlalchemy import func, case, and_, extract
 from sqlalchemy.sql import label
 import json
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import io
-import base64
-import numpy as np
+import traceback
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,45 +53,7 @@ def report3():
 def report4():
     return render_template('report4.html')
 
-# ====== НОВЫЕ API ДЛЯ ОТЧЕТА 1 ======
-
-# API: Список распределений
-@app.route('/api/distribution')
-@login_required
-def get_distribution():
-    try:
-        distributions = db.session.query(
-            FinancialData.Распределение
-        ).filter(
-            FinancialData.Распределение.isnot(None),
-            FinancialData.Распределение != ''
-        ).distinct().order_by(FinancialData.Распределение).all()
-        
-        dist_list = [d[0] for d in distributions if d[0]]
-        
-        return jsonify(dist_list)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# API: Список проектов
-@app.route('/api/projects')
-@login_required
-def get_projects():
-    try:
-        projects_query = db.session.query(
-            FinancialData.Проект
-        ).filter(
-            FinancialData.Проект.isnot(None),
-            FinancialData.Проект != ''
-        ).distinct().order_by(FinancialData.Проект).all()
-        
-        projects = [p[0] for p in projects_query if p[0]]
-        
-        return jsonify(projects)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+# ====== API ДЛЯ ОТЧЕТА 1 ======
 
 # API: Данные для фильтров
 @app.route('/api/report1/filters-data')
@@ -133,15 +90,11 @@ def get_filters_data():
         
         dist_list = [d[0] for d in distributions if d[0]]
         
-        # Месяцы (1-12)
-        months = list(range(1, 13))
-        
         return jsonify({
             'success': True,
             'years': year_list,
             'projects': projects,
-            'distributions': dist_list,
-            'months': months
+            'distributions': dist_list
         })
         
     except Exception as e:
@@ -348,7 +301,7 @@ def get_contragent_analysis():
         logger.error(f"Error in contragent analysis: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Анализ отклонений по уровням до контрагента
+# API: Анализ отклонений по уровням
 @app.route('/api/report1/deviation-analysis', methods=['POST'])
 @login_required
 def get_deviation_analysis():
@@ -376,10 +329,10 @@ def get_deviation_analysis():
         logger.error(f"Error in deviation analysis: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# API: Получение данных для графиков
-@app.route('/api/report1/chart-data', methods=['POST'])
+# API: Данные для таблицы по месяцам
+@app.route('/api/report1/monthly-data', methods=['POST'])
 @login_required
-def get_chart_data():
+def get_monthly_data():
     try:
         data = request.get_json()
         indicator_key = data.get('indicator_key')
@@ -392,20 +345,16 @@ def get_chart_data():
         if not projects or not months or not year_min or not year_max:
             return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
         
-        # Получаем данные по месяцам для графика
-        monthly_data = get_monthly_data(projects, distributions, months, year_min, year_max, indicator_key)
-        
-        # Создаем график
-        chart_image = create_comparison_chart(monthly_data, year_min, year_max, indicator_key)
+        # Получаем данные по месяцам
+        monthly_data = get_monthly_comparison_data(projects, distributions, months, year_min, year_max, indicator_key)
         
         return jsonify({
             'success': True,
-            'monthly_data': monthly_data,
-            'chart_image': chart_image
+            'monthly_data': monthly_data
         })
         
     except Exception as e:
-        logger.error(f"Error in chart data: {str(e)}")
+        logger.error(f"Error in monthly data: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # API: Анализ распределений
@@ -438,7 +387,7 @@ def get_distribution_analysis():
 # ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
 
 def get_year_data(projects, distributions, months, year):
-    """Получает данные за конкретный год - БЕЗ преобразования знака!"""
+    """Получает данные за конкретный год"""
     query = db.session.query(
         FinancialData.СтатьяУровень1,
         FinancialData.СтатьяУровень2,
@@ -458,7 +407,7 @@ def get_year_data(projects, distributions, months, year):
     return query.all()
 
 def get_year_data_for_hierarchy(projects, distributions, months, year, config):
-    """Получает данные за конкретный год для иерархии - БЕЗ преобразования знака!"""
+    """Получает данные за конкретный год для иерархии"""
     query = db.session.query(
         FinancialData.СтатьяУровень1,
         FinancialData.СтатьяУровень2,
@@ -699,7 +648,7 @@ def get_contragent_data(projects, distributions, months, year, level1=None, leve
     """Получает данные по контрагентам за конкретный год"""
     query = db.session.query(
         FinancialData.Контрагент,
-        FinancialData.Сумма
+        func.sum(FinancialData.Сумма).label('total')
     ).filter(
         FinancialData.Период.isnot(None),
         FinancialData.Проект.in_(projects),
@@ -719,15 +668,13 @@ def get_contragent_data(projects, distributions, months, year, level1=None, leve
     if level4:
         query = query.filter(FinancialData.СтатьяУровень4 == level4)
     
+    query = query.group_by(FinancialData.Контрагент)
     results = query.all()
     
-    # Группируем по контрагентам
+    # Формируем словарь контрагентов
     contragents = {}
-    for row in results:
-        contragent = row.Контрагент or 'Не указано'
-        if contragent not in contragents:
-            contragents[contragent] = 0
-        contragents[contragent] += row.Сумма or 0
+    for contragent, total in results:
+        contragents[contragent or 'Не указано'] = float(total or 0)
     
     return contragents
 
@@ -890,8 +837,8 @@ def get_deviation_data_by_levels(projects, distributions, months, year_min, year
     
     return result
 
-def get_monthly_data(projects, distributions, months, year_min, year_max, indicator_key):
-    """Получает данные по месяцам для графика"""
+def get_monthly_comparison_data(projects, distributions, months, year_min, year_max, indicator_key):
+    """Получает данные по месяцам для таблицы сравнения"""
     # Определяем какие статьи анализировать
     indicator_config = {
         'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
@@ -910,77 +857,37 @@ def get_monthly_data(projects, distributions, months, year_min, year_max, indica
     monthly_data = {year_min: {}, year_max: {}}
     
     for year in [year_min, year_max]:
-        for month in months:
-            query = db.session.query(
-                func.sum(FinancialData.Сумма).label('total')
-            ).filter(
-                FinancialData.Период.isnot(None),
-                FinancialData.Проект.in_(projects),
-                extract('year', FinancialData.Период) == year,
-                extract('month', FinancialData.Период) == month
-            )
-            
-            if distributions:
-                query = query.filter(FinancialData.Распределение.in_(distributions))
-            
-            if config:
-                if 'СтатьяУровень1' in config:
-                    if isinstance(config['СтатьяУровень1'], list):
-                        query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
-                    else:
-                        query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
-                if 'СтатьяУровень2' in config:
-                    query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
-            
-            result = query.first()
-            monthly_data[year][month] = result.total or 0
+        # Делаем один запрос для всех месяцев года
+        query = db.session.query(
+            extract('month', FinancialData.Период).label('month'),
+            func.sum(FinancialData.Сумма).label('total')
+        ).filter(
+            FinancialData.Период.isnot(None),
+            FinancialData.Проект.in_(projects),
+            extract('year', FinancialData.Период) == year,
+            extract('month', FinancialData.Период).in_(months)
+        )
+        
+        if distributions:
+            query = query.filter(FinancialData.Распределение.in_(distributions))
+        
+        if config:
+            if 'СтатьяУровень1' in config:
+                if isinstance(config['СтатьяУровень1'], list):
+                    query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+                else:
+                    query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+            if 'СтатьяУровень2' in config:
+                query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+        
+        query = query.group_by(extract('month', FinancialData.Период))
+        results = query.all()
+        
+        for month, total in results:
+            if month:
+                monthly_data[year][int(month)] = float(total or 0)
     
     return monthly_data
-
-def create_comparison_chart(monthly_data, year_min, year_max, indicator_key):
-    """Создает график сравнения по месяцам"""
-    try:
-        months = list(range(1, 13))
-        month_names = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
-        
-        values_min = [monthly_data[year_min].get(month, 0) for month in months]
-        values_max = [monthly_data[year_max].get(month, 0) for month in months]
-        
-        plt.figure(figsize=(12, 6))
-        
-        # Нормализуем значения для лучшего отображения
-        max_abs_value = max(max(abs(min(values_min)), abs(max(values_min))), 
-                           max(abs(min(values_max)), abs(max(values_max))))
-        if max_abs_value > 0:
-            values_min = [v / max_abs_value * 100 for v in values_min]
-            values_max = [v / max_abs_value * 100 for v in values_max]
-        
-        x = range(len(months))
-        width = 0.35
-        
-        plt.bar([i - width/2 for i in x], values_min, width, label=f'{year_min} год', color='#3b82f6')
-        plt.bar([i + width/2 for i in x], values_max, width, label=f'{year_max} год', color='#ef4444')
-        
-        plt.xlabel('Месяцы')
-        plt.ylabel('Значение (нормализовано)')
-        plt.title(f'Сравнение по месяцам: {year_min} vs {year_max}')
-        plt.xticks(x, month_names)
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        # Сохраняем в base64
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=100)
-        buffer.seek(0)
-        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        plt.close()
-        
-        return f"data:image/png;base64,{image_base64}"
-        
-    except Exception as e:
-        logger.error(f"Error creating chart: {str(e)}")
-        return None
 
 def analyze_distributions(projects, distributions, months, year_min, year_max):
     """Анализирует распределения"""
@@ -1010,9 +917,9 @@ def analyze_distributions(projects, distributions, months, year_min, year_max):
                     distribution_stats[dist] = {'min_year': 0, 'max_year': 0}
                 
                 if year == year_min:
-                    distribution_stats[dist]['min_year'] = total or 0
+                    distribution_stats[dist]['min_year'] = float(total or 0)
                 else:
-                    distribution_stats[dist]['max_year'] = total or 0
+                    distribution_stats[dist]['max_year'] = float(total or 0)
         
         # Формируем результат
         result = []
