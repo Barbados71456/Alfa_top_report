@@ -301,6 +301,65 @@
             color: white;
         }
 
+        /* ====== SELECT ALL BUTTON ====== */
+        .select-all-btn {
+            margin-top: var(--spacing-xs);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: var(--apple-bg);
+            border: 1px solid var(--apple-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: var(--apple-text-secondary);
+            transition: var(--transition-fast);
+            text-align: center;
+        }
+
+        .select-all-btn:hover {
+            background: var(--apple-blue);
+            color: white;
+            border-color: var(--apple-blue);
+        }
+
+        /* ====== DISTRIBUTION STATS ====== */
+        .distribution-stats {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-top: var(--spacing-md);
+            border: 1px solid #bae6fd;
+        }
+
+        .distribution-stats h4 {
+            color: var(--blue-dark);
+            margin-bottom: var(--spacing-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .distribution-values {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-sm);
+        }
+
+        .distribution-value {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
+        }
+
+        .distribution-label {
+            font-size: 0.9rem;
+            color: var(--apple-text-secondary);
+        }
+
+        .distribution-amount {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
         /* ====== AGGREGATED TABLE ====== */
         .aggregated-table-container {
             background: var(--apple-card);
@@ -337,13 +396,26 @@
             border-bottom: none;
         }
 
+        /* Стили для выделенных строк синим цветом на всю строку */
         .table-row-header {
             cursor: pointer;
             transition: var(--transition-fast);
         }
 
-        .table-row-header:hover {
-            background: rgba(0, 122, 255, 0.1);
+        .table-row-header.blue-dark {
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        }
+
+        .table-row-header.blue-dark:hover {
+            background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
+        }
+
+        .table-row-header.blue-light {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        }
+
+        .table-row-header.blue-light:hover {
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
         }
 
         .table-row-header td:first-child {
@@ -352,33 +424,11 @@
             gap: var(--spacing-sm);
         }
 
-        /* Стили для выделенных строк синим цветом */
-        .table-row-header.blue-dark td:first-child {
-            background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-dark-light) 100%);
-            color: white;
-            border-radius: var(--radius-sm);
-            padding: var(--spacing-sm) var(--spacing-md);
-            margin: 2px 0;
-        }
-
-        .table-row-header.blue-light td:first-child {
-            background: linear-gradient(135deg, var(--blue-light) 0%, var(--blue-light-lighter) 100%);
-            color: white;
-            border-radius: var(--radius-sm);
-            padding: var(--spacing-sm) var(--spacing-md);
-            margin: 2px 0;
-        }
-
         .row-toggle {
             width: 20px;
             text-align: center;
             color: var(--apple-text-secondary);
             transition: var(--transition-fast);
-        }
-
-        .table-row-header.blue-dark .row-toggle,
-        .table-row-header.blue-light .row-toggle {
-            color: white;
         }
 
         .row-toggle.rotated {
@@ -488,11 +538,14 @@
         .level-values {
             display: flex;
             gap: var(--spacing-md);
+            align-items: center;
         }
 
         .level-value {
             text-align: right;
-            min-width: 120px;
+            min-width: 140px;
+            font-weight: 500;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
         }
 
         /* ====== TABLE PLACEHOLDER ====== */
@@ -506,6 +559,130 @@
             font-size: 3rem;
             margin-bottom: var(--spacing-md);
             color: var(--apple-border);
+        }
+
+        /* ====== DEVIATION ANALYSIS SECTION ====== */
+        .deviation-analysis-container {
+            background: var(--apple-card);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+            box-shadow: var(--apple-shadow);
+            border: 1px solid var(--apple-border);
+        }
+
+        .analysis-levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-lg);
+        }
+
+        .analysis-level {
+            background: var(--apple-bg);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            border: 1px solid var(--apple-border);
+        }
+
+        .analysis-level h5 {
+            color: var(--blue-dark);
+            margin-bottom: var(--spacing-md);
+            padding-bottom: var(--spacing-sm);
+            border-bottom: 2px solid var(--apple-border);
+        }
+
+        .analysis-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-sm) var(--spacing-xs);
+            border-bottom: 1px solid var(--apple-border);
+            transition: var(--transition-fast);
+        }
+
+        .analysis-item:hover {
+            background: rgba(0, 122, 255, 0.05);
+        }
+
+        .analysis-item:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-name {
+            font-weight: 500;
+            flex: 1;
+        }
+
+        .analysis-value {
+            text-align: right;
+            min-width: 120px;
+            font-weight: 600;
+        }
+
+        /* ====== CHART SECTION ====== */
+        .chart-container {
+            background: var(--apple-card);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+            box-shadow: var(--apple-shadow);
+            border: 1px solid var(--apple-border);
+        }
+
+        .chart-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-md);
+        }
+
+        .chart-main {
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--apple-bg);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .chart-main img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .chart-controls {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .chart-indicator-selector {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+
+        .chart-indicator-btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--apple-bg);
+            border: 1px solid var(--apple-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            text-align: left;
+            transition: var(--transition-fast);
+        }
+
+        .chart-indicator-btn:hover {
+            background: rgba(0, 122, 255, 0.1);
+        }
+
+        .chart-indicator-btn.active {
+            background: var(--apple-blue);
+            color: white;
+            border-color: var(--apple-blue);
         }
 
         /* ====== MODALS ====== */
@@ -840,6 +1017,14 @@
             .level-value {
                 min-width: auto;
             }
+            
+            .chart-wrapper {
+                grid-template-columns: 1fr;
+            }
+            
+            .analysis-levels {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -894,6 +1079,9 @@
                                     <p>Загрузка проектов...</p>
                                 </div>
                             </div>
+                            <div class="select-all-btn" onclick="selectAll('projects')">
+                                Выбрать все
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -938,6 +1126,25 @@
                 </div>
             </div>
 
+            <!-- Статистика распределений -->
+            <div id="distribution-stats" class="distribution-stats hidden">
+                <h4><i class="fas fa-chart-pie"></i> Статистика по распределениям</h4>
+                <div class="distribution-values">
+                    <div class="distribution-value">
+                        <span class="distribution-label">Сумма за {minYear} год</span>
+                        <span class="distribution-amount" id="dist-min-total">0 ₽</span>
+                    </div>
+                    <div class="distribution-value">
+                        <span class="distribution-label">Сумма за {maxYear} год</span>
+                        <span class="distribution-amount" id="dist-max-total">0 ₽</span>
+                    </div>
+                    <div class="distribution-value">
+                        <span class="distribution-label">Отклонение</span>
+                        <span class="distribution-amount" id="dist-deviation">0 ₽</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Кнопки действий -->
             <div class="filter-actions">
                 <button class="btn-primary" onclick="loadReportData()">
@@ -976,6 +1183,86 @@
                     <!-- Данные будут загружены через JavaScript -->
                 </tbody>
             </table>
+        </div>
+
+        <!-- Анализ отклонений по уровням -->
+        <div class="deviation-analysis-container hidden" id="deviation-analysis">
+            <h3 class="text-center"><i class="fas fa-sitemap"></i> Анализ отклонений по выбранной статье</h3>
+            <p class="subtitle text-center">Детализация отклонений от уровня 1 до уровня 4 статей</p>
+            
+            <div id="deviation-loading" class="loading">
+                <div class="spinner"></div>
+                <p>Загрузка анализа отклонений...</p>
+            </div>
+            
+            <div id="deviation-content" class="hidden">
+                <div class="analysis-levels">
+                    <div class="analysis-level">
+                        <h5>Уровень 1: Статьи</h5>
+                        <div id="level1-analysis" class="analysis-list"></div>
+                    </div>
+                    <div class="analysis-level">
+                        <h5>Уровень 2: Подстатьи</h5>
+                        <div id="level2-analysis" class="analysis-list"></div>
+                    </div>
+                    <div class="analysis-level">
+                        <h5>Уровень 3: Группы</h5>
+                        <div id="level3-analysis" class="analysis-list"></div>
+                    </div>
+                    <div class="analysis-level">
+                        <h5>Уровень 4: Детализация</h5>
+                        <div id="level4-analysis" class="analysis-list"></div>
+                    </div>
+                </div>
+                
+                <div class="filter-actions" style="margin-top: var(--spacing-lg);">
+                    <button class="btn-secondary" onclick="showContragentAnalysisFromLevels()">
+                        <i class="fas fa-users"></i> Показать контрагентов по выбранной статье
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Графики -->
+        <div class="chart-container hidden" id="chart-container">
+            <h3 class="text-center"><i class="fas fa-chart-bar"></i> Графический анализ отклонений</h3>
+            <p class="subtitle text-center">Сравнение по месяцам и визуализация изменений</p>
+            
+            <div id="chart-loading" class="loading">
+                <div class="spinner"></div>
+                <p>Загрузка графиков...</p>
+            </div>
+            
+            <div id="chart-content" class="hidden">
+                <div class="chart-wrapper">
+                    <div class="chart-main">
+                        <img id="chart-image" src="" alt="График сравнения">
+                    </div>
+                    <div class="chart-controls">
+                        <div class="chart-indicator-selector">
+                            <h5>Выберите показатель:</h5>
+                            <button class="chart-indicator-btn" data-key="net_cash_flow" onclick="changeChartIndicator('net_cash_flow')">
+                                Чистый денежный поток
+                            </button>
+                            <button class="chart-indicator-btn" data-key="od_result" onclick="changeChartIndicator('od_result')">
+                                Результат ОД
+                            </button>
+                            <button class="chart-indicator-btn" data-key="od_income" onclick="changeChartIndicator('od_income')">
+                                Поступления по ОД
+                            </button>
+                            <button class="chart-indicator-btn" data-key="od_expense" onclick="changeChartIndicator('od_expense')">
+                                Отток по ОД
+                            </button>
+                            <button class="chart-indicator-btn" data-key="variables" onclick="changeChartIndicator('variables')">
+                                Переменные расходы
+                            </button>
+                            <button class="chart-indicator-btn" data-key="constants" onclick="changeChartIndicator('constants')">
+                                Постоянные расходы
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Модальное окно факторного анализа -->
@@ -1038,7 +1325,9 @@
             maxYear: 2025,
             availableYears: [2023, 2024, 2025],
             reportData: null,
-            expandedRows: new Set()
+            expandedRows: new Set(),
+            currentAnalysisIndicator: null,
+            currentChartIndicator: 'net_cash_flow'
         };
 
         // ====== INITIALIZATION ======
@@ -1199,6 +1488,26 @@
         }
 
         // ====== MULTISELECT FUNCTIONS ======
+        function selectAll(type) {
+            const options = document.querySelectorAll(`#${type}-options .multiselect-option`);
+            const array = type === 'projects' ? state.selectedProjects : state.selectedDistributions;
+            
+            // Очищаем массив
+            array.length = 0;
+            
+            // Добавляем все значения
+            options.forEach(option => {
+                const value = option.dataset.value;
+                if (value && !array.includes(value)) {
+                    array.push(value);
+                }
+            });
+            
+            updateMultiselectDisplay(type);
+            updateMultiselectOptions(type);
+            showNotification(`Выбраны все ${type === 'projects' ? 'проекты' : 'распределения'}`, 'success');
+        }
+
         function toggleOption(type, value) {
             const array = type === 'projects' ? state.selectedProjects : state.selectedDistributions;
             const index = array.indexOf(value);
@@ -1294,6 +1603,8 @@
             document.getElementById('table-placeholder').classList.add('hidden');
             document.getElementById('table-loading').classList.remove('hidden');
             document.getElementById('aggregated-table').classList.add('hidden');
+            document.getElementById('deviation-analysis').classList.add('hidden');
+            document.getElementById('chart-container').classList.add('hidden');
             
             // Обновляем заголовки годов
             document.getElementById('min-year-header').textContent = state.minYear;
@@ -1321,6 +1632,13 @@
                     renderAggregatedTable();
                     document.getElementById('table-loading').classList.add('hidden');
                     document.getElementById('aggregated-table').classList.remove('hidden');
+                    
+                    // Загружаем статистику распределений
+                    await loadDistributionStats();
+                    
+                    // Загружаем графики
+                    await loadChartData();
+                    
                     showNotification('Отчет успешно загружен', 'success');
                 } else {
                     throw new Error(data.error || 'Ошибка загрузки данных');
@@ -1357,7 +1675,7 @@
                 
                 const minYearValue = data.min_year || 0;
                 const maxYearValue = data.max_year || 0;
-                const deviation = maxYearValue - minYearValue;  // РАЗНИЦА, а не сумма
+                const deviation = maxYearValue - minYearValue;
                 const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
                 
                 // Основная строка
@@ -1374,7 +1692,7 @@
                     <td class="year-value">${formatCurrency(minYearValue)}</td>
                     <td class="year-value">${formatCurrency(maxYearValue)}</td>
                     <td class="deviation-cell ${deviationClass}" 
-                        onclick="showFactorAnalysis(${index}, event)">
+                        onclick="showDeviationAnalysis(${index}, event)">
                         ${formatCurrency(deviation, true)}
                     </td>
                 `;
@@ -1405,6 +1723,59 @@
                     }
                 });
             });
+        }
+
+        // ====== DISTRIBUTION STATS ======
+        async function loadDistributionStats() {
+            try {
+                const response = await fetch('/api/report1/distribution-analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        projects: state.selectedProjects,
+                        distributions: state.selectedDistributions,
+                        months: state.selectedMonths,
+                        year_min: state.minYear,
+                        year_max: state.maxYear
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.distribution_stats;
+                    document.getElementById('dist-min-total').textContent = formatCurrency(stats.total_min);
+                    document.getElementById('dist-max-total').textContent = formatCurrency(stats.total_max);
+                    document.getElementById('dist-deviation').textContent = formatCurrency(stats.total_deviation, true);
+                    
+                    // Обновляем заголовки
+                    document.getElementById('distribution-stats').innerHTML = `
+                        <h4><i class="fas fa-chart-pie"></i> Статистика по распределениям</h4>
+                        <div class="distribution-values">
+                            <div class="distribution-value">
+                                <span class="distribution-label">Сумма за ${state.minYear} год</span>
+                                <span class="distribution-amount">${formatCurrency(stats.total_min)}</span>
+                            </div>
+                            <div class="distribution-value">
+                                <span class="distribution-label">Сумма за ${state.maxYear} год</span>
+                                <span class="distribution-amount">${formatCurrency(stats.total_max)}</span>
+                            </div>
+                            <div class="distribution-value">
+                                <span class="distribution-label">Отклонение</span>
+                                <span class="distribution-amount ${stats.total_deviation > 0 ? 'positive' : stats.total_deviation < 0 ? 'negative' : ''}">
+                                    ${formatCurrency(stats.total_deviation, true)}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.getElementById('distribution-stats').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading distribution stats:', error);
+            }
         }
 
         // ====== HIERARCHY FUNCTIONS ======
@@ -1487,9 +1858,9 @@
                                 <span class="level-title">${level.name}</span>
                             </div>
                             <div class="level-values">
-                                <span class="level-value">${state.minYear}: ${formatCurrency(level.min_year)}</span>
-                                <span class="level-value">${state.maxYear}: ${formatCurrency(level.max_year)}</span>
-                                <span class="level-value ${deviationClass}">Отклонение: ${formatCurrency(deviation, true)}</span>
+                                <span class="level-value">${formatCurrency(level.min_year)}</span>
+                                <span class="level-value">${formatCurrency(level.max_year)}</span>
+                                <span class="level-value ${deviationClass}">${formatCurrency(deviation, true)}</span>
                             </div>
                         </div>
                 `;
@@ -1519,6 +1890,203 @@
             } else {
                 children.style.display = 'none';
                 toggle.classList.remove('rotated');
+            }
+        }
+
+        // ====== DEVIATION ANALYSIS ======
+        async function showDeviationAnalysis(index, event) {
+            if (event) event.stopPropagation();
+            
+            const row = document.querySelector(`tr[data-index="${index}"]`);
+            const key = row.dataset.key;
+            const title = row.querySelector('.row-title').textContent;
+            
+            state.currentAnalysisIndicator = key;
+            
+            // Показываем секцию анализа
+            document.getElementById('deviation-analysis').classList.remove('hidden');
+            document.getElementById('deviation-loading').classList.remove('hidden');
+            document.getElementById('deviation-content').classList.add('hidden');
+            
+            // Прокручиваем к анализу
+            document.getElementById('deviation-analysis').scrollIntoView({ behavior: 'smooth' });
+            
+            try {
+                const response = await fetch('/api/report1/deviation-analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        indicator_key: key,
+                        projects: state.selectedProjects,
+                        distributions: state.selectedDistributions,
+                        months: state.selectedMonths,
+                        year_min: state.minYear,
+                        year_max: state.maxYear
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderDeviationAnalysis(data.analysis, title);
+                    document.getElementById('deviation-loading').classList.add('hidden');
+                    document.getElementById('deviation-content').classList.remove('hidden');
+                } else {
+                    throw new Error(data.error || 'Ошибка загрузки анализа');
+                }
+                
+            } catch (error) {
+                console.error('Error loading deviation analysis:', error);
+                document.getElementById('deviation-loading').innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка загрузки анализа: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderDeviationAnalysis(analysis, title) {
+            // Рендерим уровень 1
+            renderAnalysisLevel('level1-analysis', analysis.level1 || []);
+            
+            // Рендерим уровень 2
+            renderAnalysisLevel('level2-analysis', analysis.level2 || []);
+            
+            // Рендерим уровень 3
+            renderAnalysisLevel('level3-analysis', analysis.level3 || []);
+            
+            // Рендерим уровень 4
+            renderAnalysisLevel('level4-analysis', analysis.level4 || []);
+            
+            // Обновляем заголовок
+            document.querySelector('#deviation-analysis h3').textContent = `Анализ отклонений: ${title}`;
+        }
+
+        function renderAnalysisLevel(containerId, items) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (!items || items.length === 0) {
+                container.innerHTML = '<div class="text-center" style="padding: var(--spacing-sm); color: var(--apple-text-secondary);">Нет данных</div>';
+                return;
+            }
+            
+            // Ограничиваем 10 самыми значимыми
+            const topItems = items.slice(0, 10);
+            
+            topItems.forEach(item => {
+                const deviation = item.deviation;
+                const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
+                
+                const div = document.createElement('div');
+                div.className = 'analysis-item';
+                div.onclick = () => {
+                    if (containerId === 'level4-analysis') {
+                        showContragentAnalysisFromDeviation(item.name);
+                    }
+                };
+                
+                div.innerHTML = `
+                    <div class="analysis-name">${item.name}</div>
+                    <div class="analysis-value ${deviationClass}">
+                        ${formatCurrency(deviation, true)}
+                    </div>
+                `;
+                
+                container.appendChild(div);
+            });
+        }
+
+        function showContragentAnalysisFromDeviation(level4Name) {
+            // Здесь нужно получить данные о статье для поиска контрагентов
+            // Пока просто показываем сообщение
+            showNotification(`Загрузка контрагентов для статьи: ${level4Name}`, 'info');
+            
+            // В реальном приложении здесь будет запрос к API для получения контрагентов
+        }
+
+        function showContragentAnalysisFromLevels() {
+            if (!state.currentAnalysisIndicator) {
+                showNotification('Сначала выберите статью для анализа', 'error');
+                return;
+            }
+            
+            // Получаем первую статью из уровня 4 для анализа
+            const level4Items = document.querySelectorAll('#level4-analysis .analysis-item');
+            if (level4Items.length === 0) {
+                showNotification('Нет данных для анализа контрагентов', 'error');
+                return;
+            }
+            
+            const firstItem = level4Items[0];
+            const articleName = firstItem.querySelector('.analysis-name').textContent;
+            showContragentAnalysisFromDeviation(articleName);
+        }
+
+        // ====== CHART FUNCTIONS ======
+        async function loadChartData() {
+            document.getElementById('chart-container').classList.remove('hidden');
+            document.getElementById('chart-loading').classList.remove('hidden');
+            document.getElementById('chart-content').classList.add('hidden');
+            
+            // Активируем первую кнопку
+            document.querySelectorAll('.chart-indicator-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.chart-indicator-btn[data-key="${state.currentChartIndicator}"]`).classList.add('active');
+            
+            await changeChartIndicator(state.currentChartIndicator);
+        }
+
+        async function changeChartIndicator(indicatorKey) {
+            state.currentChartIndicator = indicatorKey;
+            
+            // Обновляем активную кнопку
+            document.querySelectorAll('.chart-indicator-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.chart-indicator-btn[data-key="${indicatorKey}"]`).classList.add('active');
+            
+            document.getElementById('chart-loading').classList.remove('hidden');
+            document.getElementById('chart-content').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/report1/chart-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        indicator_key: indicatorKey,
+                        projects: state.selectedProjects,
+                        distributions: state.selectedDistributions,
+                        months: state.selectedMonths,
+                        year_min: state.minYear,
+                        year_max: state.maxYear
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.chart_image) {
+                    document.getElementById('chart-image').src = data.chart_image;
+                    document.getElementById('chart-loading').classList.add('hidden');
+                    document.getElementById('chart-content').classList.remove('hidden');
+                } else {
+                    throw new Error('Ошибка загрузки графика');
+                }
+                
+            } catch (error) {
+                console.error('Error loading chart:', error);
+                document.getElementById('chart-loading').innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка загрузки графика: ${error.message}</p>
+                    </div>
+                `;
             }
         }
 
@@ -1675,9 +2243,9 @@
             
             contragents.sort((a, b) => {
                 if (sortDesc) {
-                    return a.deviation - b.deviation; // Для минусов: от самого отрицательного
+                    return a.deviation - b.deviation;
                 } else {
-                    return b.deviation - a.deviation; // Для плюсов: от самого положительного
+                    return b.deviation - a.deviation;
                 }
             });
             
@@ -1780,10 +2348,13 @@
             state.maxYear = maxYear;
             initializeYearSlider();
             
-            // Скрыть таблицу
+            // Скрыть таблицу и дополнительные секции
             document.getElementById('table-placeholder').classList.remove('hidden');
             document.getElementById('aggregated-table').classList.add('hidden');
             document.getElementById('table-loading').classList.add('hidden');
+            document.getElementById('deviation-analysis').classList.add('hidden');
+            document.getElementById('chart-container').classList.add('hidden');
+            document.getElementById('distribution-stats').classList.add('hidden');
             
             showNotification('Фильтры сброшены', 'success');
         }
