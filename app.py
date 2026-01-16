@@ -73,7 +73,7 @@ def get_distribution():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# API: Список проектов (обновленный)
+# API: Список проектов
 @app.route('/api/projects')
 @login_required
 def get_projects():
@@ -160,61 +160,48 @@ def get_aggregated_table():
         if not months:
             return jsonify({'success': False, 'error': 'Не выбраны месяцы'}), 400
         
-        # Базовый запрос с вашим SQL
-        base_query = db.session.query(
-            FinancialData.Распределение,
-            FinancialData.СтатьяУровень0,
-            FinancialData.СтатьяУровень1,
-            FinancialData.СтатьяУровень2,
-            FinancialData.СтатьяУровень3,
-            FinancialData.СтатьяУровень4,
-            FinancialData.Сумма,
-            extract('month', FinancialData.Период).label('Месяц'),
-            extract('year', FinancialData.Период).label('Год'),
-            case(
-                (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-                else_=-FinancialData.Сумма
-            ).label('отклонение'),
-            FinancialData.Проект,
-            FinancialData.Контрагент
-        ).filter(
-            FinancialData.Период.isnot(None),
-            FinancialData.Проект.in_(projects)
-        )
+        if not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Не выбран период'}), 400
         
-        # Применяем фильтры
-        if distributions:
-            base_query = base_query.filter(FinancialData.Распределение.in_(distributions))
-        
-        if months:
-            base_query = base_query.filter(extract('month', FinancialData.Период).in_(months))
-        
-        if year_min and year_max:
-            base_query = base_query.filter(
-                extract('year', FinancialData.Период).between(year_min, year_max)
-            )
-        
-        # Получаем все данные
-        all_data = base_query.all()
-        
-        # Группируем данные для расчетов
-        data_by_year = {}
-        for row in all_data:
-            year = int(row.Год) if row.Год else None
-            if year not in data_by_year:
-                data_by_year[year] = []
-            data_by_year[year].append(row)
+        # Получаем данные за минимальный год
+        data_min_year = get_year_data(projects, distributions, months, year_min)
+        # Получаем данные за максимальный год
+        data_max_year = get_year_data(projects, distributions, months, year_max)
         
         # Рассчитываем показатели
         result = {
-            'net_cash_flow': calculate_net_cash_flow(data_by_year, year_min, year_max),
-            'od_result': calculate_od_result(data_by_year, year_min, year_max),
-            'od_income': calculate_od_income(data_by_year, year_min, year_max),
-            'od_expense': calculate_od_expense(data_by_year, year_min, year_max),
-            'variables': calculate_variables(data_by_year, year_min, year_max),
-            'constants': calculate_constants(data_by_year, year_min, year_max),
-            'id_result': calculate_id_result(data_by_year, year_min, year_max),
-            'fin_result': calculate_fin_result(data_by_year, year_min, year_max)
+            'net_cash_flow': {
+                'min_year': calculate_total(data_min_year),
+                'max_year': calculate_total(data_max_year)
+            },
+            'od_result': {
+                'min_year': calculate_od_result(data_min_year),
+                'max_year': calculate_od_result(data_max_year)
+            },
+            'od_income': {
+                'min_year': calculate_od_income(data_min_year),
+                'max_year': calculate_od_income(data_max_year)
+            },
+            'od_expense': {
+                'min_year': calculate_od_expense(data_min_year),
+                'max_year': calculate_od_expense(data_max_year)
+            },
+            'variables': {
+                'min_year': calculate_variables(data_min_year),
+                'max_year': calculate_variables(data_max_year)
+            },
+            'constants': {
+                'min_year': calculate_constants(data_min_year),
+                'max_year': calculate_constants(data_max_year)
+            },
+            'id_result': {
+                'min_year': calculate_id_result(data_min_year),
+                'max_year': calculate_id_result(data_max_year)
+            },
+            'fin_result': {
+                'min_year': calculate_fin_result(data_min_year),
+                'max_year': calculate_fin_result(data_max_year)
+            }
         }
         
         return jsonify({
@@ -241,6 +228,9 @@ def get_hierarchy_details():
         year_min = data.get('year_min')
         year_max = data.get('year_max')
         
+        if not projects or not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
         # Определяем какие статьи включать в иерархию
         indicator_config = {
             'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
@@ -250,73 +240,17 @@ def get_hierarchy_details():
             'id_result': {'СтатьяУровень1': 'Результат по ИД'},
             'fin_result': {'СтатьяУровень1': 'Финансы'},
             'net_cash_flow': {},  # Все статьи
-            'od_result': {}  # Поступления и Отток по ОД
+            'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']}
         }
         
         config = indicator_config.get(indicator_key, {})
         
-        base_query = db.session.query(
-            FinancialData.СтатьяУровень1,
-            FinancialData.СтатьяУровень2,
-            FinancialData.СтатьяУровень3,
-            FinancialData.СтатьяУровень4,
-            func.sum(case(
-                (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-                else_=-FinancialData.Сумма
-            )).label('отклонение')
-        ).filter(
-            FinancialData.Период.isnot(None),
-            FinancialData.Проект.in_(projects)
-        )
+        # Получаем данные за оба года
+        data_min_year = get_year_data_for_hierarchy(projects, distributions, months, year_min, config)
+        data_max_year = get_year_data_for_hierarchy(projects, distributions, months, year_max, config)
         
-        # Применяем фильтры
-        if distributions:
-            base_query = base_query.filter(FinancialData.Распределение.in_(distributions))
-        
-        if months:
-            base_query = base_query.filter(extract('month', FinancialData.Период).in_(months))
-        
-        if year_min and year_max:
-            base_query = base_query.filter(
-                extract('year', FinancialData.Период).between(year_min, year_max)
-            )
-        
-        # Фильтры по статьям
-        if config:
-            if 'СтатьяУровень1' in config:
-                base_query = base_query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
-            if 'СтатьяУровень2' in config:
-                base_query = base_query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
-        
-        # Группируем
-        if indicator_key in ['od_income', 'od_expense', 'variables', 'constants', 'id_result', 'fin_result']:
-            base_query = base_query.group_by(
-                FinancialData.СтатьяУровень1,
-                FinancialData.СтатьяУровень2,
-                FinancialData.СтатьяУровень3,
-                FinancialData.СтатьяУровень4
-            )
-        elif indicator_key == 'od_result':
-            base_query = base_query.filter(
-                FinancialData.СтатьяУровень1.in_(['Поступления по ОД', 'Отток по ОД'])
-            ).group_by(
-                FinancialData.СтатьяУровень1,
-                FinancialData.СтатьяУровень2,
-                FinancialData.СтатьяУровень3,
-                FinancialData.СтатьяУровень4
-            )
-        else:  # net_cash_flow
-            base_query = base_query.group_by(
-                FinancialData.СтатьяУровень1,
-                FinancialData.СтатьяУровень2,
-                FinancialData.СтатьяУровень3,
-                FinancialData.СтатьяУровень4
-            )
-        
-        results = base_query.all()
-        
-        # Формируем иерархию
-        hierarchy = build_hierarchy(results, year_min, year_max)
+        # Строим иерархию
+        hierarchy = build_hierarchy_with_years(data_min_year, data_max_year, year_min, year_max)
         
         return jsonify({
             'success': True,
@@ -340,6 +274,9 @@ def get_factor_analysis():
         year_min = data.get('year_min')
         year_max = data.get('year_max')
         
+        if not projects or not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
         # Определяем какие статьи анализировать
         indicator_config = {
             'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
@@ -354,73 +291,12 @@ def get_factor_analysis():
         
         config = indicator_config.get(indicator_key, {})
         
-        # Запрос для статей уровня 4
-        query = db.session.query(
-            FinancialData.СтатьяУровень1,
-            FinancialData.СтатьяУровень2,
-            FinancialData.СтатьяУровень3,
-            FinancialData.СтатьяУровень4,
-            func.sum(case(
-                (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-                else_=-FinancialData.Сумма
-            )).label('отклонение')
-        ).filter(
-            FinancialData.Период.isnot(None),
-            FinancialData.Проект.in_(projects)
-        )
+        # Получаем данные за оба года
+        data_min_year = get_year_data_for_hierarchy(projects, distributions, months, year_min, config)
+        data_max_year = get_year_data_for_hierarchy(projects, distributions, months, year_max, config)
         
-        # Фильтры
-        if distributions:
-            query = query.filter(FinancialData.Распределение.in_(distributions))
-        
-        if months:
-            query = query.filter(extract('month', FinancialData.Период).in_(months))
-        
-        if year_min and year_max:
-            query = query.filter(
-                extract('year', FinancialData.Период).between(year_min, year_max)
-            )
-        
-        # Фильтры по статьям
-        if config:
-            if 'СтатьяУровень1' in config:
-                if isinstance(config['СтатьяУровень1'], list):
-                    query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
-                else:
-                    query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
-            if 'СтатьяУровень2' in config:
-                query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
-        
-        # Группируем по уровню 4
-        query = query.group_by(
-            FinancialData.СтатьяУровень1,
-            FinancialData.СтатьяУровень2,
-            FinancialData.СтатьяУровень3,
-            FinancialData.СтатьяУровень4
-        ).order_by(func.abs(func.sum(case(
-            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-            else_=-FinancialData.Сумма
-        ))).desc())
-        
-        results = query.all()
-        
-        # Рассчитываем проценты
-        total = sum(abs(float(r.отклонение or 0)) for r in results)
-        
-        factors = []
-        for row in results:
-            if row.отклонение and float(row.отклонение) != 0:
-                deviation = float(row.отклонение)
-                percentage = (abs(deviation) / total * 100) if total > 0 else 0
-                
-                factors.append({
-                    'level1': row.СтатьяУровень1 or 'Не указано',
-                    'level2': row.СтатьяУровень2 or 'Не указано',
-                    'level3': row.СтатьяУровень3 or 'Не указано',
-                    'level4': row.СтатьяУровень4 or 'Не указано',
-                    'deviation': deviation,
-                    'percentage': round(percentage, 2)
-                })
+        # Анализируем статьи уровня 4
+        factors = analyze_level4_factors(data_min_year, data_max_year)
         
         return jsonify({
             'success': True,
@@ -447,62 +323,15 @@ def get_contragent_analysis():
         year_min = data.get('year_min')
         year_max = data.get('year_max')
         
-        # Запрос для контрагентов
-        query = db.session.query(
-            FinancialData.Контрагент,
-            func.sum(case(
-                (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-                else_=-FinancialData.Сумма
-            )).label('отклонение')
-        ).filter(
-            FinancialData.Период.isnot(None),
-            FinancialData.Проект.in_(projects)
-        )
+        if not projects or not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
         
-        # Фильтры по статьям
-        if level1:
-            query = query.filter(FinancialData.СтатьяУровень1 == level1)
-        if level2:
-            query = query.filter(FinancialData.СтатьяУровень2 == level2)
-        if level3:
-            query = query.filter(FinancialData.СтатьяУровень3 == level3)
-        if level4:
-            query = query.filter(FinancialData.СтатьяУровень4 == level4)
+        # Получаем контрагентов за оба года
+        contragents_min = get_contragent_data(projects, distributions, months, year_min, level1, level2, level3, level4)
+        contragents_max = get_contragent_data(projects, distributions, months, year_max, level1, level2, level3, level4)
         
-        # Дополнительные фильтры
-        if distributions:
-            query = query.filter(FinancialData.Распределение.in_(distributions))
-        
-        if months:
-            query = query.filter(extract('month', FinancialData.Период).in_(months))
-        
-        if year_min and year_max:
-            query = query.filter(
-                extract('year', FinancialData.Период).between(year_min, year_max)
-            )
-        
-        # Группируем по контрагентам
-        query = query.group_by(FinancialData.Контрагент)
-        results = query.all()
-        
-        # Рассчитываем проценты
-        contragents = []
-        for row in results:
-            if row.Контрагент and row.отклонение:
-                deviation = float(row.отклонение)
-                
-                contragents.append({
-                    'contragent': row.Контрагент,
-                    'deviation': deviation
-                })
-        
-        # Сортируем по абсолютному значению отклонения
-        contragents.sort(key=lambda x: abs(x['deviation']), reverse=True)
-        
-        # Рассчитываем проценты
-        total = sum(abs(c['deviation']) for c in contragents)
-        for c in contragents:
-            c['percentage'] = round((abs(c['deviation']) / total * 100), 2) if total > 0 else 0
+        # Объединяем и считаем отклонения
+        contragents = calculate_contragent_deviations(contragents_min, contragents_max)
         
         return jsonify({
             'success': True,
@@ -515,194 +344,336 @@ def get_contragent_analysis():
 
 # ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
 
-def calculate_net_cash_flow(data_by_year, year_min, year_max):
-    """Расчет чистого денежного потока"""
-    result = {'min_year': 0, 'max_year': 0}
+def get_year_data(projects, distributions, months, year):
+    """Получает данные за конкретный год с преобразованием отклонения"""
+    query = db.session.query(
+        FinancialData.СтатьяУровень1,
+        FinancialData.СтатьяУровень2,
+        FinancialData.СтатьяУровень3,
+        FinancialData.СтатьяУровень4,
+        FinancialData.Сумма,
+        case(
+            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
+            else_=-FinancialData.Сумма
+        ).label('отклонение')
+    ).filter(
+        FinancialData.Период.isnot(None),
+        FinancialData.Проект.in_(projects),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
     
-    for year, rows in data_by_year.items():
-        if year == year_min:
-            result['min_year'] = sum(row.отклонение or 0 for row in rows)
-        elif year == year_max:
-            result['max_year'] = sum(row.отклонение or 0 for row in rows)
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
     
-    return result
+    return query.all()
 
-def calculate_od_result(data_by_year, year_min, year_max):
-    """Расчет результата ОД"""
-    result = {'min_year': 0, 'max_year': 0}
+def get_year_data_for_hierarchy(projects, distributions, months, year, config):
+    """Получает данные за конкретный год для иерархии"""
+    query = db.session.query(
+        FinancialData.СтатьяУровень1,
+        FinancialData.СтатьяУровень2,
+        FinancialData.СтатьяУровень3,
+        FinancialData.СтатьяУровень4,
+        case(
+            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
+            else_=-FinancialData.Сумма
+        ).label('отклонение')
+    ).filter(
+        FinancialData.Период.isnot(None),
+        FinancialData.Проект.in_(projects),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
     
-    for year, rows in data_by_year.items():
-        od_income = sum(row.отклонение or 0 for row in rows 
-                       if row.СтатьяУровень1 == 'Поступления по ОД')
-        od_expense = sum(row.отклонение or 0 for row in rows 
-                        if row.СтатьяУровень1 == 'Отток по ОД')
-        
-        if year == year_min:
-            result['min_year'] = od_income - abs(od_expense)
-        elif year == year_max:
-            result['max_year'] = od_income - abs(od_expense)
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
     
-    return result
+    if config:
+        if 'СтатьяУровень1' in config:
+            if isinstance(config['СтатьяУровень1'], list):
+                query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+            else:
+                query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+        if 'СтатьяУровень2' in config:
+            query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+    
+    return query.all()
 
-def calculate_od_income(data_by_year, year_min, year_max):
+def calculate_total(rows):
+    """Сумма всех отклонений (с учетом знаков)"""
+    return sum(row.отклонение or 0 for row in rows)
+
+def calculate_od_result(rows):
+    """Расчет результата ОД = Поступления по ОД + Отток по ОД (с учетом знаков)"""
+    od_income = sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
+    od_expense = sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
+    return od_income + od_expense  # od_expense уже с минусом в отклонении
+
+def calculate_od_income(rows):
     """Расчет поступлений по ОД"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(row.отклонение or 0 for row in rows 
-                   if row.СтатьяУровень1 == 'Поступления по ОД')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
 
-def calculate_od_expense(data_by_year, year_min, year_max):
-    """Расчет оттока по ОД (положительное число)"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(abs(row.отклонение or 0) for row in rows 
-                   if row.СтатьяУровень1 == 'Отток по ОД')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+def calculate_od_expense(rows):
+    """Расчет оттока по ОД (отрицательное число)"""
+    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
 
-def calculate_variables(data_by_year, year_min, year_max):
+def calculate_variables(rows):
     """Расчет переменных расходов"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(abs(row.отклонение or 0) for row in rows 
-                   if row.СтатьяУровень1 == 'Отток по ОД' 
-                   and row.СтатьяУровень2 == 'Отток по ОД (переменные)')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+    return sum(row.отклонение or 0 for row in rows 
+               if row.СтатьяУровень1 == 'Отток по ОД' 
+               and row.СтатьяУровень2 == 'Отток по ОД (переменные)')
 
-def calculate_constants(data_by_year, year_min, year_max):
+def calculate_constants(rows):
     """Расчет постоянных расходов"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(abs(row.отклонение or 0) for row in rows 
-                   if row.СтатьяУровень1 == 'Отток по ОД' 
-                   and row.СтатьяУровень2 == 'Отток по ОД (постоянные)')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+    return sum(row.отклонение or 0 for row in rows 
+               if row.СтатьяУровень1 == 'Отток по ОД' 
+               and row.СтатьяУровень2 == 'Отток по ОД (постоянные)')
 
-def calculate_id_result(data_by_year, year_min, year_max):
+def calculate_id_result(rows):
     """Расчет результата по ИД"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(row.отклонение or 0 for row in rows 
-                   if row.СтатьяУровень1 == 'Результат по ИД')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Результат по ИД')
 
-def calculate_fin_result(data_by_year, year_min, year_max):
+def calculate_fin_result(rows):
     """Расчет результата финансов"""
-    result = {'min_year': 0, 'max_year': 0}
-    
-    for year, rows in data_by_year.items():
-        total = sum(row.отклонение or 0 for row in rows 
-                   if row.СтатьяУровень1 == 'Финансы')
-        if year == year_min:
-            result['min_year'] = total
-        elif year == year_max:
-            result['max_year'] = total
-    
-    return result
+    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Финансы')
 
-def build_hierarchy(results, year_min, year_max):
-    """Построение иерархии статей"""
-    hierarchy = []
+def build_hierarchy_with_years(rows_min, rows_max, year_min, year_max):
+    """Строит иерархию с данными за оба года"""
+    # Объединяем все уникальные записи
+    all_data = {}
     
-    # Группируем по уровням
-    level1_groups = {}
-    for row in results:
-        level1 = row.СтатьяУровень1 or 'Не указано'
-        if level1 not in level1_groups:
-            level1_groups[level1] = []
-        level1_groups[level1].append(row)
+    # Добавляем данные за минимальный год
+    for row in rows_min:
+        key = f"{row.СтатьяУровень1 or ''}|{row.СтатьяУровень2 or ''}|{row.СтатьяУровень3 or ''}|{row.СтатьяУровень4 or ''}"
+        if key not in all_data:
+            all_data[key] = {
+                'level1': row.СтатьяУровень1,
+                'level2': row.СтатьяУровень2,
+                'level3': row.СтатьяУровень3,
+                'level4': row.СтатьяУровень4,
+                'min_year': 0,
+                'max_year': 0
+            }
+        all_data[key]['min_year'] += row.отклонение or 0
+    
+    # Добавляем данные за максимальный год
+    for row in rows_max:
+        key = f"{row.СтатьяУровень1 or ''}|{row.СтатьяУровень2 or ''}|{row.СтатьяУровень3 or ''}|{row.СтатьяУровень4 or ''}"
+        if key not in all_data:
+            all_data[key] = {
+                'level1': row.СтатьяУровень1,
+                'level2': row.СтатьяУровень2,
+                'level3': row.СтатьяУровень3,
+                'level4': row.СтатьяУровень4,
+                'min_year': 0,
+                'max_year': 0
+            }
+        all_data[key]['max_year'] += row.отклонение or 0
     
     # Строим дерево
-    for level1_name, level1_rows in level1_groups.items():
-        level1_item = {
+    hierarchy = []
+    
+    # Группируем по level1
+    level1_groups = {}
+    for item in all_data.values():
+        level1 = item['level1'] or 'Не указано'
+        if level1 not in level1_groups:
+            level1_groups[level1] = []
+        level1_groups[level1].append(item)
+    
+    for level1_name, level1_items in level1_groups.items():
+        level1_total_min = sum(item['min_year'] for item in level1_items)
+        level1_total_max = sum(item['max_year'] for item in level1_items)
+        
+        level1_node = {
             'name': level1_name,
-            'min_year': sum(r.отклонение or 0 for r in level1_rows),
-            'max_year': sum(r.отклонение or 0 for r in level1_rows),
-            'deviation': 0,
+            'min_year': level1_total_min,
+            'max_year': level1_total_max,
+            'deviation': level1_total_max - level1_total_min,
             'children': []
         }
         
-        # Группируем по уровню 2
+        # Группируем по level2
         level2_groups = {}
-        for row in level1_rows:
-            level2 = row.СтатьяУровень2 or 'Не указано'
+        for item in level1_items:
+            level2 = item['level2'] or 'Не указано'
             if level2 not in level2_groups:
                 level2_groups[level2] = []
-            level2_groups[level2].append(row)
+            level2_groups[level2].append(item)
         
-        for level2_name, level2_rows in level2_groups.items():
-            level2_item = {
+        for level2_name, level2_items in level2_groups.items():
+            level2_total_min = sum(item['min_year'] for item in level2_items)
+            level2_total_max = sum(item['max_year'] for item in level2_items)
+            
+            level2_node = {
                 'name': level2_name,
-                'min_year': sum(r.отклонение or 0 for r in level2_rows),
-                'max_year': sum(r.отклонение or 0 for r in level2_rows),
-                'deviation': 0,
+                'min_year': level2_total_min,
+                'max_year': level2_total_max,
+                'deviation': level2_total_max - level2_total_min,
                 'children': []
             }
             
-            # Группируем по уровню 3
+            # Группируем по level3
             level3_groups = {}
-            for row in level2_rows:
-                level3 = row.СтатьяУровень3 or 'Не указано'
+            for item in level2_items:
+                level3 = item['level3'] or 'Не указано'
                 if level3 not in level3_groups:
                     level3_groups[level3] = []
-                level3_groups[level3].append(row)
+                level3_groups[level3].append(item)
             
-            for level3_name, level3_rows in level3_groups.items():
-                level3_item = {
+            for level3_name, level3_items in level3_groups.items():
+                level3_total_min = sum(item['min_year'] for item in level3_items)
+                level3_total_max = sum(item['max_year'] for item in level3_items)
+                
+                level3_node = {
                     'name': level3_name,
-                    'min_year': sum(r.отклонение or 0 for r in level3_rows),
-                    'max_year': sum(r.отклонение or 0 for r in level3_rows),
-                    'deviation': 0,
+                    'min_year': level3_total_min,
+                    'max_year': level3_total_max,
+                    'deviation': level3_total_max - level3_total_min,
                     'children': []
                 }
                 
-                # Добавляем уровень 4
-                for row in level3_rows:
-                    level4_item = {
-                        'name': row.СтатьяУровень4 or 'Не указано',
-                        'min_year': row.отклонение or 0,
-                        'max_year': row.отклонение or 0,
-                        'deviation': 0
+                # Добавляем level4
+                for item in level3_items:
+                    level4_node = {
+                        'name': item['level4'] or 'Не указано',
+                        'min_year': item['min_year'],
+                        'max_year': item['max_year'],
+                        'deviation': item['max_year'] - item['min_year']
                     }
-                    level3_item['children'].append(level4_item)
+                    level3_node['children'].append(level4_node)
                 
-                level2_item['children'].append(level3_item)
+                level2_node['children'].append(level3_node)
             
-            level1_item['children'].append(level2_item)
+            level1_node['children'].append(level2_node)
         
-        hierarchy.append(level1_item)
+        hierarchy.append(level1_node)
     
     return hierarchy
+
+def analyze_level4_factors(rows_min, rows_max):
+    """Анализирует факторы на уровне 4 статей"""
+    all_data = {}
+    
+    # Собираем данные за минимальный год
+    for row in rows_min:
+        key = f"{row.СтатьяУровень1 or ''}|{row.СтатьяУровень2 or ''}|{row.СтатьяУровень3 or ''}|{row.СтатьяУровень4 or ''}"
+        if key not in all_data:
+            all_data[key] = {
+                'level1': row.СтатьяУровень1,
+                'level2': row.СтатьяУровень2,
+                'level3': row.СтатьяУровень3,
+                'level4': row.СтатьяУровень4,
+                'min_year': 0,
+                'max_year': 0
+            }
+        all_data[key]['min_year'] += row.отклонение or 0
+    
+    # Собираем данные за максимальный год
+    for row in rows_max:
+        key = f"{row.СтатьяУровень1 or ''}|{row.СтатьяУровень2 or ''}|{row.СтатьяУровень3 or ''}|{row.СтатьяУровень4 or ''}"
+        if key not in all_data:
+            all_data[key] = {
+                'level1': row.СтатьяУровень1,
+                'level2': row.СтатьяУровень2,
+                'level3': row.СтатьяУровень3,
+                'level4': row.СтатьяУровень4,
+                'min_year': 0,
+                'max_year': 0
+            }
+        all_data[key]['max_year'] += row.отклонение or 0
+    
+    # Рассчитываем отклонения
+    factors = []
+    for item in all_data.values():
+        deviation = item['max_year'] - item['min_year']
+        if deviation != 0:  # Только ненулевые отклонения
+            factors.append({
+                'level1': item['level1'] or 'Не указано',
+                'level2': item['level2'] or 'Не указано',
+                'level3': item['level3'] or 'Не указано',
+                'level4': item['level4'] or 'Не указано',
+                'min_year': item['min_year'],
+                'max_year': item['max_year'],
+                'deviation': deviation
+            })
+    
+    # Сортируем по абсолютному значению отклонения
+    factors.sort(key=lambda x: abs(x['deviation']), reverse=True)
+    
+    # Рассчитываем проценты
+    total_deviation = sum(abs(f['deviation']) for f in factors)
+    for factor in factors:
+        factor['percentage'] = round((abs(factor['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+    
+    return factors
+
+def get_contragent_data(projects, distributions, months, year, level1=None, level2=None, level3=None, level4=None):
+    """Получает данные по контрагентам за конкретный год"""
+    query = db.session.query(
+        FinancialData.Контрагент,
+        case(
+            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
+            else_=-FinancialData.Сумма
+        ).label('отклонение')
+    ).filter(
+        FinancialData.Период.isnot(None),
+        FinancialData.Проект.in_(projects),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
+    
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
+    
+    if level1:
+        query = query.filter(FinancialData.СтатьяУровень1 == level1)
+    if level2:
+        query = query.filter(FinancialData.СтатьяУровень2 == level2)
+    if level3:
+        query = query.filter(FinancialData.СтатьяУровень3 == level3)
+    if level4:
+        query = query.filter(FinancialData.СтатьяУровень4 == level4)
+    
+    results = query.all()
+    
+    # Группируем по контрагентам
+    contragents = {}
+    for row in results:
+        contragent = row.Контрагент or 'Не указано'
+        if contragent not in contragents:
+            contragents[contragent] = 0
+        contragents[contragent] += row.отклонение or 0
+    
+    return contragents
+
+def calculate_contragent_deviations(contragents_min, contragents_max):
+    """Рассчитывает отклонения по контрагентам"""
+    all_contragents = set(list(contragents_min.keys()) + list(contragents_max.keys()))
+    
+    deviations = []
+    for contragent in all_contragents:
+        min_value = contragents_min.get(contragent, 0)
+        max_value = contragents_max.get(contragent, 0)
+        deviation = max_value - min_value
+        
+        deviations.append({
+            'contragent': contragent,
+            'min_year': min_value,
+            'max_year': max_value,
+            'deviation': deviation
+        })
+    
+    # Сортируем по абсолютному значению отклонения
+    deviations.sort(key=lambda x: abs(x['deviation']), reverse=True)
+    
+    # Рассчитываем проценты
+    total_deviation = sum(abs(d['deviation']) for d in deviations)
+    for d in deviations:
+        d['percentage'] = round((abs(d['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+    
+    return deviations
 
 # ====== СТАРЫЕ API (для совместимости) ======
 
