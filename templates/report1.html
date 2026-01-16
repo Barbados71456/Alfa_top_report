@@ -33,6 +33,12 @@
             --spacing-xl: 32px;
             --transition-fast: 0.2s ease;
             --transition-normal: 0.3s ease;
+            
+            /* Цвета для выделения строк */
+            --blue-dark: #1e3a8a;
+            --blue-dark-light: #3b82f6;
+            --blue-light: #60a5fa;
+            --blue-light-lighter: #93c5fd;
         }
 
         * {
@@ -346,11 +352,33 @@
             gap: var(--spacing-sm);
         }
 
+        /* Стили для выделенных строк синим цветом */
+        .table-row-header.blue-dark td:first-child {
+            background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-dark-light) 100%);
+            color: white;
+            border-radius: var(--radius-sm);
+            padding: var(--spacing-sm) var(--spacing-md);
+            margin: 2px 0;
+        }
+
+        .table-row-header.blue-light td:first-child {
+            background: linear-gradient(135deg, var(--blue-light) 0%, var(--blue-light-lighter) 100%);
+            color: white;
+            border-radius: var(--radius-sm);
+            padding: var(--spacing-sm) var(--spacing-md);
+            margin: 2px 0;
+        }
+
         .row-toggle {
             width: 20px;
             text-align: center;
             color: var(--apple-text-secondary);
             transition: var(--transition-fast);
+        }
+
+        .table-row-header.blue-dark .row-toggle,
+        .table-row-header.blue-light .row-toggle {
+            color: white;
         }
 
         .row-toggle.rotated {
@@ -1313,14 +1341,14 @@
             state.expandedRows.clear();
             
             const indicators = [
-                { key: 'net_cash_flow', label: 'Чистый денежный поток' },
-                { key: 'od_result', label: 'Результат ОД' },
+                { key: 'net_cash_flow', label: 'Чистый денежный поток', cssClass: 'blue-dark' },
+                { key: 'od_result', label: 'Результат ОД', cssClass: 'blue-light' },
                 { key: 'od_income', label: 'Поступления по ОД' },
                 { key: 'od_expense', label: 'Отток по ОД' },
                 { key: 'variables', label: 'Переменные' },
                 { key: 'constants', label: 'Постоянные' },
-                { key: 'id_result', label: 'Результат по ИД' },
-                { key: 'fin_result', label: 'Результат фин' }
+                { key: 'id_result', label: 'Результат по ИД', cssClass: 'blue-light' },
+                { key: 'fin_result', label: 'Результат фин', cssClass: 'blue-light' }
             ];
             
             indicators.forEach((indicator, index) => {
@@ -1334,7 +1362,7 @@
                 
                 // Основная строка
                 const mainRow = document.createElement('tr');
-                mainRow.className = 'table-row-header';
+                mainRow.className = `table-row-header ${indicator.cssClass || ''}`;
                 mainRow.dataset.index = index;
                 mainRow.dataset.key = indicator.key;
                 

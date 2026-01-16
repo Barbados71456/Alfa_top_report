@@ -345,17 +345,13 @@ def get_contragent_analysis():
 # ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
 
 def get_year_data(projects, distributions, months, year):
-    """Получает данные за конкретный год с преобразованием отклонения"""
+    """Получает данные за конкретный год - БЕЗ преобразования знака!"""
     query = db.session.query(
         FinancialData.СтатьяУровень1,
         FinancialData.СтатьяУровень2,
         FinancialData.СтатьяУровень3,
         FinancialData.СтатьяУровень4,
-        FinancialData.Сумма,
-        case(
-            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-            else_=-FinancialData.Сумма
-        ).label('отклонение')
+        FinancialData.Сумма
     ).filter(
         FinancialData.Период.isnot(None),
         FinancialData.Проект.in_(projects),
@@ -369,16 +365,13 @@ def get_year_data(projects, distributions, months, year):
     return query.all()
 
 def get_year_data_for_hierarchy(projects, distributions, months, year, config):
-    """Получает данные за конкретный год для иерархии"""
+    """Получает данные за конкретный год для иерархии - БЕЗ преобразования знака!"""
     query = db.session.query(
         FinancialData.СтатьяУровень1,
         FinancialData.СтатьяУровень2,
         FinancialData.СтатьяУровень3,
         FinancialData.СтатьяУровень4,
-        case(
-            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-            else_=-FinancialData.Сумма
-        ).label('отклонение')
+        FinancialData.Сумма
     ).filter(
         FinancialData.Период.isnot(None),
         FinancialData.Проект.in_(projects),
@@ -401,42 +394,42 @@ def get_year_data_for_hierarchy(projects, distributions, months, year, config):
     return query.all()
 
 def calculate_total(rows):
-    """Сумма всех отклонений (с учетом знаков)"""
-    return sum(row.отклонение or 0 for row in rows)
+    """Сумма всех сумм (чистый денежный поток)"""
+    return sum(row.Сумма or 0 for row in rows)
 
 def calculate_od_result(rows):
-    """Расчет результата ОД = Поступления по ОД + Отток по ОД (с учетом знаков)"""
-    od_income = sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
-    od_expense = sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
-    return od_income + od_expense  # od_expense уже с минусом в отклонении
+    """Расчет результата ОД = Поступления по ОД + Отток по ОД"""
+    od_income = sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
+    od_expense = sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
+    return od_income + od_expense
 
 def calculate_od_income(rows):
     """Расчет поступлений по ОД"""
-    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
+    return sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Поступления по ОД')
 
 def calculate_od_expense(rows):
-    """Расчет оттока по ОД (отрицательное число)"""
-    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
+    """Расчет оттока по ОД"""
+    return sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Отток по ОД')
 
 def calculate_variables(rows):
     """Расчет переменных расходов"""
-    return sum(row.отклонение or 0 for row in rows 
+    return sum(row.Сумма or 0 for row in rows 
                if row.СтатьяУровень1 == 'Отток по ОД' 
                and row.СтатьяУровень2 == 'Отток по ОД (переменные)')
 
 def calculate_constants(rows):
     """Расчет постоянных расходов"""
-    return sum(row.отклонение or 0 for row in rows 
+    return sum(row.Сумма or 0 for row in rows 
                if row.СтатьяУровень1 == 'Отток по ОД' 
                and row.СтатьяУровень2 == 'Отток по ОД (постоянные)')
 
 def calculate_id_result(rows):
     """Расчет результата по ИД"""
-    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Результат по ИД')
+    return sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Результат по ИД')
 
 def calculate_fin_result(rows):
     """Расчет результата финансов"""
-    return sum(row.отклонение or 0 for row in rows if row.СтатьяУровень1 == 'Финансы')
+    return sum(row.Сумма or 0 for row in rows if row.СтатьяУровень1 == 'Финансы')
 
 def build_hierarchy_with_years(rows_min, rows_max, year_min, year_max):
     """Строит иерархию с данными за оба года"""
@@ -455,7 +448,7 @@ def build_hierarchy_with_years(rows_min, rows_max, year_min, year_max):
                 'min_year': 0,
                 'max_year': 0
             }
-        all_data[key]['min_year'] += row.отклонение or 0
+        all_data[key]['min_year'] += row.Сумма or 0
     
     # Добавляем данные за максимальный год
     for row in rows_max:
@@ -469,7 +462,7 @@ def build_hierarchy_with_years(rows_min, rows_max, year_min, year_max):
                 'min_year': 0,
                 'max_year': 0
             }
-        all_data[key]['max_year'] += row.отклонение or 0
+        all_data[key]['max_year'] += row.Сумма or 0
     
     # Строим дерево
     hierarchy = []
@@ -568,7 +561,7 @@ def analyze_level4_factors(rows_min, rows_max):
                 'min_year': 0,
                 'max_year': 0
             }
-        all_data[key]['min_year'] += row.отклонение or 0
+        all_data[key]['min_year'] += row.Сумма or 0
     
     # Собираем данные за максимальный год
     for row in rows_max:
@@ -582,7 +575,7 @@ def analyze_level4_factors(rows_min, rows_max):
                 'min_year': 0,
                 'max_year': 0
             }
-        all_data[key]['max_year'] += row.отклонение or 0
+        all_data[key]['max_year'] += row.Сумма or 0
     
     # Рассчитываем отклонения
     factors = []
@@ -613,10 +606,7 @@ def get_contragent_data(projects, distributions, months, year, level1=None, leve
     """Получает данные по контрагентам за конкретный год"""
     query = db.session.query(
         FinancialData.Контрагент,
-        case(
-            (extract('year', FinancialData.Период) == 2025, FinancialData.Сумма),
-            else_=-FinancialData.Сумма
-        ).label('отклонение')
+        FinancialData.Сумма
     ).filter(
         FinancialData.Период.isnot(None),
         FinancialData.Проект.in_(projects),
@@ -644,7 +634,7 @@ def get_contragent_data(projects, distributions, months, year, level1=None, leve
         contragent = row.Контрагент or 'Не указано'
         if contragent not in contragents:
             contragents[contragent] = 0
-        contragents[contragent] += row.отклонение or 0
+        contragents[contragent] += row.Сумма or 0
     
     return contragents
 
@@ -724,20 +714,29 @@ def debug_data():
 @app.route('/api/report2/data')
 @login_required
 def get_report2_data():
-    # ... (оставляем старый код)
-    pass
+    try:
+        # Здесь будет логика для отчета 2
+        return jsonify({'success': True, 'message': 'Report 2 data endpoint'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/report3/data')
 @login_required
 def get_report3_data():
-    # ... (оставляем старый код)
-    pass
+    try:
+        # Здесь будет логика для отчета 3
+        return jsonify({'success': True, 'message': 'Report 3 data endpoint'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/report4/data')
 @login_required
 def get_report4_data():
-    # ... (оставляем старый код)
-    pass
+    try:
+        # Здесь будет логика для отчета 4
+        return jsonify({'success': True, 'message': 'Report 4 data endpoint'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ====== ИНИЦИАЛИЗАЦИЯ ======
 
