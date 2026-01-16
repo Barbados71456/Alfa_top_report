@@ -301,6 +301,100 @@ def get_contragent_analysis():
         logger.error(f"Error in contragent analysis: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# API: Поиск контрагентов по уровню
+@app.route('/api/report1/find-contragents-by-level', methods=['POST'])
+@login_required
+def find_contragents_by_level():
+    try:
+        data = request.get_json()
+        level = data.get('level')
+        level_name = data.get('level_name')
+        projects = data.get('projects', [])
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not projects or not months or not year_min or not year_max or not level_name:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем поле для фильтрации по уровню
+        level_field = None
+        if level == 1:
+            level_field = FinancialData.СтатьяУровень1
+        elif level == 2:
+            level_field = FinancialData.СтатьяУровень2
+        elif level == 3:
+            level_field = FinancialData.СтатьяУровень3
+        elif level == 4:
+            level_field = FinancialData.СтатьяУровень4
+        else:
+            return jsonify({'success': False, 'error': 'Неверный уровень'}), 400
+        
+        # Получаем контрагентов за оба года
+        contragents_min = {}
+        contragents_max = {}
+        
+        for year in [year_min, year_max]:
+            query = db.session.query(
+                FinancialData.Контрагент,
+                func.sum(FinancialData.Сумма).label('total')
+            ).filter(
+                FinancialData.Период.isnot(None),
+                FinancialData.Проект.in_(projects),
+                extract('year', FinancialData.Период) == year,
+                extract('month', FinancialData.Период).in_(months),
+                level_field == level_name
+            )
+            
+            if distributions:
+                query = query.filter(FinancialData.Распределение.in_(distributions))
+            
+            query = query.group_by(FinancialData.Контрагент)
+            results = query.all()
+            
+            if year == year_min:
+                for contragent, total in results:
+                    contragents_min[contragent or 'Не указано'] = float(total or 0)
+            else:
+                for contragent, total in results:
+                    contragents_max[contragent or 'Не указано'] = float(total or 0)
+        
+        # Объединяем и считаем отклонения
+        all_contragents = set(list(contragents_min.keys()) + list(contragents_max.keys()))
+        contragents = []
+        
+        for contragent in all_contragents:
+            min_value = contragents_min.get(contragent, 0)
+            max_value = contragents_max.get(contragent, 0)
+            deviation = max_value - min_value
+            
+            contragents.append({
+                'contragent': contragent,
+                'min_year': min_value,
+                'max_year': max_value,
+                'deviation': deviation
+            })
+        
+        # Сортируем по абсолютному значению отклонения
+        contragents.sort(key=lambda x: abs(x['deviation']), reverse=True)
+        
+        # Рассчитываем проценты
+        total_deviation = sum(abs(c['deviation']) for c in contragents)
+        for c in contragents:
+            c['percentage'] = round((abs(c['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+        
+        return jsonify({
+            'success': True,
+            'contragents': contragents[:50],  # Ограничиваем 50 контрагентами
+            'level': level,
+            'level_name': level_name
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding contragents by level: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # API: Анализ отклонений по уровням
 @app.route('/api/report1/deviation-analysis', methods=['POST'])
 @login_required

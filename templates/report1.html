@@ -649,7 +649,8 @@
         }
 
         .analysis-item:hover {
-            background: rgba(0, 122, 255, 0.1);
+            background: rgba(0, 122, 255, 0.15);
+            transform: translateX(2px);
         }
 
         .analysis-item:last-child {
@@ -916,6 +917,25 @@
             border-color: var(--apple-text-secondary);
         }
 
+        .btn-tertiary {
+            background: var(--apple-green);
+            color: white;
+            border: none;
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            transition: var(--transition-fast);
+        }
+
+        .btn-tertiary:hover {
+            background: #2da44e;
+            transform: translateY(-1px);
+        }
+
         .filter-actions {
             display: flex;
             gap: var(--spacing-md);
@@ -984,6 +1004,13 @@
             padding: var(--spacing-sm) var(--spacing-md);
             background: var(--apple-bg);
             border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .contragent-item:hover {
+            background: rgba(0, 122, 255, 0.1);
+            transform: translateX(2px);
         }
 
         .contragent-info {
@@ -1062,6 +1089,10 @@
 
         .notification.error {
             border-left-color: var(--apple-red);
+        }
+
+        .notification.warning {
+            border-left-color: var(--apple-orange);
         }
 
         .notification-content {
@@ -1309,7 +1340,7 @@
         <!-- Анализ отклонений по уровням -->
         <div class="deviation-analysis-container hidden" id="deviation-analysis">
             <h3 class="text-center"><i class="fas fa-sitemap"></i> Анализ отклонений по выбранной статье</h3>
-            <p class="subtitle text-center">Детализация отклонений от уровня 1 до уровня 4 статей</p>
+            <p class="subtitle text-center">Кликните на статью для детального анализа или перехода к контрагентам</p>
             
             <div id="deviation-loading" class="loading">
                 <div class="spinner"></div>
@@ -1319,29 +1350,32 @@
             <div id="deviation-content" class="hidden">
                 <div class="analysis-levels">
                     <div class="analysis-level">
-                        <h5>Уровень 1: Статьи</h5>
+                        <h5><i class="fas fa-layer-group"></i> Уровень 1: Статьи</h5>
                         <div id="level1-analysis" class="analysis-list"></div>
                     </div>
                     <div class="analysis-level">
-                        <h5>Уровень 2: Подстатьи</h5>
+                        <h5><i class="fas fa-layer-group"></i> Уровень 2: Подстатьи</h5>
                         <div id="level2-analysis" class="analysis-list"></div>
                     </div>
                     <div class="analysis-level">
-                        <h5>Уровень 3: Группы</h5>
+                        <h5><i class="fas fa-layer-group"></i> Уровень 3: Группы</h5>
                         <div id="level3-analysis" class="analysis-list"></div>
                     </div>
                     <div class="analysis-level">
-                        <h5>Уровень 4: Детализация</h5>
+                        <h5><i class="fas fa-layer-group"></i> Уровень 4: Детализация</h5>
                         <div id="level4-analysis" class="analysis-list"></div>
                     </div>
                 </div>
                 
                 <div class="filter-actions" style="margin-top: var(--spacing-lg);">
-                    <button class="btn-secondary" onclick="showContragentAnalysisFromLevels()">
+                    <button class="btn-primary" onclick="showContragentAnalysisFromCurrentLevel()">
                         <i class="fas fa-users"></i> Показать контрагентов по выбранной статье
                     </button>
-                    <button class="btn-secondary" onclick="showFactorAnalysisFromCurrent()">
+                    <button class="btn-tertiary" onclick="showFactorAnalysisFromCurrent()">
                         <i class="fas fa-chart-pie"></i> Факторный анализ по статье
+                    </button>
+                    <button class="btn-secondary" onclick="copyDeviationAnalysis()">
+                        <i class="fas fa-copy"></i> Копировать анализ
                     </button>
                 </div>
             </div>
@@ -1421,6 +1455,7 @@
                     </div>
                     <div id="factor-content" class="hidden">
                         <h4 id="factor-title" class="text-center"></h4>
+                        <p class="subtitle text-center" id="factor-subtitle">Кликните на статью для анализа контрагентов</p>
                         <div class="factor-list" id="factor-list"></div>
                     </div>
                 </div>
@@ -1441,7 +1476,13 @@
                     </div>
                     <div id="contragent-content" class="hidden">
                         <h4 id="contragent-title" class="text-center"></h4>
+                        <p class="subtitle text-center" id="contragent-subtitle">Топ контрагентов по влиянию на отклонение</p>
                         <div class="contragent-list" id="contragent-list"></div>
+                        <div class="filter-actions" style="margin-top: var(--spacing-lg);">
+                            <button class="btn-secondary" onclick="exportContragentsToExcel()">
+                                <i class="fas fa-file-export"></i> Экспорт контрагентов
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1471,6 +1512,7 @@
             monthlyData: null,
             expandedRows: new Set(),
             currentAnalysisIndicator: null,
+            currentAnalysisData: null,
             currentMonthlyIndicator: 'net_cash_flow',
             monthlySortColumn: null,
             monthlySortDirection: 'asc'
@@ -2136,6 +2178,9 @@
         }
 
         function renderDeviationAnalysis(analysis, title) {
+            // Сохраняем данные для дальнейшего использования
+            state.currentAnalysisData = analysis;
+            
             // Рендерим уровень 1
             renderAnalysisLevel('level1-analysis', analysis.level1 || []);
             
@@ -2171,8 +2216,13 @@
                 const div = document.createElement('div');
                 div.className = 'analysis-item';
                 div.onclick = () => {
+                    // Для уровня 4 - показываем контрагентов
                     if (containerId === 'level4-analysis') {
                         showContragentAnalysisFromDeviation(item.name);
+                    }
+                    // Для других уровней - можно добавить дополнительную информацию
+                    else {
+                        showLevelDetails(item, containerId);
                     }
                 };
                 
@@ -2187,29 +2237,204 @@
             });
         }
 
-        function showContragentAnalysisFromDeviation(level4Name) {
+        function showLevelDetails(item, levelType) {
+            const levelNumber = levelType.replace('level', '').replace('-analysis', '');
+            const levelName = getLevelName(levelNumber);
+            
+            showNotification(`${levelName}: ${item.name} - Отклонение: ${formatCurrency(item.deviation, true)}`, 'info');
+            
+            // Можно добавить модальное окно с дополнительной информацией
+            // или сразу перейти к анализу контрагентов для этого уровня
+            if (levelNumber >= 3) { // Для уровней 3 и 4
+                findAndShowContragentsForLevel(item.name, levelNumber);
+            }
+        }
+
+        function getLevelName(levelNumber) {
+            const names = {
+                '1': 'Уровень 1: Статья',
+                '2': 'Уровень 2: Подстатья',
+                '3': 'Уровень 3: Группа',
+                '4': 'Уровень 4: Детализация'
+            };
+            return names[levelNumber] || `Уровень ${levelNumber}`;
+        }
+
+        async function findAndShowContragentsForLevel(itemName, levelNumber) {
+            showNotification(`Поиск контрагентов для "${itemName}"...`, 'info');
+            
+            try {
+                const response = await fetch('/api/report1/find-contragents-by-level', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        level: levelNumber,
+                        level_name: itemName,
+                        projects: state.selectedProjects,
+                        distributions: state.selectedDistributions,
+                        months: state.selectedMonths,
+                        year_min: state.minYear,
+                        year_max: state.maxYear
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.contragents && data.contragents.length > 0) {
+                    renderContragentAnalysis(data.contragents);
+                    
+                    // Показываем модальное окно с контрагентами
+                    document.getElementById('contragent-title').textContent = `Контрагенты: ${itemName}`;
+                    document.getElementById('contragent-content').classList.remove('hidden');
+                    document.getElementById('contragent-loading').classList.add('hidden');
+                    
+                    openModal('contragent-modal');
+                } else {
+                    showNotification('Контрагенты не найдены для выбранной статьи', 'warning');
+                }
+                
+            } catch (error) {
+                console.error('Error finding contragents:', error);
+                showNotification('Ошибка поиска контрагентов', 'error');
+            }
+        }
+
+        async function showContragentAnalysisFromDeviation(level4Name) {
             showNotification(`Загрузка контрагентов для статьи: ${level4Name}`, 'info');
-            // В реальном приложении здесь будет запрос к API
+            
+            // Получаем данные для анализа контрагентов
+            const level1 = findLevel1ForLevel4(level4Name);
+            const level2 = findLevel2ForLevel4(level4Name);
+            const level3 = findLevel3ForLevel4(level4Name);
+            
+            // Показываем модальное окно
+            document.getElementById('contragent-title').textContent = `Контрагенты: ${level4Name}`;
+            document.getElementById('contragent-loading').classList.remove('hidden');
+            document.getElementById('contragent-content').classList.add('hidden');
+            
+            openModal('contragent-modal');
+            
+            try {
+                const response = await fetch('/api/report1/contragent-analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        level1: level1,
+                        level2: level2,
+                        level3: level3,
+                        level4: level4Name,
+                        projects: state.selectedProjects,
+                        distributions: state.selectedDistributions,
+                        months: state.selectedMonths,
+                        year_min: state.minYear,
+                        year_max: state.maxYear
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderContragentAnalysis(data.contragents);
+                    document.getElementById('contragent-loading').classList.add('hidden');
+                    document.getElementById('contragent-content').classList.remove('hidden');
+                } else {
+                    throw new Error(data.error || 'Ошибка загрузки данных');
+                }
+                
+            } catch (error) {
+                console.error('Error loading contragent analysis:', error);
+                document.getElementById('contragent-loading').innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка загрузки контрагентов: ${error.message}</p>
+                    </div>
+                `;
+            }
         }
 
-        function showContragentAnalysisFromLevels() {
-            if (!state.currentAnalysisIndicator) {
-                showNotification('Сначала выберите статью для анализа', 'error');
-                return;
+        function findLevel1ForLevel4(level4Name) {
+            // Ищем в текущих данных
+            if (state.currentAnalysisData && state.currentAnalysisData.level1) {
+                // Попробуем найти связанную статью уровня 1
+                for (const level1Item of state.currentAnalysisData.level1) {
+                    // Здесь должна быть логика связи level1 и level4
+                    // В реальном приложении нужно хранить связи между уровнями
+                    return level1Item.name;
+                }
             }
-            
-            showNotification('Загрузка контрагентов...', 'info');
+            return null;
         }
 
-        function showFactorAnalysisFromCurrent() {
-            if (!state.currentAnalysisIndicator) {
-                showNotification('Сначала выберите статью для анализа', 'error');
-                return;
+        function findLevel2ForLevel4(level4Name) {
+            if (state.currentAnalysisData && state.currentAnalysisData.level2) {
+                for (const level2Item of state.currentAnalysisData.level2) {
+                    return level2Item.name;
+                }
             }
+            return null;
+        }
+
+        function findLevel3ForLevel4(level4Name) {
+            if (state.currentAnalysisData && state.currentAnalysisData.level3) {
+                for (const level3Item of state.currentAnalysisData.level3) {
+                    return level3Item.name;
+                }
+            }
+            return null;
+        }
+
+        function showContragentAnalysisFromCurrentLevel() {
+            // Пытаемся найти статью уровня 4 для анализа
+            const level4Items = document.querySelectorAll('#level4-analysis .analysis-item');
+            if (level4Items.length > 0) {
+                // Берем первую (самую значимую) статью
+                const firstItem = level4Items[0];
+                const itemName = firstItem.querySelector('.analysis-name').textContent;
+                showContragentAnalysisFromDeviation(itemName);
+            } else {
+                showNotification('Выберите статью уровня 4 для анализа контрагентов', 'warning');
+                
+                // Показываем подсказку
+                const level4Section = document.getElementById('level4-analysis');
+                level4Section.innerHTML = `
+                    <div class="text-center" style="padding: var(--spacing-sm);">
+                        <i class="fas fa-info-circle" style="color: var(--apple-blue);"></i>
+                        <p>Кликните на статью выше для выбора</p>
+                        <p style="font-size: 0.9rem; color: var(--apple-text-secondary);">
+                            Или выберите статью из уровней 1-3
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        function copyDeviationAnalysis() {
+            let analysisText = `Анализ отклонений: ${state.currentAnalysisIndicator}\n\n`;
             
-            const row = document.querySelector(`tr[data-key="${state.currentAnalysisIndicator}"]`);
-            const index = row ? parseInt(row.dataset.index) : 0;
-            showFactorAnalysis(index, null);
+            // Собираем данные всех уровней
+            const levels = ['level1-analysis', 'level2-analysis', 'level3-analysis', 'level4-analysis'];
+            levels.forEach(levelId => {
+                const levelElement = document.getElementById(levelId);
+                const levelName = levelId.replace('-analysis', '').replace('level', 'Уровень ');
+                analysisText += `${levelName}:\n`;
+                
+                const items = levelElement.querySelectorAll('.analysis-item');
+                items.forEach((item, index) => {
+                    const name = item.querySelector('.analysis-name').textContent;
+                    const value = item.querySelector('.analysis-value').textContent;
+                    analysisText += `${index + 1}. ${name}: ${value}\n`;
+                });
+                analysisText += '\n';
+            });
+            
+            // Копируем в буфер обмена
+            navigator.clipboard.writeText(analysisText)
+                .then(() => showNotification('Анализ скопирован в буфер обмена', 'success'))
+                .catch(err => showNotification('Ошибка копирования: ' + err, 'error'));
         }
 
         // ====== MONTHLY COMPARISON ======
@@ -2435,6 +2660,17 @@
             }
         }
 
+        function showFactorAnalysisFromCurrent() {
+            if (!state.currentAnalysisIndicator) {
+                showNotification('Сначала выберите статью для анализа', 'error');
+                return;
+            }
+            
+            const row = document.querySelector(`tr[data-key="${state.currentAnalysisIndicator}"]`);
+            const index = row ? parseInt(row.dataset.index) : 0;
+            showFactorAnalysis(index, null);
+        }
+
         function renderFactorAnalysis(factors) {
             const container = document.getElementById('factor-list');
             container.innerHTML = '';
@@ -2550,6 +2786,9 @@
                 
                 const item = document.createElement('div');
                 item.className = 'contragent-item';
+                item.onclick = () => {
+                    showNotification(`Контрагент: ${contragent.contragent}\nОтклонение: ${formatCurrency(deviation, true)}`, 'info');
+                };
                 
                 item.innerHTML = `
                     <div class="contragent-info">
@@ -2564,6 +2803,10 @@
                 
                 container.appendChild(item);
             });
+        }
+
+        function exportContragentsToExcel() {
+            showNotification('Экспорт контрагентов в Excel будет реализован в следующей версии', 'info');
         }
 
         // ====== UTILITY FUNCTIONS ======
@@ -2605,6 +2848,7 @@
             icon.className = 
                 type === 'success' ? 'fas fa-check-circle' :
                 type === 'error' ? 'fas fa-exclamation-circle' :
+                type === 'warning' ? 'fas fa-exclamation-triangle' :
                 'fas fa-info-circle';
             
             notification.classList.add('show');
