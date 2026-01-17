@@ -15,6 +15,19 @@ class Config:
     SQLALCHEMY_DATABASE_URI = f'postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # Настройки пула соединений
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'pool_size': 10,
+        'max_overflow': 20,
+        'pool_timeout': 30,
+        'connect_args': {
+            'connect_timeout': 10,
+            'statement_timeout': 30000,  # 30 секунд
+        }
+    }
+    
     # Безопасность
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
@@ -22,6 +35,14 @@ class Config:
     FLASK_ENV = os.environ.get('FLASK_ENV') or 'development'
     DEBUG = FLASK_ENV == 'development'
     
+    # Кэширование
+    CACHE_TYPE = 'simple'
+    CACHE_DEFAULT_TIMEOUT = 300  # 5 минут
+    
     # Админ
     ADMIN_USERNAME = 'admin'
     ADMIN_PASSWORD = 'admin123'
+    
+    # Настройки пагинации
+    DEFAULT_PAGE_SIZE = 50
+    MAX_PAGE_SIZE = 1000
