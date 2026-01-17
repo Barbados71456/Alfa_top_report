@@ -1,26 +1,103 @@
 {% extends "base.html" %}
 
-{% block title %}Дашборд - Аналитика финансов{% endblock %}
+{% block title %}Финансовый дашборд - Аналитика{% endblock %}
 
 {% block content %}
 <div class="dashboard-container">
     <!-- Заголовок дашборда -->
     <div class="dashboard-header">
         <h1><i class="fas fa-tachometer-alt"></i> Финансовый дашборд</h1>
-        <p class="dashboard-subtitle">Обзор ключевых показателей эффективности по проектам</p>
-        <div class="dashboard-actions">
-            <button class="btn btn-refresh" onclick="refreshDashboard()">
+        <p class="dashboard-subtitle">Обзор ключевых показателей по проектам</p>
+        
+        <!-- Быстрые действия -->
+        <div class="quick-actions-bar">
+            <button class="btn-primary" onclick="loadDashboardData()">
                 <i class="fas fa-sync-alt"></i> Обновить
             </button>
-            <div class="date-selector">
-                <select id="period-selector" onchange="changePeriod()">
-                    <option value="current_month">Текущий месяц</option>
-                    <option value="last_month">Прошлый месяц</option>
-                    <option value="quarter">Квартал</option>
-                    <option value="year">Год</option>
-                    <option value="custom">Произвольный период</option>
-                </select>
+            <a href="{{ url_for('report1') }}" class="btn-secondary">
+                <i class="fas fa-filter"></i> Детальный анализ
+            </a>
+            <a href="{{ url_for('report2') }}" class="btn-secondary">
+                <i class="fas fa-chart-bar"></i> Все проекты
+            </a>
+            <a href="{{ url_for('report3') }}" class="btn-secondary">
+                <i class="fas fa-project-diagram"></i> Сравнение проектов
+            </a>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="filters-card">
+        <div class="filter-section">
+            <!-- Месяцы -->
+            <div class="filter-group">
+                <label><i class="fas fa-calendar-alt"></i> Месяцы</label>
+                <div class="month-selector">
+                    <button class="month-btn" data-month="1">Я</button>
+                    <button class="month-btn" data-month="2">Ф</button>
+                    <button class="month-btn" data-month="3">М</button>
+                    <button class="month-btn" data-month="4">А</button>
+                    <button class="month-btn" data-month="5">М</button>
+                    <button class="month-btn" data-month="6">И</button>
+                    <button class="month-btn" data-month="7">И</button>
+                    <button class="month-btn" data-month="8">А</button>
+                    <button class="month-btn" data-month="9">С</button>
+                    <button class="month-btn" data-month="10">О</button>
+                    <button class="month-btn" data-month="11">Н</button>
+                    <button class="month-btn" data-month="12">Д</button>
+                    <button class="month-btn" data-month="all">Все</button>
+                </div>
             </div>
+
+            <!-- Годы -->
+            <div class="filter-group">
+                <label><i class="fas fa-calendar"></i> Год сравнения</label>
+                <div class="year-comparison">
+                    <select id="year-min" class="year-select">
+                        <option value="2023">2023</option>
+                        <option value="2024" selected>2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+                    <span class="vs">vs</span>
+                    <select id="year-max" class="year-select">
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025" selected>2025</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Проекты -->
+            <div class="filter-group">
+                <label><i class="fas fa-project-diagram"></i> Проекты</label>
+                <div class="multiselect" id="project-multiselect">
+                    <div class="multiselect-input" onclick="toggleDropdown('project')">
+                        <span class="placeholder">Все проекты...</span>
+                    </div>
+                    <div class="multiselect-dropdown" id="project-dropdown">
+                        <div class="multiselect-search">
+                            <input type="text" placeholder="Поиск проекта..." 
+                                   oninput="searchOptions('project', this.value)">
+                        </div>
+                        <div class="multiselect-options" id="project-options">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Загрузка проектов...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопка загрузки -->
+        <div class="filter-actions">
+            <button class="btn-primary" onclick="loadDashboardData()">
+                <i class="fas fa-play"></i> Загрузить данные
+            </button>
+            <button class="btn-secondary" onclick="resetFilters()">
+                <i class="fas fa-redo"></i> Сбросить
+            </button>
         </div>
     </div>
 
@@ -30,1010 +107,976 @@
             <i class="fas fa-chart-line"></i> Ключевые показатели
         </h2>
         <div class="kpi-grid">
-            <div class="kpi-card positive">
-                <div class="kpi-icon">
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <h3>Чистый денежный поток</h3>
                     <i class="fas fa-money-bill-wave"></i>
                 </div>
-                <div class="kpi-content">
-                    <h3>Чистый денежный поток</h3>
-                    <div class="kpi-value" id="kpi-net-cash">0 ₽</div>
-                    <div class="kpi-change">
-                        <span class="change-value" id="kpi-net-cash-change">0%</span>
-                        <span class="change-label">за период</span>
-                    </div>
+                <div class="kpi-value" id="kpi-net-cash">0 ₽</div>
+                <div class="kpi-change" id="kpi-net-cash-change">
+                    <span class="change-value">+0%</span>
+                    <span class="change-label">изменение</span>
                 </div>
             </div>
 
-            <div class="kpi-card positive">
-                <div class="kpi-icon">
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <h3>Поступления по ОД</h3>
                     <i class="fas fa-hand-holding-usd"></i>
                 </div>
-                <div class="kpi-content">
-                    <h3>Поступления по ОД</h3>
-                    <div class="kpi-value" id="kpi-od-income">0 ₽</div>
-                    <div class="kpi-change">
-                        <span class="change-value" id="kpi-od-income-change">0%</span>
-                        <span class="change-label">за период</span>
-                    </div>
+                <div class="kpi-value" id="kpi-od-income">0 ₽</div>
+                <div class="kpi-change" id="kpi-od-income-change">
+                    <span class="change-value">+0%</span>
+                    <span class="change-label">изменение</span>
                 </div>
             </div>
 
-            <div class="kpi-card negative">
-                <div class="kpi-icon">
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <h3>Отток по ОД</h3>
                     <i class="fas fa-file-invoice-dollar"></i>
                 </div>
-                <div class="kpi-content">
-                    <h3>Отток по ОД</h3>
-                    <div class="kpi-value" id="kpi-od-expense">0 ₽</div>
-                    <div class="kpi-change">
-                        <span class="change-value" id="kpi-od-expense-change">0%</span>
-                        <span class="change-label">за период</span>
-                    </div>
+                <div class="kpi-value" id="kpi-od-expense">0 ₽</div>
+                <div class="kpi-change" id="kpi-od-expense-change">
+                    <span class="change-value">+0%</span>
+                    <span class="change-label">изменение</span>
                 </div>
             </div>
 
-            <div class="kpi-card neutral">
-                <div class="kpi-icon">
-                    <i class="fas fa-percentage"></i>
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <h3>Результат ОД</h3>
+                    <i class="fas fa-chart-bar"></i>
                 </div>
-                <div class="kpi-content">
-                    <h3>Рентабельность</h3>
-                    <div class="kpi-value" id="kpi-profitability">0%</div>
-                    <div class="kpi-change">
-                        <span class="change-value" id="kpi-profitability-change">0 п.п.</span>
-                        <span class="change-label">изменение</span>
-                    </div>
+                <div class="kpi-value" id="kpi-od-result">0 ₽</div>
+                <div class="kpi-change" id="kpi-od-result-change">
+                    <span class="change-value">+0%</span>
+                    <span class="change-label">изменение</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Основные графики и визуализации -->
-    <div class="visualization-section">
-        <div class="viz-row">
-            <!-- График денежного потока -->
-            <div class="viz-card large">
-                <div class="viz-header">
-                    <h3><i class="fas fa-chart-area"></i> Денежный поток по месяцам</h3>
-                    <div class="viz-actions">
-                        <button class="viz-btn active" data-period="3m">3 мес</button>
-                        <button class="viz-btn" data-period="6m">6 мес</button>
-                        <button class="viz-btn" data-period="1y">1 год</button>
-                    </div>
-                </div>
-                <div class="viz-content">
-                    <div class="chart-placeholder" id="cash-flow-chart">
-                        <div class="loading-chart">
-                            <div class="spinner"></div>
-                            <p>Загрузка графика...</p>
-                        </div>
-                    </div>
-                    <div class="chart-legend">
-                        <div class="legend-item">
-                            <span class="legend-color" style="background: var(--apple-green);"></span>
-                            <span>Поступления</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-color" style="background: var(--apple-red);"></span>
-                            <span>Отток</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-color" style="background: var(--apple-blue);"></span>
-                            <span>Чистый поток</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Круговой график структуры расходов -->
-            <div class="viz-card">
-                <div class="viz-header">
-                    <h3><i class="fas fa-chart-pie"></i> Структура расходов</h3>
-                    <select class="viz-select" id="expense-structure-selector">
-                        <option value="variables">Переменные vs Постоянные</option>
-                        <option value="projects">По проектам</option>
-                        <option value="distributions">По распределениям</option>
-                    </select>
-                </div>
-                <div class="viz-content">
-                    <div class="chart-placeholder" id="expense-structure-chart">
-                        <div class="loading-chart">
-                            <div class="spinner"></div>
-                            <p>Загрузка графика...</p>
-                        </div>
-                    </div>
-                </div>
+    <!-- Основная таблица -->
+    <div class="main-table-container">
+        <div class="table-header">
+            <h2><i class="fas fa-table"></i> Сводная таблица эффективности</h2>
+            <div class="table-actions">
+                <button class="btn-secondary" onclick="exportToExcel()">
+                    <i class="fas fa-file-export"></i> Экспорт
+                </button>
             </div>
         </div>
-
-        <div class="viz-row">
-            <!-- Топ проектов по эффективности -->
-            <div class="viz-card">
-                <div class="viz-header">
-                    <h3><i class="fas fa-trophy"></i> Топ-5 проектов по эффективности</h3>
-                    <select class="viz-select" id="top-projects-selector">
-                        <option value="net_cash">Чистый денежный поток</option>
-                        <option value="od_result">Результат ОД</option>
-                        <option value="profitability">Рентабельность</option>
-                    </select>
-                </div>
-                <div class="viz-content">
-                    <div class="top-projects-list" id="top-projects-list">
-                        <div class="loading-chart">
-                            <div class="spinner"></div>
-                            <p>Загрузка данных...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Последние значимые отклонения -->
-            <div class="viz-card">
-                <div class="viz-header">
-                    <h3><i class="fas fa-exclamation-triangle"></i> Значимые отклонения</h3>
-                    <button class="viz-btn" onclick="refreshDeviations()">
-                        <i class="fas fa-sync"></i>
-                    </button>
-                </div>
-                <div class="viz-content">
-                    <div class="deviations-list" id="deviations-list">
-                        <div class="loading-chart">
-                            <div class="spinner"></div>
-                            <p>Загрузка отклонений...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Быстрые действия -->
-            <div class="viz-card">
-                <div class="viz-header">
-                    <h3><i class="fas fa-bolt"></i> Быстрые действия</h3>
-                </div>
-                <div class="viz-content">
-                    <div class="quick-actions">
-                        <a href="{{ url_for('report1') }}" class="quick-action">
-                            <div class="action-icon">
-                                <i class="fas fa-filter"></i>
-                            </div>
-                            <div class="action-content">
-                                <h4>Детальный анализ</h4>
-                                <p>Полный отчет с фильтрами</p>
-                            </div>
-                        </a>
-                        
-                        <a href="{{ url_for('report3') }}" class="quick-action">
-                            <div class="action-icon">
-                                <i class="fas fa-project-diagram"></i>
-                            </div>
-                            <div class="action-content">
-                                <h4>Сравнение проектов</h4>
-                                <p>Анализ эффективности по проектам</p>
-                            </div>
-                        </a>
-                        
-                        <button class="quick-action" onclick="exportDashboard()">
-                            <div class="action-icon">
-                                <i class="fas fa-file-export"></i>
-                            </div>
-                            <div class="action-content">
-                                <h4>Экспорт отчета</h4>
-                                <p>Скачать PDF или Excel</p>
-                            </div>
-                        </button>
-                        
-                        <button class="quick-action" onclick="showAlerts()">
-                            <div class="action-icon">
-                                <i class="fas fa-bell"></i>
-                            </div>
-                            <div class="action-content">
-                                <h4>Настроить оповещения</h4>
-                                <p>Уведомления об отклонениях</p>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-            </div>
+        
+        <div id="table-placeholder" class="table-placeholder">
+            <i class="fas fa-hand-pointer"></i>
+            <p>Настройте фильтры и нажмите "Загрузить данные"</p>
+        </div>
+        
+        <div id="table-loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Загрузка данных...</p>
+        </div>
+        
+        <div class="table-wrapper">
+            <table class="main-table hidden" id="main-table">
+                <thead>
+                    <tr>
+                        <th>Показатель</th>
+                        <th class="text-right" id="year-min-header">2024</th>
+                        <th class="text-right" id="year-max-header">2025</th>
+                        <th class="text-right">Отклонение</th>
+                        <th class="text-right">% Изменение</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Данные будут загружены через JavaScript -->
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- Последние обновления данных -->
+    <!-- Последние обновления -->
     <div class="updates-section">
         <h2 class="section-title">
             <i class="fas fa-history"></i> Последние обновления
         </h2>
-        <div class="updates-timeline">
-            <div class="timeline-item">
-                <div class="timeline-date">Сегодня, 10:30</div>
-                <div class="timeline-content">
-                    <i class="fas fa-database timeline-icon"></i>
-                    <div class="timeline-text">
-                        <strong>Обновлены данные за апрель 2024</strong>
-                        <p>Добавлено 156 новых транзакций</p>
-                    </div>
+        <div class="updates-grid">
+            <div class="update-card">
+                <div class="update-icon success">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="update-content">
+                    <h4>Обновлены данные</h4>
+                    <p>Загружены данные за март 2024</p>
+                    <span class="update-time">Сегодня, 10:30</span>
                 </div>
             </div>
             
-            <div class="timeline-item">
-                <div class="timeline-date">Вчера, 15:45</div>
-                <div class="timeline-content">
-                    <i class="fas fa-user timeline-icon"></i>
-                    <div class="timeline-text">
-                        <strong>Алексей Петров</strong>
-                        <p>Добавил комментарий к проекту "Смарт-офис"</p>
-                    </div>
+            <div class="update-card">
+                <div class="update-icon info">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="update-content">
+                    <h4>Новый комментарий</h4>
+                    <p>Алексей добавил комментарий</p>
+                    <span class="update-time">Вчера, 15:45</span>
                 </div>
             </div>
             
-            <div class="timeline-item">
-                <div class="timeline-date">2 дня назад</div>
-                <div class="timeline-content">
-                    <i class="fas fa-chart-bar timeline-icon"></i>
-                    <div class="timeline-text">
-                        <strong>Обнаружено отклонение</strong>
-                        <p>Проект "Реновация" превысил бюджет на 12%</p>
-                    </div>
+            <div class="update-card">
+                <div class="update-icon warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="update-content">
+                    <h4>Обнаружено отклонение</h4>
+                    <p>Проект "Реновация" превысил бюджет</p>
+                    <span class="update-time">2 дня назад</span>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Стили для дашборда -->
+<!-- Стили для нового дашборда -->
 <style>
 .dashboard-container {
-    padding: var(--spacing-lg);
-    max-width: 1600px;
+    padding: 24px;
+    max-width: 1400px;
     margin: 0 auto;
 }
 
+/* Заголовок */
 .dashboard-header {
-    margin-bottom: var(--spacing-xl);
-    padding-bottom: var(--spacing-lg);
-    border-bottom: 1px solid var(--apple-border);
+    margin-bottom: 32px;
 }
 
 .dashboard-header h1 {
     font-size: 2rem;
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: 8px;
+    color: #1d1d1f;
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: 12px;
+}
+
+.dashboard-header h1 i {
+    color: #007aff;
 }
 
 .dashboard-subtitle {
-    color: var(--apple-text-secondary);
+    color: #86868b;
     font-size: 1.1rem;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 24px;
 }
 
-.dashboard-actions {
+.quick-actions-bar {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--spacing-md);
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
-.btn-refresh {
-    background: var(--apple-blue);
+.btn-primary, .btn-secondary {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.btn-primary {
+    background: #007aff;
     color: white;
     border: none;
-    padding: var(--spacing-sm) var(--spacing-lg);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    transition: var(--transition-fast);
 }
 
-.btn-refresh:hover {
+.btn-primary:hover {
     background: #0056cc;
     transform: translateY(-1px);
 }
 
-.date-selector select {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 1px solid var(--apple-border);
-    border-radius: var(--radius-sm);
-    background: var(--apple-card);
-    color: var(--apple-text);
+.btn-secondary {
+    background: #f5f5f7;
+    color: #1d1d1f;
+    border: 1px solid #d2d2d7;
+}
+
+.btn-secondary:hover {
+    background: #e5e5e7;
+    border-color: #86868b;
+}
+
+/* Фильтры */
+.filters-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e5e5e7;
+}
+
+.filter-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.filter-group label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1d1d1f;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.filter-group label i {
+    color: #007aff;
+}
+
+.month-selector {
+    display: grid;
+    grid-template-columns: repeat(13, 1fr);
+    gap: 6px;
+}
+
+.month-btn {
+    padding: 8px 4px;
+    border: 1px solid #d2d2d7;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.month-btn:hover {
+    border-color: #007aff;
+}
+
+.month-btn.active {
+    background: #007aff;
+    color: white;
+    border-color: #007aff;
+}
+
+.year-comparison {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.year-select {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    background: white;
+    color: #1d1d1f;
+    font-size: 0.95rem;
+}
+
+.vs {
+    color: #86868b;
+    font-weight: 500;
+}
+
+/* Multiselect */
+.multiselect {
+    position: relative;
+}
+
+.multiselect-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+}
+
+.placeholder {
+    color: #86868b;
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: none;
+}
+
+.multiselect-dropdown.show {
+    display: block;
+}
+
+.multiselect-search {
+    padding: 12px;
+    border-bottom: 1px solid #d2d2d7;
+}
+
+.multiselect-search input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 6px;
     font-size: 0.9rem;
-    min-width: 200px;
+}
+
+.multiselect-options {
+    padding: 8px;
+}
+
+.multiselect-option {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+}
+
+.multiselect-option:hover {
+    background: #f5f5f7;
+}
+
+.multiselect-option.selected {
+    background: #007aff;
+    color: white;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 24px;
+    border-top: 1px solid #e5e5e7;
 }
 
 /* KPI Cards */
 .kpi-section {
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: 32px;
 }
 
 .section-title {
     font-size: 1.3rem;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 20px;
+    color: #1d1d1f;
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    color: var(--apple-text);
+    gap: 10px;
 }
 
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--spacing-lg);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
 }
 
 .kpi-card {
-    background: var(--apple-card);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    box-shadow: var(--apple-shadow);
-    border: 1px solid var(--apple-border);
-    transition: var(--transition-normal);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e5e7;
+    transition: transform 0.2s ease;
 }
 
 .kpi-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--apple-shadow-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
-.kpi-card.positive {
-    border-top: 4px solid var(--apple-green);
-}
-
-.kpi-card.negative {
-    border-top: 4px solid var(--apple-red);
-}
-
-.kpi-card.neutral {
-    border-top: 4px solid var(--apple-blue);
-}
-
-.kpi-icon {
-    width: 60px;
-    height: 60px;
-    background: var(--apple-bg);
-    border-radius: var(--radius-md);
+.kpi-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: var(--apple-blue);
+    margin-bottom: 16px;
 }
 
-.kpi-card.positive .kpi-icon {
-    color: var(--apple-green);
-}
-
-.kpi-card.negative .kpi-icon {
-    color: var(--apple-red);
-}
-
-.kpi-content {
-    flex: 1;
-}
-
-.kpi-content h3 {
-    font-size: 0.9rem;
-    color: var(--apple-text-secondary);
-    margin-bottom: var(--spacing-xs);
+.kpi-header h3 {
+    font-size: 0.95rem;
+    color: #86868b;
     font-weight: 500;
+}
+
+.kpi-header i {
+    color: #007aff;
+    font-size: 1.2rem;
 }
 
 .kpi-value {
     font-size: 1.8rem;
     font-weight: 600;
-    margin-bottom: var(--spacing-xs);
+    color: #1d1d1f;
+    margin-bottom: 8px;
 }
 
 .kpi-change {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: 8px;
     font-size: 0.85rem;
 }
 
 .change-value {
     font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 12px;
-    background: var(--apple-bg);
+    color: #34c759;
 }
 
-.kpi-card.positive .change-value {
-    color: var(--apple-green);
-    background: rgba(52, 199, 89, 0.1);
-}
-
-.kpi-card.negative .change-value {
-    color: var(--apple-red);
-    background: rgba(255, 59, 48, 0.1);
+.change-value.negative {
+    color: #ff3b30;
 }
 
 .change-label {
-    color: var(--apple-text-secondary);
+    color: #86868b;
 }
 
-/* Visualization Cards */
-.visualization-section {
-    margin-bottom: var(--spacing-xl);
+/* Основная таблица */
+.main-table-container {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e5e7;
 }
 
-.viz-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
-}
-
-.viz-row:last-child {
-    margin-bottom: 0;
-}
-
-.viz-card {
-    background: var(--apple-card);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    box-shadow: var(--apple-shadow);
-    border: 1px solid var(--apple-border);
-}
-
-.viz-card.large {
-    grid-column: span 2;
-}
-
-.viz-header {
+.table-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid var(--apple-border);
+    margin-bottom: 20px;
 }
 
-.viz-header h3 {
-    font-size: 1.1rem;
+.table-header h2 {
+    font-size: 1.3rem;
+    color: #1d1d1f;
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: 10px;
 }
 
-.viz-actions {
-    display: flex;
-    gap: var(--spacing-xs);
-}
-
-.viz-btn {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    background: var(--apple-bg);
-    border: 1px solid var(--apple-border);
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: var(--transition-fast);
-}
-
-.viz-btn:hover {
-    background: var(--apple-border);
-}
-
-.viz-btn.active {
-    background: var(--apple-blue);
-    color: white;
-    border-color: var(--apple-blue);
-}
-
-.viz-select {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--apple-border);
-    border-radius: var(--radius-sm);
-    background: var(--apple-card);
-    font-size: 0.85rem;
-    min-width: 150px;
-}
-
-.viz-content {
-    height: 300px;
-}
-
-.viz-card.large .viz-content {
-    height: 400px;
-}
-
-.chart-placeholder {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: var(--apple-text-secondary);
-}
-
-.loading-chart {
+.table-placeholder {
     text-align: center;
+    padding: 60px 20px;
+    color: #86868b;
 }
 
-.loading-chart .spinner {
+.table-placeholder i {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    color: #d2d2d7;
+}
+
+.table-placeholder p {
+    font-size: 1.1rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: #86868b;
+}
+
+.spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid var(--apple-border);
-    border-top-color: var(--apple-blue);
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007aff;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-bottom: var(--spacing-md);
+    margin: 0 auto 16px;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-.chart-legend {
-    display: flex;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-md);
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--apple-border);
+.table-wrapper {
+    overflow-x: auto;
 }
 
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    font-size: 0.85rem;
+.main-table {
+    width: 100%;
+    border-collapse: collapse;
 }
 
-.legend-color {
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-}
-
-/* Top Projects List */
-.top-projects-list {
-    height: 100%;
-    overflow-y: auto;
-}
-
-.project-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-sm) 0;
-    border-bottom: 1px solid var(--apple-border);
-}
-
-.project-item:last-child {
-    border-bottom: none;
-}
-
-.project-rank {
-    width: 24px;
-    height: 24px;
-    background: var(--apple-blue);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
+.main-table th {
+    text-align: left;
+    padding: 16px 20px;
+    background: #f5f5f7;
+    border-bottom: 2px solid #d2d2d7;
     font-weight: 600;
-}
-
-.project-info {
-    flex: 1;
-    margin-left: var(--spacing-md);
-}
-
-.project-name {
-    font-weight: 500;
-    margin-bottom: 2px;
-}
-
-.project-metric {
-    font-size: 0.85rem;
-    color: var(--apple-text-secondary);
-}
-
-.project-value {
-    font-weight: 600;
-    text-align: right;
-    min-width: 80px;
-}
-
-.project-value.positive {
-    color: var(--apple-green);
-}
-
-.project-value.negative {
-    color: var(--apple-red);
-}
-
-/* Deviations List */
-.deviations-list {
-    height: 100%;
-    overflow-y: auto;
-}
-
-.deviation-item {
-    padding: var(--spacing-sm) 0;
-    border-bottom: 1px solid var(--apple-border);
-    cursor: pointer;
-    transition: var(--transition-fast);
-}
-
-.deviation-item:hover {
-    background: rgba(255, 59, 48, 0.05);
-}
-
-.deviation-item:last-child {
-    border-bottom: none;
-}
-
-.deviation-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-xs);
-}
-
-.deviation-title {
-    font-weight: 500;
-    font-size: 0.95rem;
-}
-
-.deviation-value {
-    font-weight: 600;
+    color: #1d1d1f;
     font-size: 0.9rem;
 }
 
-.deviation-value.negative {
-    color: var(--apple-red);
+.text-right {
+    text-align: right;
 }
 
-.deviation-value.positive {
-    color: var(--apple-green);
+.main-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e5e7;
+    color: #1d1d1f;
 }
 
-.deviation-details {
-    font-size: 0.85rem;
-    color: var(--apple-text-secondary);
+.main-table tr:hover {
+    background: #f9f9fa;
 }
 
-/* Quick Actions */
-.quick-actions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-    height: 100%;
-}
-
-.quick-action {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-sm);
-    background: var(--apple-bg);
-    border-radius: var(--radius-md);
-    text-decoration: none;
-    color: inherit;
-    cursor: pointer;
-    transition: var(--transition-fast);
-    border: none;
-    width: 100%;
-    text-align: left;
-}
-
-.quick-action:hover {
-    background: rgba(0, 122, 255, 0.1);
-    transform: translateX(4px);
-}
-
-.action-icon {
-    width: 40px;
-    height: 40px;
-    background: var(--apple-blue);
-    color: white;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-}
-
-.action-content {
-    flex: 1;
-}
-
-.action-content h4 {
-    font-size: 0.95rem;
-    margin-bottom: 2px;
-}
-
-.action-content p {
-    font-size: 0.85rem;
-    color: var(--apple-text-secondary);
-}
-
-/* Updates Timeline */
-.updates-section {
-    background: var(--apple-card);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    box-shadow: var(--apple-shadow);
-    border: 1px solid var(--apple-border);
-}
-
-.updates-timeline {
-    margin-top: var(--spacing-lg);
-}
-
-.timeline-item {
-    padding: var(--spacing-md) 0;
-    border-bottom: 1px solid var(--apple-border);
-    position: relative;
-    padding-left: 40px;
-}
-
-.timeline-item:last-child {
+.main-table tr:last-child td {
     border-bottom: none;
 }
 
-.timeline-item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 12px;
-    height: 12px;
-    background: var(--apple-blue);
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 0 2px var(--apple-border);
+/* Обновления */
+.updates-section {
+    margin-bottom: 32px;
 }
 
-.timeline-date {
-    font-size: 0.85rem;
-    color: var(--apple-text-secondary);
-    margin-bottom: var(--spacing-xs);
+.updates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
 }
 
-.timeline-content {
+.update-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e5e7;
     display: flex;
     align-items: flex-start;
-    gap: var(--spacing-md);
+    gap: 16px;
 }
 
-.timeline-icon {
-    width: 32px;
-    height: 32px;
-    background: var(--apple-bg);
-    border-radius: var(--radius-sm);
+.update-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--apple-blue);
+    font-size: 1.2rem;
     flex-shrink: 0;
 }
 
-.timeline-text strong {
-    display: block;
-    margin-bottom: 2px;
+.update-icon.success {
+    background: rgba(52, 199, 89, 0.1);
+    color: #34c759;
 }
 
-.timeline-text p {
+.update-icon.info {
+    background: rgba(0, 122, 255, 0.1);
+    color: #007aff;
+}
+
+.update-icon.warning {
+    background: rgba(255, 149, 0, 0.1);
+    color: #ff9500;
+}
+
+.update-content {
+    flex: 1;
+}
+
+.update-content h4 {
+    font-size: 1rem;
+    color: #1d1d1f;
+    margin-bottom: 4px;
+}
+
+.update-content p {
+    color: #86868b;
     font-size: 0.9rem;
-    color: var(--apple-text-secondary);
+    margin-bottom: 8px;
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
-    .viz-card.large {
-        grid-column: span 1;
-    }
-    
-    .viz-row {
-        grid-template-columns: 1fr;
-    }
+.update-time {
+    font-size: 0.8rem;
+    color: #a1a1a6;
 }
 
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+/* Адаптивность */
 @media (max-width: 768px) {
     .dashboard-container {
-        padding: var(--spacing-md);
+        padding: 16px;
+    }
+    
+    .filter-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .month-selector {
+        grid-template-columns: repeat(7, 1fr);
+    }
+    
+    .quick-actions-bar {
+        flex-direction: column;
+    }
+    
+    .btn-primary, .btn-secondary {
+        width: 100%;
+        justify-content: center;
     }
     
     .kpi-grid {
         grid-template-columns: 1fr;
     }
     
-    .dashboard-actions {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .date-selector select {
-        width: 100%;
+    .updates-grid {
+        grid-template-columns: 1fr;
     }
 }
 </style>
 
 <script>
-// Инициализация дашборда
+// ====== GLOBAL STATE ======
+let state = {
+    selectedMonths: [],
+    selectedProjects: [],
+    minYear: 2024,
+    maxYear: 2025,
+    reportData: null,
+    availableProjects: []
+};
+
+// ====== INITIALIZATION ======
 document.addEventListener('DOMContentLoaded', function() {
-    loadDashboardData();
-    setupDashboardListeners();
+    initializeMonthButtons();
+    loadFilterData();
+    setupEventListeners();
 });
 
-// Загрузка данных дашборда
-async function loadDashboardData() {
+// ====== LOAD FILTER DATA ======
+async function loadFilterData() {
     try {
-        // Загружаем KPI
-        await loadKPIData();
+        // Загружаем проекты
+        const response = await fetch('/api/report1/filters-data');
+        const data = await response.json();
         
-        // Загружаем топ проекты
-        await loadTopProjects();
-        
-        // Загружаем значимые отклонения
-        await loadDeviations();
-        
-        // Обновляем таймлайн
-        updateTimeline();
-        
-    } catch (error) {
-        console.error('Error loading dashboard data:', error);
-        showNotification('Ошибка загрузки данных дашборда', 'error');
-    }
-}
-
-// Загрузка KPI данных
-async function loadKPIData() {
-    try {
-        // Загружаем данные за текущий и предыдущий период
-        const currentDate = new Date();
-        const lastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-        
-        // Здесь будут реальные запросы к API
-        // Для примера используем мок данные
-        const kpiData = {
-            net_cash_flow: { current: 2450000, previous: 2100000 },
-            od_income: { current: 4500000, previous: 3800000 },
-            od_expense: { current: -2050000, previous: -1700000 },
-            profitability: { current: 8.9, previous: 7.5 }
-        };
-        
-        // Обновляем KPI
-        updateKPI('net-cash', kpiData.net_cash_flow);
-        updateKPI('od-income', kpiData.od_income);
-        updateKPI('od-expense', kpiData.od_expense);
-        updateKPI('profitability', kpiData.profitability, '%', 'п.п.');
-        
-    } catch (error) {
-        console.error('Error loading KPI data:', error);
-    }
-}
-
-function updateKPI(kpiId, data, suffix = ' ₽', changeSuffix = '%') {
-    const valueElement = document.getElementById(`kpi-${kpiId}`);
-    const changeElement = document.getElementById(`kpi-${kpiId}-change`);
-    
-    if (valueElement && changeElement) {
-        // Форматируем значение
-        const formattedValue = new Intl.NumberFormat('ru-RU').format(Math.abs(data.current));
-        valueElement.textContent = `${data.current >= 0 ? '' : '-'}${formattedValue}${suffix}`;
-        
-        // Рассчитываем изменение
-        if (data.previous !== 0) {
-            const changePercent = ((data.current - data.previous) / Math.abs(data.previous)) * 100;
-            const changeText = changePercent > 0 ? `+${changePercent.toFixed(1)}` : changePercent.toFixed(1);
-            changeElement.textContent = `${changeText}${changeSuffix}`;
+        if (data.success && data.projects) {
+            state.availableProjects = data.projects;
+            populateOptions('project', data.projects);
             
-            // Обновляем цвет
-            changeElement.className = `change-value ${changePercent >= 0 ? 'positive' : 'negative'}`;
+            // По умолчанию выбираем все проекты
+            state.selectedProjects = [...data.projects];
+            updateMultiselectDisplay('project');
+            updateMultiselectOptions('project');
+        }
+    } catch (error) {
+        console.error('Error loading filter data:', error);
+        showNotification('Ошибка загрузки проектов', 'error');
+    }
+}
+
+// ====== FILTERS INITIALIZATION ======
+function initializeMonthButtons() {
+    // По умолчанию выбираем последние 3 месяца
+    const currentMonth = new Date().getMonth() + 1;
+    for (let i = 0; i < 3; i++) {
+        const month = currentMonth - i;
+        if (month >= 1) {
+            state.selectedMonths.push(month);
         }
     }
-}
-
-// Загрузка топ проектов
-async function loadTopProjects() {
-    try {
-        // Здесь будет запрос к API отчетов
-        // Для примепа используем мок данные
-        const projects = [
-            { name: "Реновация бизнес-центра", metric: "Чистый поток", value: 1250000, change: 15.2 },
-            { name: "Смарт-офис", metric: "Результат ОД", value: 890000, change: 8.7 },
-            { name: "Цифровая трансформация", metric: "Рентабельность", value: 12.5, change: 3.2 },
-            { name: "Модернизация ИТ", metric: "Чистый поток", value: -450000, change: -5.8 },
-            { name: "Облачная инфраструктура", metric: "Результат ОД", value: 620000, change: 12.1 }
-        ];
-        
-        renderTopProjects(projects);
-        
-    } catch (error) {
-        console.error('Error loading top projects:', error);
-    }
-}
-
-function renderTopProjects(projects) {
-    const container = document.getElementById('top-projects-list');
-    container.innerHTML = '';
     
-    projects.forEach((project, index) => {
-        const isPositive = project.value >= 0;
+    // Обновляем кнопки
+    document.querySelectorAll('.month-btn').forEach(btn => {
+        const month = parseInt(btn.dataset.month);
+        if (state.selectedMonths.includes(month)) {
+            btn.classList.add('active');
+        }
         
-        const projectElement = document.createElement('div');
-        projectElement.className = 'project-item';
-        projectElement.innerHTML = `
-            <div class="project-rank">${index + 1}</div>
-            <div class="project-info">
-                <div class="project-name">${project.name}</div>
-                <div class="project-metric">${project.metric}</div>
-            </div>
-            <div class="project-value ${isPositive ? 'positive' : 'negative'}">
-                ${isPositive ? '+' : ''}${formatCurrency(project.value, false)}
-                <div style="font-size: 0.8rem; color: var(--apple-text-secondary);">
-                    ${project.change > 0 ? '+' : ''}${project.change}%
-                </div>
-            </div>
-        `;
-        
-        container.appendChild(projectElement);
+        btn.addEventListener('click', function() {
+            const month = this.dataset.month;
+            
+            if (month === 'all') {
+                const allSelected = state.selectedMonths.length === 12;
+                state.selectedMonths = allSelected ? [] : [1,2,3,4,5,6,7,8,9,10,11,12];
+                document.querySelectorAll('.month-btn').forEach(b => {
+                    if (b.dataset.month !== 'all') {
+                        b.classList.toggle('active', !allSelected);
+                    }
+                });
+                this.classList.toggle('active', !allSelected);
+            } else {
+                const monthNum = parseInt(month);
+                const index = state.selectedMonths.indexOf(monthNum);
+                
+                if (index === -1) {
+                    state.selectedMonths.push(monthNum);
+                    this.classList.add('active');
+                } else {
+                    state.selectedMonths.splice(index, 1);
+                    this.classList.remove('active');
+                }
+            }
+        });
     });
 }
 
-// Загрузка значимых отклонений
-async function loadDeviations() {
-    try {
-        // Мок данные отклонений
-        const deviations = [
-            { title: "Превышение бюджета", project: "Модернизация ИТ", value: -245000, details: "Переменные расходы на 45% выше плана" },
-            { title: "Неожиданные поступления", project: "Смарт-офис", value: 180000, details: "Досрочная оплата контракта" },
-            { title: "Задержка поставок", project: "Реновация бизнес-центра", value: -89000, details: "Перенос сроков на 2 недели" },
-            { title: "Экономия на материалах", project: "Цифровая трансформация", value: 56000, details: "Новый поставщик" }
-        ];
-        
-        renderDeviations(deviations);
-        
-    } catch (error) {
-        console.error('Error loading deviations:', error);
-    }
-}
-
-function renderDeviations(deviations) {
-    const container = document.getElementById('deviations-list');
+// ====== MULTISELECT FUNCTIONS ======
+function populateOptions(type, options) {
+    const container = document.getElementById(`${type}-options`);
     container.innerHTML = '';
     
-    deviations.forEach(deviation => {
-        const isPositive = deviation.value >= 0;
-        
-        const deviationElement = document.createElement('div');
-        deviationElement.className = 'deviation-item';
-        deviationElement.onclick = () => showDeviationDetails(deviation);
-        
-        deviationElement.innerHTML = `
-            <div class="deviation-header">
-                <div class="deviation-title">${deviation.title}</div>
-                <div class="deviation-value ${isPositive ? 'positive' : 'negative'}">
-                    ${isPositive ? '+' : ''}${formatCurrency(deviation.value, true)}
-                </div>
-            </div>
-            <div class="deviation-details">
-                <strong>${deviation.project}</strong> • ${deviation.details}
-            </div>
-        `;
-        
-        container.appendChild(deviationElement);
+    options.forEach(option => {
+        const div = document.createElement('div');
+        div.className = 'multiselect-option selected';
+        div.textContent = option;
+        div.dataset.value = option;
+        div.onclick = (e) => {
+            e.stopPropagation();
+            toggleOption(type, option);
+        };
+        container.appendChild(div);
     });
 }
 
-// Обновление таймлайна
-function updateTimeline() {
-    // В реальном приложении здесь будет запрос к API
-    // пока оставляем статический контент
+function toggleOption(type, value) {
+    const array = type === 'project' ? state.selectedProjects : [];
+    const index = array.indexOf(value);
+    
+    if (index === -1) {
+        array.push(value);
+    } else {
+        array.splice(index, 1);
+    }
+    
+    updateMultiselectDisplay(type);
+    updateMultiselectOptions(type);
 }
 
-// Утилиты
+function updateMultiselectDisplay(type) {
+    const array = type === 'project' ? state.selectedProjects : [];
+    const input = document.querySelector(`#${type}-multiselect .multiselect-input`);
+    
+    if (array.length === 0) {
+        input.innerHTML = '<span class="placeholder">Выберите проекты...</span>';
+        return;
+    }
+    
+    if (array.length === state.availableProjects.length) {
+        input.innerHTML = '<span>Все проекты</span>';
+        return;
+    }
+    
+    if (array.length <= 2) {
+        input.textContent = array.join(', ');
+    } else {
+        input.textContent = `${array.length} проектов выбрано`;
+    }
+}
+
+function updateMultiselectOptions(type) {
+    const options = document.querySelectorAll(`#${type}-options .multiselect-option`);
+    const array = type === 'project' ? state.selectedProjects : [];
+    
+    options.forEach(option => {
+        const value = option.dataset.value;
+        option.classList.toggle('selected', array.includes(value));
+    });
+}
+
+function searchOptions(type, query) {
+    const options = document.querySelectorAll(`#${type}-options .multiselect-option`);
+    const normalizedQuery = query.toLowerCase();
+    
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(normalizedQuery) ? 'block' : 'none';
+    });
+}
+
+function toggleDropdown(type) {
+    const dropdown = document.getElementById(`${type}-dropdown`);
+    dropdown.classList.toggle('show');
+    
+    // Закрываем другие дропдауны
+    const allDropdowns = document.querySelectorAll('.multiselect-dropdown');
+    allDropdowns.forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+    });
+}
+
+// ====== LOAD DASHBOARD DATA ======
+async function loadDashboardData() {
+    // Проверка фильтров
+    if (state.selectedMonths.length === 0) {
+        showNotification('Выберите хотя бы один месяц', 'error');
+        return;
+    }
+    
+    if (state.selectedProjects.length === 0) {
+        showNotification('Выберите хотя бы один проект', 'error');
+        return;
+    }
+    
+    // Получаем годы
+    state.minYear = parseInt(document.getElementById('year-min').value);
+    state.maxYear = parseInt(document.getElementById('year-max').value);
+    
+    if (state.minYear >= state.maxYear) {
+        showNotification('Год "до" должен быть меньше года "после"', 'error');
+        return;
+    }
+    
+    // Показываем загрузку
+    document.getElementById('table-placeholder').classList.add('hidden');
+    document.getElementById('table-loading').classList.remove('hidden');
+    document.getElementById('main-table').classList.add('hidden');
+    
+    // Обновляем заголовки годов
+    document.getElementById('year-min-header').textContent = state.minYear;
+    document.getElementById('year-max-header').textContent = state.maxYear;
+    
+    try {
+        // Загружаем основные данные
+        const response = await fetch('/api/report1/aggregated', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                projects: state.selectedProjects,
+                months: state.selectedMonths,
+                year_min: state.minYear,
+                year_max: state.maxYear
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            state.reportData = data.data;
+            renderKPI();
+            renderMainTable();
+            document.getElementById('table-loading').classList.add('hidden');
+            document.getElementById('main-table').classList.remove('hidden');
+            
+            showNotification(`Данные загружены по ${state.selectedProjects.length} проектам`, 'success');
+        } else {
+            throw new Error(data.error || 'Ошибка загрузки данных');
+        }
+        
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+        showNotification(`Ошибка загрузки: ${error.message}`, 'error');
+        document.getElementById('table-loading').classList.add('hidden');
+        document.getElementById('table-placeholder').classList.remove('hidden');
+    }
+}
+
+// ====== RENDER KPI ======
+function renderKPI() {
+    const data = state.reportData;
+    
+    // Чистый денежный поток
+    const netCash = data.net_cash_flow;
+    updateKPI('net-cash', netCash);
+    
+    // Поступления по ОД
+    const odIncome = data.od_income;
+    updateKPI('od-income', odIncome);
+    
+    // Отток по ОД
+    const odExpense = data.od_expense;
+    updateKPI('od-expense', odExpense);
+    
+    // Результат ОД
+    const odResult = data.od_result;
+    updateKPI('od-result', odResult);
+}
+
+function updateKPI(kpiId, data) {
+    const minValue = data.min_year || 0;
+    const maxValue = data.max_year || 0;
+    const deviation = maxValue - minValue;
+    const percentage = minValue !== 0 ? Math.round((deviation / Math.abs(minValue)) * 100) : 0;
+    
+    const valueElement = document.getElementById(`kpi-${kpiId}`);
+    const changeElement = document.getElementById(`kpi-${kpiId}-change`);
+    const changeValue = changeElement.querySelector('.change-value');
+    
+    if (valueElement && changeElement && changeValue) {
+        valueElement.textContent = formatCurrency(maxValue);
+        
+        changeValue.textContent = `${percentage > 0 ? '+' : ''}${percentage}%`;
+        changeValue.className = `change-value ${percentage > 0 ? '' : 'negative'}`;
+    }
+}
+
+// ====== RENDER MAIN TABLE ======
+function renderMainTable() {
+    const tableBody = document.getElementById('table-body');
+    tableBody.innerHTML = '';
+    
+    const indicators = [
+        { key: 'net_cash_flow', label: 'Чистый денежный поток' },
+        { key: 'od_result', label: 'Результат ОД' },
+        { key: 'od_income', label: 'Поступления по ОД' },
+        { key: 'od_expense', label: 'Отток по ОД' },
+        { key: 'variables', label: 'Переменные расходы' },
+        { key: 'constants', label: 'Постоянные расходы' },
+        { key: 'id_result', label: 'Результат по ИД' },
+        { key: 'fin_result', label: 'Результат фин' }
+    ];
+    
+    indicators.forEach(indicator => {
+        const data = state.reportData[indicator.key];
+        if (!data) return;
+        
+        const minYearValue = data.min_year || 0;
+        const maxYearValue = data.max_year || 0;
+        const deviation = maxYearValue - minYearValue;
+        const percentage = minYearValue !== 0 ? Math.round((deviation / Math.abs(minYearValue)) * 100) : 0;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${indicator.label}</td>
+            <td class="text-right">${formatCurrency(minYearValue)}</td>
+            <td class="text-right">${formatCurrency(maxYearValue)}</td>
+            <td class="text-right ${deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : ''}">
+                ${formatCurrency(deviation, true)}
+            </td>
+            <td class="text-right ${percentage > 0 ? 'positive' : percentage < 0 ? 'negative' : ''}">
+                ${percentage > 0 ? '+' : ''}${percentage}%
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+// ====== UTILITY FUNCTIONS ======
 function formatCurrency(value, showSign = false) {
     if (value === null || value === undefined) return '0 ₽';
     
@@ -1051,88 +1094,99 @@ function formatCurrency(value, showSign = false) {
     return showSign ? `${sign}${formatted} ₽` : `${formatted} ₽`;
 }
 
-function showDeviationDetails(deviation) {
-    // В реальном приложении здесь будет переход к детальному анализу
-    alert(`Детали отклонения:\n\n${deviation.title}\nПроект: ${deviation.project}\nСумма: ${formatCurrency(deviation.value, true)}\n${deviation.details}`);
-}
-
-function refreshDashboard() {
-    loadDashboardData();
-    showNotification('Дашборд обновлен', 'success');
-}
-
-function changePeriod() {
-    const selector = document.getElementById('period-selector');
-    console.log('Изменен период на:', selector.value);
-    loadDashboardData();
-}
-
-function exportDashboard() {
-    showNotification('Экспорт дашборда в разработке', 'info');
-}
-
-function showAlerts() {
-    showNotification('Настройка оповещений в разработке', 'info');
-}
-
-function setupDashboardListeners() {
-    // Кнопки периода графика
-    document.querySelectorAll('.viz-btn[data-period]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.viz-btn[data-period]').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            // Здесь будет обновление графика
-            console.log('Изменен период графика:', this.dataset.period);
-        });
-    });
-    
-    // Селекторы визуализаций
-    document.getElementById('expense-structure-selector')?.addEventListener('change', function() {
-        console.log('Изменена структура расходов:', this.value);
-        // Обновляем график
-    });
-    
-    document.getElementById('top-projects-selector')?.addEventListener('change', function() {
-        console.log('Изменен критерий топ проектов:', this.value);
-        loadTopProjects();
-    });
-}
-
-function refreshDeviations() {
-    loadDeviations();
-    showNotification('Отклонения обновлены', 'success');
-}
-
 function showNotification(message, type = 'info') {
-    // Простая реализация уведомления
+    // Создаем временное уведомление
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: var(--apple-card);
-        padding: 16px;
+        background: white;
+        padding: 16px 20px;
         border-radius: 8px;
         box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-        border-left: 4px solid var(--apple-${type});
+        border-left: 4px solid ${type === 'success' ? '#34c759' : type === 'error' ? '#ff3b30' : '#007aff'};
         z-index: 10000;
         max-width: 400px;
+        animation: slideIn 0.3s ease;
     `;
     
     notification.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}" 
-               style="color: var(--apple-${type});"></i>
-            <span>${message}</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}" 
+               style="color: ${type === 'success' ? '#34c759' : type === 'error' ? '#ff3b30' : '#007aff'};"></i>
+            <span style="flex: 1;">${message}</span>
         </div>
     `;
     
     document.body.appendChild(notification);
     
     setTimeout(() => {
-        notification.remove();
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
     }, 3000);
 }
+
+// Добавляем анимации для уведомлений
+const style = document.createElement('style');
+style.textContent = `
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+`;
+document.head.appendChild(style);
+
+function resetFilters() {
+    // Сброс месяцев
+    state.selectedMonths = [];
+    document.querySelectorAll('.month-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Сброс проектов
+    state.selectedProjects = [...state.availableProjects];
+    updateMultiselectDisplay('project');
+    updateMultiselectOptions('project');
+    
+    // Сброс годов
+    document.getElementById('year-min').value = '2024';
+    document.getElementById('year-max').value = '2025';
+    
+    // Сброс таблицы
+    document.getElementById('table-placeholder').classList.remove('hidden');
+    document.getElementById('main-table').classList.add('hidden');
+    document.getElementById('table-loading').classList.add('hidden');
+    
+    showNotification('Фильтры сброшены', 'success');
+}
+
+function exportToExcel() {
+    if (!state.reportData) {
+        showNotification('Сначала загрузите данные', 'error');
+        return;
+    }
+    
+    showNotification('Экспорт в Excel будет реализован в следующей версии', 'info');
+}
+
+function setupEventListeners() {
+    // Закрытие дропдаунов при клике вне
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.multiselect')) {
+            document.querySelectorAll('.multiselect-dropdown').forEach(d => {
+                d.classList.remove('show');
+            });
+        }
+    });
+}
+
+// Загружаем данные при загрузке страницы
+loadDashboardData();
 </script>
 {% endblock %}
