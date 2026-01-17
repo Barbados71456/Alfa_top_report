@@ -724,6 +724,17 @@
     display: none !important;
 }
 
+/* Цвета для таблицы */
+.positive {
+    color: #34c759 !important;
+    font-weight: 600;
+}
+
+.negative {
+    color: #ff3b30 !important;
+    font-weight: 600;
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
     .dashboard-container {
@@ -770,6 +781,7 @@ let state = {
 
 // ====== INITIALIZATION ======
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Dashboard initialized');
     initializeMonthButtons();
     loadFilterData();
     setupEventListeners();
@@ -777,10 +789,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ====== LOAD FILTER DATA ======
 async function loadFilterData() {
+    console.log('Loading filter data...');
     try {
-        // Загружаем проекты
         const response = await fetch('/api/report1/filters-data');
         const data = await response.json();
+        console.log('Filter data response:', data);
         
         if (data.success && data.projects) {
             state.availableProjects = data.projects;
@@ -790,6 +803,11 @@ async function loadFilterData() {
             state.selectedProjects = [...data.projects];
             updateMultiselectDisplay('project');
             updateMultiselectOptions('project');
+            
+            console.log('Available projects loaded:', data.projects.length);
+        } else {
+            console.error('Failed to load projects:', data.error);
+            showNotification('Ошибка загрузки проектов', 'error');
         }
     } catch (error) {
         console.error('Error loading filter data:', error);
@@ -799,8 +817,12 @@ async function loadFilterData() {
 
 // ====== FILTERS INITIALIZATION ======
 function initializeMonthButtons() {
+    console.log('Initializing month buttons...');
+    
     // По умолчанию выбираем последние 3 месяца
     const currentMonth = new Date().getMonth() + 1;
+    state.selectedMonths = [];
+    
     for (let i = 0; i < 3; i++) {
         const month = currentMonth - i;
         if (month >= 1) {
@@ -808,27 +830,39 @@ function initializeMonthButtons() {
         }
     }
     
+    // Если текущий месяц январь, февраль или март, берем первые 3 месяца года
+    if (state.selectedMonths.length < 3) {
+        state.selectedMonths = [1, 2, 3];
+    }
+    
+    console.log('Default selected months:', state.selectedMonths);
+    
     // Обновляем кнопки
     document.querySelectorAll('.month-btn').forEach(btn => {
-        const month = parseInt(btn.dataset.month);
-        if (state.selectedMonths.includes(month)) {
-            btn.classList.add('active');
-        }
+        const month = btn.dataset.month;
         
-        btn.addEventListener('click', function() {
-            const month = this.dataset.month;
-            
-            if (month === 'all') {
+        if (month === 'all') {
+            btn.addEventListener('click', function() {
                 const allSelected = state.selectedMonths.length === 12;
                 state.selectedMonths = allSelected ? [] : [1,2,3,4,5,6,7,8,9,10,11,12];
+                
                 document.querySelectorAll('.month-btn').forEach(b => {
                     if (b.dataset.month !== 'all') {
                         b.classList.toggle('active', !allSelected);
                     }
                 });
                 this.classList.toggle('active', !allSelected);
-            } else {
-                const monthNum = parseInt(month);
+                
+                console.log('All months toggled. Selected months:', state.selectedMonths);
+            });
+        } else {
+            const monthNum = parseInt(month);
+            if (state.selectedMonths.includes(monthNum)) {
+                btn.classList.add('active');
+            }
+            
+            btn.addEventListener('click', function() {
+                const monthNum = parseInt(this.dataset.month);
                 const index = state.selectedMonths.indexOf(monthNum);
                 
                 if (index === -1) {
@@ -838,14 +872,21 @@ function initializeMonthButtons() {
                     state.selectedMonths.splice(index, 1);
                     this.classList.remove('active');
                 }
-            }
-        });
+                
+                console.log('Month toggled. Selected months:', state.selectedMonths);
+            });
+        }
     });
 }
 
 // ====== MULTISELECT FUNCTIONS ======
 function populateOptions(type, options) {
     const container = document.getElementById(`${type}-options`);
+    if (!container) {
+        console.error(`Container ${type}-options not found`);
+        return;
+    }
+    
     container.innerHTML = '';
     
     options.forEach(option => {
@@ -862,6 +903,8 @@ function populateOptions(type, options) {
 }
 
 function toggleOption(type, value) {
+    console.log(`Toggling option: ${type} - ${value}`);
+    
     const array = type === 'project' ? state.selectedProjects : [];
     const index = array.indexOf(value);
     
@@ -878,6 +921,11 @@ function toggleOption(type, value) {
 function updateMultiselectDisplay(type) {
     const array = type === 'project' ? state.selectedProjects : [];
     const input = document.querySelector(`#${type}-multiselect .multiselect-input`);
+    
+    if (!input) {
+        console.error(`Multiselect input for ${type} not found`);
+        return;
+    }
     
     if (array.length === 0) {
         input.innerHTML = '<span class="placeholder">Выберите проекты...</span>';
@@ -918,6 +966,11 @@ function searchOptions(type, query) {
 
 function toggleDropdown(type) {
     const dropdown = document.getElementById(`${type}-dropdown`);
+    if (!dropdown) {
+        console.error(`Dropdown ${type}-dropdown not found`);
+        return;
+    }
+    
     dropdown.classList.toggle('show');
     
     // Закрываем другие дропдауны
@@ -929,6 +982,8 @@ function toggleDropdown(type) {
 
 // ====== LOAD DASHBOARD DATA ======
 async function loadDashboardData() {
+    console.log('Loading dashboard data...');
+    
     // Проверка фильтров
     if (state.selectedMonths.length === 0) {
         showNotification('Выберите хотя бы один месяц', 'error');
@@ -941,8 +996,18 @@ async function loadDashboardData() {
     }
     
     // Получаем годы
-    state.minYear = parseInt(document.getElementById('year-min').value);
-    state.maxYear = parseInt(document.getElementById('year-max').value);
+    const yearMinSelect = document.getElementById('year-min');
+    const yearMaxSelect = document.getElementById('year-max');
+    
+    if (!yearMinSelect || !yearMaxSelect) {
+        console.error('Year select elements not found');
+        return;
+    }
+    
+    state.minYear = parseInt(yearMinSelect.value);
+    state.maxYear = parseInt(yearMaxSelect.value);
+    
+    console.log('Years selected:', state.minYear, state.maxYear);
     
     if (state.minYear >= state.maxYear) {
         showNotification('Год "до" должен быть меньше года "после"', 'error');
@@ -950,15 +1015,31 @@ async function loadDashboardData() {
     }
     
     // Показываем загрузку
-    document.getElementById('table-placeholder').classList.add('hidden');
-    document.getElementById('table-loading').classList.remove('hidden');
-    document.getElementById('main-table').classList.add('hidden');
+    const placeholder = document.getElementById('table-placeholder');
+    const loading = document.getElementById('table-loading');
+    const mainTable = document.getElementById('main-table');
+    
+    if (placeholder && loading && mainTable) {
+        placeholder.classList.add('hidden');
+        loading.classList.remove('hidden');
+        mainTable.classList.add('hidden');
+    }
     
     // Обновляем заголовки годов
-    document.getElementById('year-min-header').textContent = state.minYear;
-    document.getElementById('year-max-header').textContent = state.maxYear;
+    const yearMinHeader = document.getElementById('year-min-header');
+    const yearMaxHeader = document.getElementById('year-max-header');
+    
+    if (yearMinHeader) yearMinHeader.textContent = state.minYear;
+    if (yearMaxHeader) yearMaxHeader.textContent = state.maxYear;
     
     try {
+        console.log('Sending request with data:', {
+            projects: state.selectedProjects,
+            months: state.selectedMonths,
+            year_min: state.minYear,
+            year_max: state.maxYear
+        });
+        
         // Загружаем основные данные
         const response = await fetch('/api/report1/aggregated', {
             method: 'POST',
@@ -973,14 +1054,21 @@ async function loadDashboardData() {
             })
         });
         
+        console.log('Response received');
         const data = await response.json();
+        console.log('Response data:', data);
         
         if (data.success) {
             state.reportData = data.data;
+            console.log('Report data loaded:', state.reportData);
+            
             renderKPI();
             renderMainTable();
-            document.getElementById('table-loading').classList.add('hidden');
-            document.getElementById('main-table').classList.remove('hidden');
+            
+            if (loading && mainTable) {
+                loading.classList.add('hidden');
+                mainTable.classList.remove('hidden');
+            }
             
             showNotification(`Данные загружены по ${state.selectedProjects.length} проектам`, 'success');
         } else {
@@ -990,53 +1078,98 @@ async function loadDashboardData() {
     } catch (error) {
         console.error('Error loading dashboard:', error);
         showNotification(`Ошибка загрузки: ${error.message}`, 'error');
-        document.getElementById('table-loading').classList.add('hidden');
-        document.getElementById('table-placeholder').classList.remove('hidden');
+        
+        if (loading && placeholder) {
+            loading.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+        }
     }
 }
 
 // ====== RENDER KPI ======
 function renderKPI() {
+    console.log('Rendering KPI...');
+    
+    if (!state.reportData) {
+        console.error('No report data to render KPI');
+        return;
+    }
+    
     const data = state.reportData;
     
     // Чистый денежный поток
     const netCash = data.net_cash_flow;
+    console.log('Net cash flow data:', netCash);
     updateKPI('net-cash', netCash);
     
     // Поступления по ОД
     const odIncome = data.od_income;
+    console.log('OD income data:', odIncome);
     updateKPI('od-income', odIncome);
     
     // Отток по ОД
     const odExpense = data.od_expense;
+    console.log('OD expense data:', odExpense);
     updateKPI('od-expense', odExpense);
     
     // Результат ОД
     const odResult = data.od_result;
+    console.log('OD result data:', odResult);
     updateKPI('od-result', odResult);
 }
 
 function updateKPI(kpiId, data) {
+    console.log(`Updating KPI: ${kpiId}`, data);
+    
+    if (!data) {
+        console.error(`No data for KPI: ${kpiId}`);
+        return;
+    }
+    
     const minValue = data.min_year || 0;
     const maxValue = data.max_year || 0;
     const deviation = maxValue - minValue;
     const percentage = minValue !== 0 ? Math.round((deviation / Math.abs(minValue)) * 100) : 0;
     
+    console.log(`KPI ${kpiId} values:`, {minValue, maxValue, deviation, percentage});
+    
     const valueElement = document.getElementById(`kpi-${kpiId}`);
     const changeElement = document.getElementById(`kpi-${kpiId}-change`);
-    const changeValue = changeElement.querySelector('.change-value');
     
-    if (valueElement && changeElement && changeValue) {
-        valueElement.textContent = formatCurrency(maxValue);
-        
-        changeValue.textContent = `${percentage > 0 ? '+' : ''}${percentage}%`;
-        changeValue.className = `change-value ${percentage > 0 ? '' : 'negative'}`;
+    if (!valueElement) {
+        console.error(`Element kpi-${kpiId} not found`);
+        return;
     }
+    
+    if (!changeElement) {
+        console.error(`Element kpi-${kpiId}-change not found`);
+        return;
+    }
+    
+    const changeValue = changeElement.querySelector('.change-value');
+    if (!changeValue) {
+        console.error('.change-value element not found');
+        return;
+    }
+    
+    valueElement.textContent = formatCurrency(maxValue);
+    console.log(`Formatted value for ${kpiId}:`, formatCurrency(maxValue));
+    
+    changeValue.textContent = `${percentage > 0 ? '+' : ''}${percentage}%`;
+    changeValue.className = `change-value ${percentage >= 0 ? '' : 'negative'}`;
 }
 
 // ====== RENDER MAIN TABLE ======
 function renderMainTable() {
+    console.log('Rendering main table...');
+    console.log('Report data:', state.reportData);
+    
     const tableBody = document.getElementById('table-body');
+    if (!tableBody) {
+        console.error('table-body element not found');
+        return;
+    }
+    
     tableBody.innerHTML = '';
     
     const indicators = [
@@ -1050,38 +1183,61 @@ function renderMainTable() {
         { key: 'fin_result', label: 'Результат фин' }
     ];
     
+    console.log('Processing indicators...');
+    
     indicators.forEach(indicator => {
         const data = state.reportData[indicator.key];
-        if (!data) return;
+        if (!data) {
+            console.warn(`No data for indicator: ${indicator.key}`);
+            return;
+        }
+        
+        console.log(`Processing ${indicator.key}:`, data);
         
         const minYearValue = data.min_year || 0;
         const maxYearValue = data.max_year || 0;
         const deviation = maxYearValue - minYearValue;
         const percentage = minYearValue !== 0 ? Math.round((deviation / Math.abs(minYearValue)) * 100) : 0;
         
+        // Определяем классы для цветового кодирования
+        const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : '';
+        const percentageClass = percentage > 0 ? 'positive' : percentage < 0 ? 'negative' : '';
+        
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${indicator.label}</td>
             <td class="text-right">${formatCurrency(minYearValue)}</td>
             <td class="text-right">${formatCurrency(maxYearValue)}</td>
-            <td class="text-right ${deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : ''}">
+            <td class="text-right ${deviationClass}">
                 ${formatCurrency(deviation, true)}
             </td>
-            <td class="text-right ${percentage > 0 ? 'positive' : percentage < 0 ? 'negative' : ''}">
+            <td class="text-right ${percentageClass}">
                 ${percentage > 0 ? '+' : ''}${percentage}%
             </td>
         `;
         
         tableBody.appendChild(row);
     });
+    
+    console.log('Table rendered with', indicators.length, 'rows');
 }
 
 // ====== UTILITY FUNCTIONS ======
 function formatCurrency(value, showSign = false) {
-    if (value === null || value === undefined) return '0 ₽';
+    console.log('formatCurrency called with:', value, 'showSign:', showSign);
+    
+    if (value === null || value === undefined) {
+        console.log('Value is null or undefined, returning default');
+        return '0 ₽';
+    }
     
     const num = parseFloat(value);
-    if (isNaN(num)) return '0 ₽';
+    console.log('Parsed number:', num);
+    
+    if (isNaN(num)) {
+        console.log('Value is NaN, returning default');
+        return '0 ₽';
+    }
     
     const absValue = Math.abs(num);
     const sign = num > 0 ? '+' : num < 0 ? '-' : '';
@@ -1091,10 +1247,14 @@ function formatCurrency(value, showSign = false) {
         maximumFractionDigits: 0
     }).format(absValue);
     
-    return showSign ? `${sign}${formatted} ₽` : `${formatted} ₽`;
+    const result = showSign ? `${sign}${formatted} ₽` : `${formatted} ₽`;
+    console.log('Formatted result:', result);
+    return result;
 }
 
 function showNotification(message, type = 'info') {
+    console.log(`Showing notification: ${message} (${type})`);
+    
     // Создаем временное уведомление
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
@@ -1124,25 +1284,34 @@ function showNotification(message, type = 'info') {
     
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
     }, 3000);
 }
 
 // Добавляем анимации для уведомлений
-const style = document.createElement('style');
-style.textContent = `
-@keyframes slideIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+if (!document.querySelector('#notification-styles')) {
+    const style = document.createElement('style');
+    style.id = 'notification-styles';
+    style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+    `;
+    document.head.appendChild(style);
 }
-@keyframes slideOut {
-    from { transform: translateX(0); opacity: 1; }
-    to { transform: translateX(100%); opacity: 0; }
-}
-`;
-document.head.appendChild(style);
 
 function resetFilters() {
+    console.log('Resetting filters...');
+    
     // Сброс месяцев
     state.selectedMonths = [];
     document.querySelectorAll('.month-btn').forEach(btn => {
@@ -1150,7 +1319,9 @@ function resetFilters() {
     });
     
     // Сброс проектов
-    state.selectedProjects = [...state.availableProjects];
+    if (state.availableProjects.length > 0) {
+        state.selectedProjects = [...state.availableProjects];
+    }
     updateMultiselectDisplay('project');
     updateMultiselectOptions('project');
     
@@ -1159,9 +1330,15 @@ function resetFilters() {
     document.getElementById('year-max').value = '2025';
     
     // Сброс таблицы
-    document.getElementById('table-placeholder').classList.remove('hidden');
-    document.getElementById('main-table').classList.add('hidden');
-    document.getElementById('table-loading').classList.add('hidden');
+    const placeholder = document.getElementById('table-placeholder');
+    const mainTable = document.getElementById('main-table');
+    const loading = document.getElementById('table-loading');
+    
+    if (placeholder && mainTable && loading) {
+        placeholder.classList.remove('hidden');
+        mainTable.classList.add('hidden');
+        loading.classList.add('hidden');
+    }
     
     showNotification('Фильтры сброшены', 'success');
 }
@@ -1176,6 +1353,8 @@ function exportToExcel() {
 }
 
 function setupEventListeners() {
+    console.log('Setting up event listeners...');
+    
     // Закрытие дропдаунов при клике вне
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.multiselect')) {
@@ -1184,9 +1363,23 @@ function setupEventListeners() {
             });
         }
     });
+    
+    // Загрузка данных при изменении фильтров
+    document.getElementById('year-min')?.addEventListener('change', function() {
+        console.log('Year min changed to:', this.value);
+    });
+    
+    document.getElementById('year-max')?.addEventListener('change', function() {
+        console.log('Year max changed to:', this.value);
+    });
 }
 
 // Загружаем данные при загрузке страницы
-loadDashboardData();
+window.addEventListener('load', function() {
+    console.log('Page loaded, loading dashboard data...');
+    setTimeout(() => {
+        loadDashboardData();
+    }, 500);
+});
 </script>
 {% endblock %}
