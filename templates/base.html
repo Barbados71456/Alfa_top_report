@@ -25,15 +25,15 @@
                 </a>
                 <a href="{{ url_for('report1') }}" class="nav-item {% if request.path == '/report1' %}active{% endif %}">
                     <i class="fas fa-project-diagram"></i>
-                    <span>Эффективность</span>
+                    <span>Оценка эффективности по выбранным проектам</span>
                 </a>
                 <a href="{{ url_for('report2') }}" class="nav-item {% if request.path == '/report2' %}active{% endif %}">
                     <i class="fas fa-table"></i>
-                    <span>Сводная</span>
+                    <span>Итоговая эффективность по всем проектам</span>
                 </a>
                 <a href="{{ url_for('report3') }}" class="nav-item {% if request.path == '/report3' %}active{% endif %}">
                     <i class="fas fa-sun"></i>
-                    <span>Анализ статей</span>
+                    <span>Анализ эффективности по проектам</span>
                 </a>
             </nav>
             
@@ -87,13 +87,13 @@
             <i class="fas fa-home"></i> Главная
         </a>
         <a href="{{ url_for('report1') }}" class="mobile-nav-item">
-            <i class="fas fa-project-diagram"></i> Эффективность
+            <i class="fas fa-project-diagram"></i> Оценка эффективности по выбранным проектам
         </a>
         <a href="{{ url_for('report2') }}" class="mobile-nav-item">
-            <i class="fas fa-table"></i> Сводная
+            <i class="fas fa-table"></i> Итоговая эффективность по всем проектам
         </a>
         <a href="{{ url_for('report3') }}" class="mobile-nav-item">
-            <i class="fas fa-sun"></i> Анализ статей
+            <i class="fas fa-sun"></i> Анализ эффективности по проектам
         </a>
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('auth.logout') }}" class="mobile-nav-item logout">
