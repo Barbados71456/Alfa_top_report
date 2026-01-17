@@ -167,6 +167,37 @@
             border-color: var(--apple-blue);
         }
 
+        /* ====== INDICATOR SELECTOR ====== */
+        .indicator-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .indicator-btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--apple-bg);
+            border: 1px solid var(--apple-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            font-size: 0.9rem;
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .indicator-btn:hover {
+            background: rgba(0, 122, 255, 0.1);
+        }
+
+        .indicator-btn.active {
+            background: var(--apple-blue);
+            color: white;
+            border-color: var(--apple-blue);
+        }
+
         /* ====== RANGE SLIDER ====== */
         .range-slider {
             padding: var(--spacing-lg) var(--spacing-md);
@@ -299,50 +330,6 @@
             color: white;
         }
 
-        /* ====== INDICATOR SELECTOR ====== */
-        .indicator-selector {
-            display: flex;
-            flex-wrap: wrap;
-            gap: var(--spacing-sm);
-            margin-bottom: var(--spacing-md);
-        }
-
-        .indicator-btn {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--apple-bg);
-            border: 1px solid var(--apple-border);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            transition: var(--transition-fast);
-            font-size: 0.9rem;
-            flex: 1;
-            min-width: 160px;
-            text-align: center;
-        }
-
-        .indicator-btn:hover {
-            background: rgba(0, 122, 255, 0.1);
-        }
-
-        .indicator-btn.active {
-            background: var(--apple-blue);
-            color: white;
-            border-color: var(--apple-blue);
-        }
-
-        /* ====== TABLE PLACEHOLDER ====== */
-        .table-placeholder {
-            text-align: center;
-            padding: var(--spacing-xl);
-            color: var(--apple-text-secondary);
-        }
-
-        .table-placeholder i {
-            font-size: 3rem;
-            margin-bottom: var(--spacing-md);
-            color: var(--apple-border);
-        }
-
         /* ====== PROJECTS TABLE ====== */
         .projects-table-container {
             background: var(--apple-card);
@@ -369,9 +356,6 @@
             color: var(--apple-text);
             cursor: pointer;
             user-select: none;
-            position: sticky;
-            top: 0;
-            z-index: 10;
         }
 
         .projects-table th:hover {
@@ -398,13 +382,8 @@
             background: rgba(0, 122, 255, 0.05);
         }
 
-        .project-row {
-            cursor: pointer;
-            transition: var(--transition-fast);
-        }
-
-        .project-row:hover {
-            background: rgba(0, 122, 255, 0.1);
+        .project-name {
+            font-weight: 500;
         }
 
         .year-value {
@@ -435,18 +414,100 @@
             color: var(--apple-text-secondary);
         }
 
-        /* ====== HIERARCHY SECTION ====== */
-        .hierarchy-container {
-            background: var(--apple-card);
-            border-radius: var(--radius-lg);
-            padding: var(--spacing-lg);
-            margin-bottom: var(--spacing-xl);
-            box-shadow: var(--apple-shadow);
-            border: 1px solid var(--apple-border);
+        /* ====== TABLE PLACEHOLDER ====== */
+        .table-placeholder {
+            text-align: center;
+            padding: var(--spacing-xl);
+            color: var(--apple-text-secondary);
         }
 
-        .hierarchy-tree {
-            margin-top: var(--spacing-md);
+        .table-placeholder i {
+            font-size: 3rem;
+            margin-bottom: var(--spacing-md);
+            color: var(--apple-border);
+        }
+
+        /* ====== HIERARCHY MODAL ====== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-md);
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--apple-card);
+            border-radius: var(--radius-lg);
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--apple-shadow-hover);
+            animation: modalAppear 0.3s ease;
+        }
+
+        @keyframes modalAppear {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: var(--spacing-lg);
+            border-bottom: 1px solid var(--apple-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--apple-text-secondary);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+        }
+
+        .modal-close:hover {
+            background: var(--apple-bg);
+        }
+
+        .modal-body {
+            padding: var(--spacing-lg);
+        }
+
+        /* ====== HIERARCHY STYLES ====== */
+        .hierarchy-container {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: var(--spacing-md);
         }
 
         .hierarchy-level {
@@ -458,7 +519,7 @@
             justify-content: space-between;
             align-items: center;
             padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--apple-card);
+            background: var(--apple-bg);
             border-radius: var(--radius-sm);
             cursor: pointer;
             transition: var(--transition-fast);
@@ -582,6 +643,25 @@
             border-color: var(--apple-text-secondary);
         }
 
+        .btn-tertiary {
+            background: var(--apple-green);
+            color: white;
+            border: none;
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            transition: var(--transition-fast);
+        }
+
+        .btn-tertiary:hover {
+            background: #2da44e;
+            transform: translateY(-1px);
+        }
+
         .filter-actions {
             display: flex;
             gap: var(--spacing-md);
@@ -650,80 +730,17 @@
             margin-top: var(--spacing-xs);
         }
 
-        /* ====== MODALS ====== */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-            padding: var(--spacing-md);
+        /* ====== UTILITY CLASSES ====== */
+        .hidden {
+            display: none !important;
         }
 
-        .modal.show {
-            display: flex;
+        .text-center {
+            text-align: center;
         }
 
-        .modal-content {
-            background: var(--apple-card);
-            border-radius: var(--radius-lg);
-            max-width: 800px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: var(--apple-shadow-hover);
-            animation: modalAppear 0.3s ease;
-        }
-
-        @keyframes modalAppear {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .modal-header {
-            padding: var(--spacing-lg);
-            border-bottom: 1px solid var(--apple-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .modal-header h3 {
-            font-size: 1.3rem;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--apple-text-secondary);
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: var(--radius-sm);
-        }
-
-        .modal-close:hover {
-            background: var(--apple-bg);
-        }
-
-        .modal-body {
-            padding: var(--spacing-lg);
+        .text-right {
+            text-align: right;
         }
 
         /* ====== NOTIFICATION ====== */
@@ -773,19 +790,6 @@
             padding: var(--spacing-xs);
         }
 
-        /* ====== UTILITY CLASSES ====== */
-        .hidden {
-            display: none !important;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-right {
-            text-align: right;
-        }
-
         /* ====== RESPONSIVE ====== */
         @media (max-width: 768px) {
             body {
@@ -828,39 +832,33 @@
         <!-- Заголовок -->
         <div class="report-header">
             <h1><i class="fas fa-chart-line"></i> Анализ эффективности по проектам</h1>
-            <p class="subtitle">Выберите показатель и фильтры для сравнения проектов</p>
+            <p class="subtitle">Сравнение показателей по всем проектам. Выберите показатель для анализа</p>
         </div>
 
         <!-- Фильтры -->
         <div class="filters-card">
-            <!-- Показатель -->
+            <!-- Выбор показателя -->
             <div class="filter-section">
                 <div class="filter-group full-width">
                     <label><i class="fas fa-chart-bar"></i> Показатель для анализа</label>
-                    <div class="indicator-selector" id="indicator-selector">
-                        <button class="indicator-btn active" data-key="net_cash_flow" onclick="selectIndicator('net_cash_flow')">
+                    <div class="indicator-selector">
+                        <button class="indicator-btn active" data-key="net_cash_flow" onclick="changeIndicator('net_cash_flow')">
                             Чистый денежный поток
                         </button>
-                        <button class="indicator-btn" data-key="od_result" onclick="selectIndicator('od_result')">
+                        <button class="indicator-btn" data-key="od_result" onclick="changeIndicator('od_result')">
                             Результат ОД
                         </button>
-                        <button class="indicator-btn" data-key="od_income" onclick="selectIndicator('od_income')">
+                        <button class="indicator-btn" data-key="od_income" onclick="changeIndicator('od_income')">
                             Поступления по ОД
                         </button>
-                        <button class="indicator-btn" data-key="od_expense" onclick="selectIndicator('od_expense')">
+                        <button class="indicator-btn" data-key="od_expense" onclick="changeIndicator('od_expense')">
                             Отток по ОД
                         </button>
-                        <button class="indicator-btn" data-key="variables" onclick="selectIndicator('variables')">
+                        <button class="indicator-btn" data-key="variables" onclick="changeIndicator('variables')">
                             Переменные расходы
                         </button>
-                        <button class="indicator-btn" data-key="constants" onclick="selectIndicator('constants')">
+                        <button class="indicator-btn" data-key="constants" onclick="changeIndicator('constants')">
                             Постоянные расходы
-                        </button>
-                        <button class="indicator-btn" data-key="id_result" onclick="selectIndicator('id_result')">
-                            Результат по ИД
-                        </button>
-                        <button class="indicator-btn" data-key="fin_result" onclick="selectIndicator('fin_result')">
-                            Результат фин
                         </button>
                     </div>
                 </div>
@@ -912,7 +910,7 @@
                 </div>
             </div>
 
-            <!-- Годы (Range Slider) -->
+            <!-- Годы -->
             <div class="filter-section">
                 <div class="filter-group full-width">
                     <label><i class="fas fa-calendar"></i> Период (годы)</label>
@@ -932,8 +930,8 @@
 
             <!-- Кнопки действий -->
             <div class="filter-actions">
-                <button class="btn-primary" onclick="loadReportData()">
-                    <i class="fas fa-play"></i> Загрузить отчет
+                <button class="btn-primary" onclick="loadProjectsData()">
+                    <i class="fas fa-play"></i> Загрузить данные
                 </button>
                 <button class="btn-secondary" onclick="resetFilters()">
                     <i class="fas fa-redo"></i> Сбросить фильтры
@@ -949,16 +947,13 @@
             <h3 class="text-center"><i class="fas fa-table"></i> Сравнение проектов по выбранному показателю</h3>
             <div id="table-placeholder" class="table-placeholder">
                 <i class="fas fa-hand-pointer"></i>
-                <p>Настройте фильтры выше и нажмите "Загрузить отчет"</p>
-                <p style="font-size: 0.9rem; color: var(--apple-text-secondary); margin-top: var(--spacing-sm);">
-                    Кликните на отклонение для детального анализа по проекту
-                </p>
+                <p>Настройте фильтры выше и нажмите "Загрузить данные"</p>
             </div>
             <div id="table-loading" class="loading hidden">
                 <div class="spinner"></div>
                 <p>Загрузка данных по проектам...</p>
             </div>
-            <div style="overflow-x: auto; max-height: 600px; overflow-y: auto;">
+            <div style="overflow-x: auto;">
                 <table class="projects-table hidden" id="projects-table">
                     <thead>
                         <tr>
@@ -971,30 +966,42 @@
                     <tbody id="table-body">
                         <!-- Данные будут загружены через JavaScript -->
                     </tbody>
+                    <tfoot id="table-footer" class="hidden">
+                        <tr style="font-weight: 600; background: var(--apple-bg);">
+                            <td>ИТОГО</td>
+                            <td class="text-right" id="total-min">0</td>
+                            <td class="text-right" id="total-max">0</td>
+                            <td class="text-right" id="total-dev">0</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
 
-        <!-- Иерархия для выбранного проекта -->
-        <div class="hierarchy-container hidden" id="hierarchy-section">
-            <h3 class="text-center"><i class="fas fa-sitemap"></i> Детализация по проекту: <span id="selected-project-name"></span></h3>
-            <p class="subtitle text-center">Иерархия статей для выбранного проекта</p>
-            
-            <div id="hierarchy-loading" class="loading">
-                <div class="spinner"></div>
-                <p>Загрузка иерархии...</p>
-            </div>
-            
-            <div id="hierarchy-content" class="hidden">
-                <div class="hierarchy-tree" id="hierarchy-tree"></div>
-                
-                <div class="filter-actions" style="margin-top: var(--spacing-lg);">
-                    <button class="btn-primary" onclick="showContragentAnalysisForCurrentProject()">
-                        <i class="fas fa-users"></i> Анализ контрагентов для этого проекта
-                    </button>
-                    <button class="btn-secondary" onclick="copyHierarchyAnalysis()">
-                        <i class="fas fa-copy"></i> Копировать анализ
-                    </button>
+        <!-- Модальное окно иерархии проекта -->
+        <div class="modal" id="hierarchy-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-sitemap"></i> Детализация по проекту</h3>
+                    <button class="modal-close" onclick="closeModal('hierarchy-modal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="hierarchy-loading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Загрузка иерархии...</p>
+                    </div>
+                    <div id="hierarchy-content" class="hidden">
+                        <h4 id="hierarchy-title" class="text-center"></h4>
+                        <div class="hierarchy-container" id="hierarchy-tree"></div>
+                        <div class="filter-actions" style="margin-top: var(--spacing-lg);">
+                            <button class="btn-primary" onclick="showContragentAnalysis()">
+                                <i class="fas fa-users"></i> Анализ контрагентов
+                            </button>
+                            <button class="btn-secondary" onclick="exportHierarchyToExcel()">
+                                <i class="fas fa-file-export"></i> Экспорт иерархии
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1044,9 +1051,9 @@
             minYear: 2023,
             maxYear: 2025,
             availableYears: [2023, 2024, 2025],
-            projectsData: [],
+            projectsData: null,
             currentProject: null,
-            currentHierarchy: null,
+            currentLevel4: null,
             sortColumn: null,
             sortDirection: 'asc'
         };
@@ -1103,16 +1110,6 @@
         }
 
         // ====== FILTERS INITIALIZATION ======
-        function selectIndicator(indicatorKey) {
-            state.selectedIndicator = indicatorKey;
-            
-            // Обновляем активную кнопку
-            document.querySelectorAll('.indicator-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.querySelector(`.indicator-btn[data-key="${indicatorKey}"]`).classList.add('active');
-        }
-
         function initializeMonthButtons() {
             const buttons = document.querySelectorAll('.month-btn');
             buttons.forEach(btn => {
@@ -1215,7 +1212,7 @@
 
         // ====== MULTISELECT FUNCTIONS ======
         function toggleOption(type, value) {
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const index = array.indexOf(value);
             
             if (index === -1) {
@@ -1229,7 +1226,7 @@
         }
 
         function updateMultiselectDisplay(type) {
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const input = document.querySelector(`#${type}-multiselect .multiselect-input`);
             const placeholder = input.querySelector('.placeholder');
             
@@ -1252,7 +1249,7 @@
 
         function updateMultiselectOptions(type) {
             const options = document.querySelectorAll(`#${type}-options .multiselect-option`);
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             
             options.forEach(option => {
                 const value = option.dataset.value;
@@ -1283,7 +1280,7 @@
 
         function removeOption(type, value, event) {
             event.stopPropagation();
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const index = array.indexOf(value);
             if (index > -1) {
                 array.splice(index, 1);
@@ -1292,8 +1289,24 @@
             }
         }
 
-        // ====== REPORT DATA LOADING ======
-        async function loadReportData() {
+        // ====== CHANGE INDICATOR ======
+        function changeIndicator(indicatorKey) {
+            state.selectedIndicator = indicatorKey;
+            
+            // Обновляем активную кнопку
+            document.querySelectorAll('.indicator-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.indicator-btn[data-key="${indicatorKey}"]`).classList.add('active');
+            
+            // Перезагружаем данные если они уже загружены
+            if (state.projectsData) {
+                loadProjectsData();
+            }
+        }
+
+        // ====== LOAD PROJECTS DATA ======
+        async function loadProjectsData() {
             // Проверка фильтров
             if (state.selectedMonths.length === 0) {
                 showNotification('Выберите хотя бы один месяц', 'error');
@@ -1304,15 +1317,14 @@
             document.getElementById('table-placeholder').classList.add('hidden');
             document.getElementById('table-loading').classList.remove('hidden');
             document.getElementById('projects-table').classList.add('hidden');
-            document.getElementById('hierarchy-section').classList.add('hidden');
+            document.getElementById('table-footer').classList.add('hidden');
             
             // Обновляем заголовки годов
             document.getElementById('min-year-header').textContent = state.minYear;
             document.getElementById('max-year-header').textContent = state.maxYear;
             
             try {
-                // Загружаем данные по проектам
-                const response = await fetch('/api/report3/projects-data', {
+                const response = await fetch('/api/report3/projects-table', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1333,52 +1345,66 @@
                     renderProjectsTable();
                     document.getElementById('table-loading').classList.add('hidden');
                     document.getElementById('projects-table').classList.remove('hidden');
+                    document.getElementById('table-footer').classList.remove('hidden');
                     
-                    showNotification(`Загружено ${state.projectsData.length} проектов`, 'success');
+                    showNotification(`Данные загружены по ${state.projectsData.length} проектам`, 'success');
                 } else {
                     throw new Error(data.error || 'Ошибка загрузки данных');
                 }
                 
             } catch (error) {
-                console.error('Error loading report:', error);
+                console.error('Error loading projects data:', error);
                 showNotification(`Ошибка загрузки: ${error.message}`, 'error');
                 document.getElementById('table-loading').classList.add('hidden');
                 document.getElementById('table-placeholder').classList.remove('hidden');
             }
         }
 
-        // ====== TABLE RENDERING ======
+        // ====== RENDER PROJECTS TABLE ======
         function renderProjectsTable() {
             const tableBody = document.getElementById('table-body');
             tableBody.innerHTML = '';
             
-            state.projectsData.forEach((projectData, index) => {
-                const minYearValue = projectData.min_year || 0;
-                const maxYearValue = projectData.max_year || 0;
-                const deviation = projectData.deviation;
+            let totalMin = 0;
+            let totalMax = 0;
+            let totalDev = 0;
+            
+            state.projectsData.forEach(project => {
+                const minValue = project.min_year || 0;
+                const maxValue = project.max_year || 0;
+                const deviation = maxValue - minValue;
                 const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
                 
-                const row = document.createElement('tr');
-                row.className = 'project-row';
-                row.dataset.index = index;
-                row.dataset.project = projectData.project;
+                totalMin += minValue;
+                totalMax += maxValue;
+                totalDev += deviation;
                 
+                const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>
-                        <strong>${projectData.project}</strong>
-                    </td>
-                    <td class="year-value">${formatCurrency(minYearValue)}</td>
-                    <td class="year-value">${formatCurrency(maxYearValue)}</td>
+                    <td class="project-name">${project.project || 'Не указано'}</td>
+                    <td class="year-value">${formatCurrency(minValue)}</td>
+                    <td class="year-value">${formatCurrency(maxValue)}</td>
                     <td class="deviation-cell ${deviationClass}" 
-                        onclick="showProjectHierarchy(${index}, event)">
+                        onclick="showProjectHierarchy('${project.project.replace(/'/g, "\\'")}')">
                         ${formatCurrency(deviation, true)}
                     </td>
                 `;
                 
                 tableBody.appendChild(row);
             });
+            
+            // Итоги
+            const totalDeviationClass = totalDev > 0 ? 'positive' : totalDev < 0 ? 'negative' : 'neutral';
+            document.getElementById('total-min').textContent = formatCurrency(totalMin);
+            document.getElementById('total-max').textContent = formatCurrency(totalMax);
+            document.getElementById('total-dev').textContent = formatCurrency(totalDev, true);
+            document.getElementById('total-dev').className = `text-right ${totalDeviationClass}`;
+            
+            // Сортируем таблицу
+            sortTable(state.sortColumn || 0);
         }
 
+        // ====== SORT TABLE ======
         function sortTable(column) {
             const table = document.getElementById('projects-table');
             const tbody = document.getElementById('table-body');
@@ -1427,27 +1453,15 @@
             }
         }
 
-        function parseCurrency(value) {
-            return parseFloat(value.replace(/[^-\d.]/g, '')) || 0;
-        }
-
         // ====== PROJECT HIERARCHY ======
-        async function showProjectHierarchy(index, event) {
-            if (event) event.stopPropagation();
+        async function showProjectHierarchy(project) {
+            state.currentProject = project;
             
-            const projectData = state.projectsData[index];
-            state.currentProject = projectData.project;
-            
-            // Показываем секцию иерархии
-            document.getElementById('hierarchy-section').classList.remove('hidden');
+            document.getElementById('hierarchy-title').textContent = `Детализация по проекту: ${project}`;
             document.getElementById('hierarchy-loading').classList.remove('hidden');
             document.getElementById('hierarchy-content').classList.add('hidden');
             
-            // Обновляем заголовок
-            document.getElementById('selected-project-name').textContent = state.currentProject;
-            
-            // Прокручиваем к иерархии
-            document.getElementById('hierarchy-section').scrollIntoView({ behavior: 'smooth' });
+            openModal('hierarchy-modal');
             
             try {
                 const response = await fetch('/api/report3/project-hierarchy', {
@@ -1456,8 +1470,8 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
+                        project: project,
                         indicator_key: state.selectedIndicator,
-                        project: state.currentProject,
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -1468,7 +1482,6 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    state.currentHierarchy = data.hierarchy;
                     renderHierarchy(data.hierarchy);
                     document.getElementById('hierarchy-loading').classList.add('hidden');
                     document.getElementById('hierarchy-content').classList.remove('hidden');
@@ -1477,7 +1490,7 @@
                 }
                 
             } catch (error) {
-                console.error('Error loading project hierarchy:', error);
+                console.error('Error loading hierarchy:', error);
                 document.getElementById('hierarchy-loading').innerHTML = `
                     <div class="text-center">
                         <i class="fas fa-exclamation-triangle"></i>
@@ -1531,6 +1544,29 @@
             html += '</div>';
             
             container.innerHTML = html;
+            
+            // Сохраняем первый элемент level4 для анализа контрагентов
+            const firstLevel4 = findFirstLevel4(hierarchy);
+            if (firstLevel4) {
+                state.currentLevel4 = firstLevel4;
+            }
+        }
+
+        function findFirstLevel4(hierarchy) {
+            for (const level1 of hierarchy) {
+                if (level1.children && level1.children.length > 0) {
+                    for (const level2 of level1.children) {
+                        if (level2.children && level2.children.length > 0) {
+                            for (const level3 of level2.children) {
+                                if (level3.children && level3.children.length > 0) {
+                                    return level3.children[0].name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
         }
 
         function toggleHierarchyLevel(element) {
@@ -1546,79 +1582,29 @@
             }
         }
 
-        function copyHierarchyAnalysis() {
-            if (!state.currentHierarchy) {
-                showNotification('Нет данных для копирования', 'warning');
-                return;
-            }
-            
-            let analysisText = `Анализ проекта: ${state.currentProject}\n`;
-            analysisText += `Показатель: ${getIndicatorName(state.selectedIndicator)}\n`;
-            analysisText += `Период: ${state.minYear} - ${state.maxYear}\n\n`;
-            
-            function addLevelToText(level, depth = 0) {
-                const indent = '  '.repeat(depth);
-                analysisText += `${indent}${level.name}: ${formatCurrency(level.min_year)} → ${formatCurrency(level.max_year)} (${formatCurrency(level.deviation, true)})\n`;
-                
-                if (level.children) {
-                    level.children.forEach(child => addLevelToText(child, depth + 1));
-                }
-            }
-            
-            state.currentHierarchy.forEach(level => addLevelToText(level));
-            
-            // Копируем в буфер обмена
-            navigator.clipboard.writeText(analysisText)
-                .then(() => showNotification('Анализ скопирован в буфер обмена', 'success'))
-                .catch(err => showNotification('Ошибка копирования: ' + err, 'error'));
-        }
-
-        function getIndicatorName(key) {
-            const names = {
-                'net_cash_flow': 'Чистый денежный поток',
-                'od_result': 'Результат ОД',
-                'od_income': 'Поступления по ОД',
-                'od_expense': 'Отток по ОД',
-                'variables': 'Переменные расходы',
-                'constants': 'Постоянные расходы',
-                'id_result': 'Результат по ИД',
-                'fin_result': 'Результат фин'
-            };
-            return names[key] || key;
-        }
-
         // ====== CONTRAGENT ANALYSIS ======
-        async function showContragentAnalysisForCurrentProject() {
+        async function showContragentAnalysis() {
             if (!state.currentProject) {
                 showNotification('Сначала выберите проект', 'error');
                 return;
             }
             
-            const title = `Контрагенты проекта: ${state.currentProject}`;
-            document.getElementById('contragent-title').textContent = title;
+            document.getElementById('contragent-title').textContent = `Контрагенты по проекту: ${state.currentProject}`;
             document.getElementById('contragent-loading').classList.remove('hidden');
             document.getElementById('contragent-content').classList.add('hidden');
             
+            closeModal('hierarchy-modal');
             openModal('contragent-modal');
             
             try {
-                // Получаем основную статью уровня 4 из иерархии для анализа
-                const level4Name = findMainLevel4FromHierarchy();
-                
-                if (!level4Name) {
-                    showNotification('Не удалось определить статью для анализа контрагентов', 'warning');
-                    return;
-                }
-                
-                // Загружаем контрагентов для этой статьи и проекта
-                const response = await fetch('/api/report3/project-contragent-analysis', {
+                const response = await fetch('/api/report3/project-contragents', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        level4: level4Name,
                         project: state.currentProject,
+                        level4: state.currentLevel4,
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -1633,7 +1619,7 @@
                     document.getElementById('contragent-loading').classList.add('hidden');
                     document.getElementById('contragent-content').classList.remove('hidden');
                 } else {
-                    throw new Error(data.error || 'Ошибка загрузки данных');
+                    throw new Error(data.error || 'Ошибка загрузки контрагентов');
                 }
                 
             } catch (error) {
@@ -1647,33 +1633,6 @@
             }
         }
 
-        function findMainLevel4FromHierarchy() {
-            if (!state.currentHierarchy || state.currentHierarchy.length === 0) {
-                return null;
-            }
-            
-            // Ищем самую значимую статью уровня 4 (с максимальным отклонением)
-            let maxDeviation = 0;
-            let mainLevel4 = null;
-            
-            function searchLevel4(level) {
-                if (level.children && level.children.length > 0) {
-                    level.children.forEach(child => searchLevel4(child));
-                } else {
-                    // Это уровень 4 (нет детей)
-                    const deviation = Math.abs(level.deviation || 0);
-                    if (deviation > maxDeviation) {
-                        maxDeviation = deviation;
-                        mainLevel4 = level.name;
-                    }
-                }
-            }
-            
-            state.currentHierarchy.forEach(level => searchLevel4(level));
-            
-            return mainLevel4;
-        }
-
         function renderContragentAnalysis(contragents) {
             const container = document.getElementById('contragent-list');
             container.innerHTML = '';
@@ -1683,13 +1642,19 @@
                 return;
             }
             
-            // Сортируем по абсолютному значению отклонения
-            contragents.sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation));
+            // Сортируем: если общее отклонение отрицательное - сначала минусы, если положительное - сначала плюсы
+            const totalDeviation = contragents.reduce((sum, c) => sum + c.deviation, 0);
+            const sortDesc = totalDeviation < 0;
             
-            // Ограничиваем 20 контрагентами
-            const topContragents = contragents.slice(0, 20);
+            contragents.sort((a, b) => {
+                if (sortDesc) {
+                    return a.deviation - b.deviation;
+                } else {
+                    return b.deviation - a.deviation;
+                }
+            });
             
-            topContragents.forEach((contragent, index) => {
+            contragents.forEach((contragent, index) => {
                 const deviation = contragent.deviation;
                 const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
                 const percentage = contragent.percentage || 0;
@@ -1715,10 +1680,6 @@
             });
         }
 
-        function exportContragentsToExcel() {
-            showNotification('Экспорт контрагентов в Excel будет реализован в следующей версии', 'info');
-        }
-
         // ====== UTILITY FUNCTIONS ======
         function formatCurrency(value, showSign = false) {
             if (value === null || value === undefined) return '0 ₽';
@@ -1735,6 +1696,10 @@
             }).format(absValue);
             
             return showSign ? `${sign}${formatted} ₽` : `${formatted} ₽`;
+        }
+
+        function parseCurrency(value) {
+            return parseFloat(value.replace(/[^-\d.]/g, '')) || 0;
         }
 
         function openModal(modalId) {
@@ -1798,22 +1763,30 @@
             state.maxYear = maxYear;
             initializeYearSlider();
             
-            // Скрыть все секции
+            // Скрыть таблицу
             document.getElementById('table-placeholder').classList.remove('hidden');
             document.getElementById('projects-table').classList.add('hidden');
             document.getElementById('table-loading').classList.add('hidden');
-            document.getElementById('hierarchy-section').classList.add('hidden');
+            document.getElementById('table-footer').classList.add('hidden');
             
             showNotification('Фильтры сброшены', 'success');
         }
 
         function exportToExcel() {
-            if (state.projectsData.length === 0) {
-                showNotification('Сначала загрузите отчет', 'error');
+            if (!state.projectsData) {
+                showNotification('Сначала загрузите данные', 'error');
                 return;
             }
             
             showNotification('Экспорт в Excel будет реализован в следующей версии', 'info');
+        }
+
+        function exportHierarchyToExcel() {
+            showNotification('Экспорт иерархии в Excel будет реализован в следующей версии', 'info');
+        }
+
+        function exportContragentsToExcel() {
+            showNotification('Экспорт контрагентов в Excel будет реализован в следующей версии', 'info');
         }
 
         function setupEventListeners() {

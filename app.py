@@ -6,7 +6,7 @@ from models import User, FinancialData
 from auth import auth_bp, init_admin
 from datetime import datetime, timedelta
 import logging
-from sqlalchemy import func, case, and_, extract
+from sqlalchemy import func, case, and_, extract, distinct
 from sqlalchemy.sql import label
 import json
 import traceback
@@ -386,7 +386,7 @@ def find_contragents_by_level():
         
         return jsonify({
             'success': True,
-            'contragents': contragents[:50],  # Ограничиваем 50 контрагентами
+            'contragents': contragents[:50],
             'level': level,
             'level_name': level_name
         })
@@ -478,6 +478,592 @@ def get_distribution_analysis():
         logger.error(f"Error in distribution analysis: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ====== API ДЛЯ ОТЧЕТА 2 (ИТОГОВАЯ ЭФФЕКТИВНОСТЬ ПО ВСЕМ ПРОЕКТАМ) ======
+
+# API: Данные для фильтров (без проектов)
+@app.route('/api/report2/filters-data')
+@login_required
+def get_report2_filters_data():
+    """Возвращает данные для инициализации фильтров (без проектов)"""
+    try:
+        # Годы
+        years = db.session.query(
+            extract('year', FinancialData.Период).label('year')
+        ).filter(
+            FinancialData.Период.isnot(None)
+        ).distinct().order_by('year').all()
+        
+        year_list = [int(y[0]) for y in years if y[0]]
+        
+        # Распределения
+        distributions = db.session.query(
+            FinancialData.Распределение
+        ).filter(
+            FinancialData.Распределение.isnot(None),
+            FinancialData.Распределение != ''
+        ).distinct().order_by(FinancialData.Распределение).all()
+        
+        dist_list = [d[0] for d in distributions if d[0]]
+        
+        # Проекты (только для информации, не для выбора)
+        projects_count = db.session.query(
+            func.count(distinct(FinancialData.Проект))
+        ).scalar()
+        
+        return jsonify({
+            'success': True,
+            'years': year_list,
+            'distributions': dist_list,
+            'projects_count': projects_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 filters data: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Агрегированная таблица эффективности (по всем проектам)
+@app.route('/api/report2/aggregated', methods=['POST'])
+@login_required
+def get_report2_aggregated_table():
+    try:
+        data = request.get_json()
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months:
+            return jsonify({'success': False, 'error': 'Не выбраны месяцы'}), 400
+        
+        if not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Не выбран период'}), 400
+        
+        # Получаем данные за минимальный год (ВСЕ проекты)
+        data_min_year = get_year_data_all_projects(distributions, months, year_min)
+        # Получаем данные за максимальный год (ВСЕ проекты)
+        data_max_year = get_year_data_all_projects(distributions, months, year_max)
+        
+        # Рассчитываем показатели
+        result = {
+            'net_cash_flow': {
+                'min_year': calculate_total(data_min_year),
+                'max_year': calculate_total(data_max_year)
+            },
+            'od_result': {
+                'min_year': calculate_od_result(data_min_year),
+                'max_year': calculate_od_result(data_max_year)
+            },
+            'od_income': {
+                'min_year': calculate_od_income(data_min_year),
+                'max_year': calculate_od_income(data_max_year)
+            },
+            'od_expense': {
+                'min_year': calculate_od_expense(data_min_year),
+                'max_year': calculate_od_expense(data_max_year)
+            },
+            'variables': {
+                'min_year': calculate_variables(data_min_year),
+                'max_year': calculate_variables(data_max_year)
+            },
+            'constants': {
+                'min_year': calculate_constants(data_min_year),
+                'max_year': calculate_constants(data_max_year)
+            },
+            'id_result': {
+                'min_year': calculate_id_result(data_min_year),
+                'max_year': calculate_id_result(data_max_year)
+            },
+            'fin_result': {
+                'min_year': calculate_fin_result(data_min_year),
+                'max_year': calculate_fin_result(data_max_year)
+            }
+        }
+        
+        # Получаем количество проектов для информации
+        projects_count = db.session.query(
+            func.count(distinct(FinancialData.Проект))
+        ).filter(
+            FinancialData.Период.isnot(None),
+            extract('year', FinancialData.Период).in_([year_min, year_max]),
+            extract('month', FinancialData.Период).in_(months)
+        ).scalar() or 0
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'year_min': year_min,
+            'year_max': year_max,
+            'projects_count': projects_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 aggregated table: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Детализация иерархии (по всем проектам)
+@app.route('/api/report2/hierarchy', methods=['POST'])
+@login_required
+def get_report2_hierarchy_details():
+    try:
+        data = request.get_json()
+        indicator_key = data.get('indicator_key')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем какие статьи включать в иерархию
+        indicator_config = {
+            'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+            'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+            'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+            'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+            'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+            'fin_result': {'СтатьяУровень1': 'Финансы'},
+            'net_cash_flow': {},  # Все статьи
+            'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']}
+        }
+        
+        config = indicator_config.get(indicator_key, {})
+        
+        # Получаем данные за оба года (ВСЕ проекты)
+        data_min_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_min, config)
+        data_max_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_max, config)
+        
+        # Строим иерархию
+        hierarchy = build_hierarchy_with_years(data_min_year, data_max_year, year_min, year_max)
+        
+        return jsonify({
+            'success': True,
+            'hierarchy': hierarchy
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 hierarchy details: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Факторный анализ (по всем проектам)
+@app.route('/api/report2/factor-analysis', methods=['POST'])
+@login_required
+def get_report2_factor_analysis():
+    try:
+        data = request.get_json()
+        indicator_key = data.get('indicator_key')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем какие статьи анализировать
+        indicator_config = {
+            'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+            'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+            'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+            'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+            'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+            'fin_result': {'СтатьяУровень1': 'Финансы'},
+            'net_cash_flow': {},  # Все статьи уровня 4
+            'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']}
+        }
+        
+        config = indicator_config.get(indicator_key, {})
+        
+        # Получаем данные за оба года (ВСЕ проекты)
+        data_min_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_min, config)
+        data_max_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_max, config)
+        
+        # Анализируем статьи уровня 4
+        factors = analyze_level4_factors(data_min_year, data_max_year)
+        
+        return jsonify({
+            'success': True,
+            'factors': factors[:20]  # Ограничиваем 20 самыми значимыми
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 factor analysis: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Анализ по ПРОЕКТАМ (вместо контрагентов)
+@app.route('/api/report2/project-analysis', methods=['POST'])
+@login_required
+def get_project_analysis():
+    try:
+        data = request.get_json()
+        level1 = data.get('level1')
+        level2 = data.get('level2')
+        level3 = data.get('level3')
+        level4 = data.get('level4')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Получаем проекты за оба года
+        projects_min = get_project_data(distributions, months, year_min, level1, level2, level3, level4)
+        projects_max = get_project_data(distributions, months, year_max, level1, level2, level3, level4)
+        
+        # Объединяем и считаем отклонения
+        projects = calculate_project_deviations(projects_min, projects_max)
+        
+        return jsonify({
+            'success': True,
+            'projects': projects[:50]  # Ограничиваем 50 проектами
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in project analysis: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Поиск проектов по уровню
+@app.route('/api/report2/find-projects-by-level', methods=['POST'])
+@login_required
+def find_projects_by_level():
+    try:
+        data = request.get_json()
+        level = data.get('level')
+        level_name = data.get('level_name')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max or not level_name:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем поле для фильтрации по уровню
+        level_field = None
+        if level == 1:
+            level_field = FinancialData.СтатьяУровень1
+        elif level == 2:
+            level_field = FinancialData.СтатьяУровень2
+        elif level == 3:
+            level_field = FinancialData.СтатьяУровень3
+        elif level == 4:
+            level_field = FinancialData.СтатьяУровень4
+        else:
+            return jsonify({'success': False, 'error': 'Неверный уровень'}), 400
+        
+        # Получаем проекты за оба года
+        projects_min = {}
+        projects_max = {}
+        
+        for year in [year_min, year_max]:
+            query = db.session.query(
+                FinancialData.Проект,
+                func.sum(FinancialData.Сумма).label('total')
+            ).filter(
+                FinancialData.Период.isnot(None),
+                extract('year', FinancialData.Период) == year,
+                extract('month', FinancialData.Период).in_(months),
+                level_field == level_name
+            )
+            
+            if distributions:
+                query = query.filter(FinancialData.Распределение.in_(distributions))
+            
+            query = query.group_by(FinancialData.Проект)
+            results = query.all()
+            
+            if year == year_min:
+                for project, total in results:
+                    projects_min[project or 'Не указано'] = float(total or 0)
+            else:
+                for project, total in results:
+                    projects_max[project or 'Не указано'] = float(total or 0)
+        
+        # Объединяем и считаем отклонения
+        all_projects = set(list(projects_min.keys()) + list(projects_max.keys()))
+        projects_list = []
+        
+        for project in all_projects:
+            min_value = projects_min.get(project, 0)
+            max_value = projects_max.get(project, 0)
+            deviation = max_value - min_value
+            
+            projects_list.append({
+                'project': project,
+                'min_year': min_value,
+                'max_year': max_value,
+                'deviation': deviation
+            })
+        
+        # Сортируем по абсолютному значению отклонения
+        projects_list.sort(key=lambda x: abs(x['deviation']), reverse=True)
+        
+        # Рассчитываем проценты
+        total_deviation = sum(abs(p['deviation']) for p in projects_list)
+        for p in projects_list:
+            p['percentage'] = round((abs(p['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+        
+        return jsonify({
+            'success': True,
+            'projects': projects_list[:50],
+            'level': level,
+            'level_name': level_name
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding projects by level: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Анализ отклонений по уровням (по всем проектам)
+@app.route('/api/report2/deviation-analysis', methods=['POST'])
+@login_required
+def get_report2_deviation_analysis():
+    try:
+        data = request.get_json()
+        indicator_key = data.get('indicator_key')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Получаем данные для анализа отклонений
+        analysis_data = get_deviation_data_by_levels_all_projects(distributions, months, year_min, year_max, indicator_key)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 deviation analysis: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Данные для таблицы по месяцам (по всем проектам)
+@app.route('/api/report2/monthly-data', methods=['POST'])
+@login_required
+def get_report2_monthly_data():
+    try:
+        data = request.get_json()
+        indicator_key = data.get('indicator_key')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Получаем данные по месяцам
+        monthly_data = get_monthly_comparison_data_all_projects(distributions, months, year_min, year_max, indicator_key)
+        
+        return jsonify({
+            'success': True,
+            'monthly_data': monthly_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 monthly data: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Анализ распределений (по всем проектам)
+@app.route('/api/report2/distribution-analysis', methods=['POST'])
+@login_required
+def get_report2_distribution_analysis():
+    try:
+        data = request.get_json()
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Анализируем распределения
+        distribution_stats = analyze_distributions_all_projects(distributions, months, year_min, year_max)
+        
+        return jsonify({
+            'success': True,
+            'distribution_stats': distribution_stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report2 distribution analysis: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ====== API ДЛЯ ОТЧЕТА 3 (АНАЛИЗ ЭФФЕКТИВНОСТИ ПО ПРОЕКТАМ) ======
+
+# API: Данные для фильтров report3
+@app.route('/api/report3/filters-data')
+@login_required
+def get_report3_filters_data():
+    """Возвращает данные для инициализации фильтров report3"""
+    try:
+        # Годы
+        years = db.session.query(
+            extract('year', FinancialData.Период).label('year')
+        ).filter(
+            FinancialData.Период.isnot(None)
+        ).distinct().order_by('year').all()
+        
+        year_list = [int(y[0]) for y in years if y[0]]
+        
+        # Распределения
+        distributions = db.session.query(
+            FinancialData.Распределение
+        ).filter(
+            FinancialData.Распределение.isnot(None),
+            FinancialData.Распределение != ''
+        ).distinct().order_by(FinancialData.Распределение).all()
+        
+        dist_list = [d[0] for d in distributions if d[0]]
+        
+        # Все проекты
+        projects_query = db.session.query(
+            FinancialData.Проект
+        ).filter(
+            FinancialData.Проект.isnot(None),
+            FinancialData.Проект != ''
+        ).distinct().order_by(FinancialData.Проект).all()
+        
+        projects = [p[0] for p in projects_query if p[0]]
+        
+        return jsonify({
+            'success': True,
+            'years': year_list,
+            'distributions': dist_list,
+            'projects': projects
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report3 filters data: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Таблица эффективности по проектам
+@app.route('/api/report3/projects-table', methods=['POST'])
+@login_required
+def get_report3_projects_table():
+    try:
+        data = request.get_json()
+        indicator_key = data.get('indicator_key', 'net_cash_flow')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем какие статьи анализировать
+        indicator_config = {
+            'net_cash_flow': {},  # Все статьи
+            'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']},
+            'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+            'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+            'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+            'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+            'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+            'fin_result': {'СтатьяУровень1': 'Финансы'}
+        }
+        
+        config = indicator_config.get(indicator_key, {})
+        
+        # Получаем данные по проектам за оба года
+        projects_data = get_projects_comparison_data(distributions, months, year_min, year_max, config)
+        
+        return jsonify({
+            'success': True,
+            'projects_data': projects_data,
+            'indicator_key': indicator_key,
+            'year_min': year_min,
+            'year_max': year_max
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report3 projects table: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Детализация иерархии для конкретного проекта
+@app.route('/api/report3/project-hierarchy', methods=['POST'])
+@login_required
+def get_report3_project_hierarchy():
+    try:
+        data = request.get_json()
+        project = data.get('project')
+        indicator_key = data.get('indicator_key')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not project or not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Определяем какие статьи включать в иерархию
+        indicator_config = {
+            'net_cash_flow': {},  # Все статьи
+            'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']},
+            'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+            'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+            'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+            'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+            'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+            'fin_result': {'СтатьяУровень1': 'Финансы'}
+        }
+        
+        config = indicator_config.get(indicator_key, {})
+        
+        # Получаем данные за оба года для конкретного проекта
+        data_min_year = get_year_data_for_project(project, distributions, months, year_min, config)
+        data_max_year = get_year_data_for_project(project, distributions, months, year_max, config)
+        
+        # Строим иерархию
+        hierarchy = build_hierarchy_with_years(data_min_year, data_max_year, year_min, year_max)
+        
+        return jsonify({
+            'success': True,
+            'hierarchy': hierarchy,
+            'project': project
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report3 project hierarchy: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# API: Анализ контрагентов для конкретного проекта
+@app.route('/api/report3/project-contragents', methods=['POST'])
+@login_required
+def get_report3_project_contragents():
+    try:
+        data = request.get_json()
+        project = data.get('project')
+        level4 = data.get('level4')
+        distributions = data.get('distributions', [])
+        months = data.get('months', [])
+        year_min = data.get('year_min')
+        year_max = data.get('year_max')
+        
+        if not project or not months or not year_min or not year_max:
+            return jsonify({'success': False, 'error': 'Недостаточно данных'}), 400
+        
+        # Получаем контрагентов для конкретного проекта
+        contragents = get_contragents_for_project(project, distributions, months, year_min, year_max, level4)
+        
+        return jsonify({
+            'success': True,
+            'contragents': contragents[:50],
+            'project': project
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in report3 project contragents: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
 
 def get_year_data(projects, distributions, months, year):
@@ -500,6 +1086,25 @@ def get_year_data(projects, distributions, months, year):
     
     return query.all()
 
+def get_year_data_all_projects(distributions, months, year):
+    """Получает данные за конкретный год для ВСЕХ проектов"""
+    query = db.session.query(
+        FinancialData.СтатьяУровень1,
+        FinancialData.СтатьяУровень2,
+        FinancialData.СтатьяУровень3,
+        FinancialData.СтатьяУровень4,
+        FinancialData.Сумма
+    ).filter(
+        FinancialData.Период.isnot(None),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
+    
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
+    
+    return query.all()
+
 def get_year_data_for_hierarchy(projects, distributions, months, year, config):
     """Получает данные за конкретный год для иерархии"""
     query = db.session.query(
@@ -511,6 +1116,63 @@ def get_year_data_for_hierarchy(projects, distributions, months, year, config):
     ).filter(
         FinancialData.Период.isnot(None),
         FinancialData.Проект.in_(projects),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
+    
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
+    
+    if config:
+        if 'СтатьяУровень1' in config:
+            if isinstance(config['СтатьяУровень1'], list):
+                query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+            else:
+                query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+        if 'СтатьяУровень2' in config:
+            query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+    
+    return query.all()
+
+def get_year_data_for_hierarchy_all_projects(distributions, months, year, config):
+    """Получает данные за конкретный год для иерархии (ВСЕ проекты)"""
+    query = db.session.query(
+        FinancialData.СтатьяУровень1,
+        FinancialData.СтатьяУровень2,
+        FinancialData.СтатьяУровень3,
+        FinancialData.СтатьяУровень4,
+        FinancialData.Сумма
+    ).filter(
+        FinancialData.Период.isnot(None),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
+    
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
+    
+    if config:
+        if 'СтатьяУровень1' in config:
+            if isinstance(config['СтатьяУровень1'], list):
+                query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+            else:
+                query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+        if 'СтатьяУровень2' in config:
+            query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+    
+    return query.all()
+
+def get_year_data_for_project(project, distributions, months, year, config):
+    """Получает данные за конкретный год для конкретного проекта"""
+    query = db.session.query(
+        FinancialData.СтатьяУровень1,
+        FinancialData.СтатьяУровень2,
+        FinancialData.СтатьяУровень3,
+        FinancialData.СтатьяУровень4,
+        FinancialData.Сумма
+    ).filter(
+        FinancialData.Период.isnot(None),
+        FinancialData.Проект == project,
         extract('year', FinancialData.Период) == year,
         extract('month', FinancialData.Период).in_(months)
     )
@@ -772,6 +1434,97 @@ def get_contragent_data(projects, distributions, months, year, level1=None, leve
     
     return contragents
 
+def get_project_data(distributions, months, year, level1=None, level2=None, level3=None, level4=None):
+    """Получает данные по проектам за конкретный год"""
+    query = db.session.query(
+        FinancialData.Проект,
+        func.sum(FinancialData.Сумма).label('total')
+    ).filter(
+        FinancialData.Период.isnot(None),
+        extract('year', FinancialData.Период) == year,
+        extract('month', FinancialData.Период).in_(months)
+    )
+    
+    if distributions:
+        query = query.filter(FinancialData.Распределение.in_(distributions))
+    
+    if level1:
+        query = query.filter(FinancialData.СтатьяУровень1 == level1)
+    if level2:
+        query = query.filter(FinancialData.СтатьяУровень2 == level2)
+    if level3:
+        query = query.filter(FinancialData.СтатьяУровень3 == level3)
+    if level4:
+        query = query.filter(FinancialData.СтатьяУровень4 == level4)
+    
+    query = query.group_by(FinancialData.Проект)
+    results = query.all()
+    
+    # Формируем словарь проектов
+    projects = {}
+    for project, total in results:
+        projects[project or 'Не указано'] = float(total or 0)
+    
+    return projects
+
+def get_contragents_for_project(project, distributions, months, year_min, year_max, level4=None):
+    """Получает контрагентов для конкретного проекта за оба года"""
+    contragents_min = {}
+    contragents_max = {}
+    
+    for year in [year_min, year_max]:
+        query = db.session.query(
+            FinancialData.Контрагент,
+            func.sum(FinancialData.Сумма).label('total')
+        ).filter(
+            FinancialData.Период.isnot(None),
+            FinancialData.Проект == project,
+            extract('year', FinancialData.Период) == year,
+            extract('month', FinancialData.Период).in_(months)
+        )
+        
+        if distributions:
+            query = query.filter(FinancialData.Распределение.in_(distributions))
+        
+        if level4:
+            query = query.filter(FinancialData.СтатьяУровень4 == level4)
+        
+        query = query.group_by(FinancialData.Контрагент)
+        results = query.all()
+        
+        if year == year_min:
+            for contragent, total in results:
+                contragents_min[contragent or 'Не указано'] = float(total or 0)
+        else:
+            for contragent, total in results:
+                contragents_max[contragent or 'Не указано'] = float(total or 0)
+    
+    # Объединяем и считаем отклонения
+    all_contragents = set(list(contragents_min.keys()) + list(contragents_max.keys()))
+    contragents_list = []
+    
+    for contragent in all_contragents:
+        min_value = contragents_min.get(contragent, 0)
+        max_value = contragents_max.get(contragent, 0)
+        deviation = max_value - min_value
+        
+        contragents_list.append({
+            'contragent': contragent,
+            'min_year': min_value,
+            'max_year': max_value,
+            'deviation': deviation
+        })
+    
+    # Сортируем по абсолютному значению отклонения
+    contragents_list.sort(key=lambda x: abs(x['deviation']), reverse=True)
+    
+    # Рассчитываем проценты
+    total_deviation = sum(abs(c['deviation']) for c in contragents_list)
+    for c in contragents_list:
+        c['percentage'] = round((abs(c['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+    
+    return contragents_list
+
 def calculate_contragent_deviations(contragents_min, contragents_max):
     """Рассчитывает отклонения по контрагентам"""
     all_contragents = set(list(contragents_min.keys()) + list(contragents_max.keys()))
@@ -784,6 +1537,33 @@ def calculate_contragent_deviations(contragents_min, contragents_max):
         
         deviations.append({
             'contragent': contragent,
+            'min_year': min_value,
+            'max_year': max_value,
+            'deviation': deviation
+        })
+    
+    # Сортируем по абсолютному значению отклонения
+    deviations.sort(key=lambda x: abs(x['deviation']), reverse=True)
+    
+    # Рассчитываем проценты
+    total_deviation = sum(abs(d['deviation']) for d in deviations)
+    for d in deviations:
+        d['percentage'] = round((abs(d['deviation']) / total_deviation * 100), 2) if total_deviation > 0 else 0
+    
+    return deviations
+
+def calculate_project_deviations(projects_min, projects_max):
+    """Рассчитывает отклонения по проектам"""
+    all_projects = set(list(projects_min.keys()) + list(projects_max.keys()))
+    
+    deviations = []
+    for project in all_projects:
+        min_value = projects_min.get(project, 0)
+        max_value = projects_max.get(project, 0)
+        deviation = max_value - min_value
+        
+        deviations.append({
+            'project': project,
             'min_year': min_value,
             'max_year': max_value,
             'deviation': deviation
@@ -818,6 +1598,138 @@ def get_deviation_data_by_levels(projects, distributions, months, year_min, year
     # Получаем данные за оба года
     data_min_year = get_year_data_for_hierarchy(projects, distributions, months, year_min, config)
     data_max_year = get_year_data_for_hierarchy(projects, distributions, months, year_max, config)
+    
+    # Группируем по уровням
+    level1_data = {}
+    level2_data = {}
+    level3_data = {}
+    level4_data = {}
+    
+    # Собираем данные за минимальный год
+    for row in data_min_year:
+        level1 = row.СтатьяУровень1 or 'Не указано'
+        level2 = row.СтатьяУровень2 or 'Не указано'
+        level3 = row.СтатьяУровень3 or 'Не указано'
+        level4 = row.СтатьяУровень4 or 'Не указано'
+        
+        if level1 not in level1_data:
+            level1_data[level1] = {'min_year': 0, 'max_year': 0}
+        level1_data[level1]['min_year'] += row.Сумма or 0
+        
+        if level2 not in level2_data:
+            level2_data[level2] = {'min_year': 0, 'max_year': 0}
+        level2_data[level2]['min_year'] += row.Сумма or 0
+        
+        if level3 not in level3_data:
+            level3_data[level3] = {'min_year': 0, 'max_year': 0}
+        level3_data[level3]['min_year'] += row.Сумма or 0
+        
+        if level4 not in level4_data:
+            level4_data[level4] = {'min_year': 0, 'max_year': 0}
+        level4_data[level4]['min_year'] += row.Сумма or 0
+    
+    # Собираем данные за максимальный год
+    for row in data_max_year:
+        level1 = row.СтатьяУровень1 or 'Не указано'
+        level2 = row.СтатьяУровень2 or 'Не указано'
+        level3 = row.СтатьяУровень3 or 'Не указано'
+        level4 = row.СтатьяУровень4 or 'Не указано'
+        
+        if level1 not in level1_data:
+            level1_data[level1] = {'min_year': 0, 'max_year': 0}
+        level1_data[level1]['max_year'] += row.Сумма or 0
+        
+        if level2 not in level2_data:
+            level2_data[level2] = {'min_year': 0, 'max_year': 0}
+        level2_data[level2]['max_year'] += row.Сумма or 0
+        
+        if level3 not in level3_data:
+            level3_data[level3] = {'min_year': 0, 'max_year': 0}
+        level3_data[level3]['max_year'] += row.Сумма or 0
+        
+        if level4 not in level4_data:
+            level4_data[level4] = {'min_year': 0, 'max_year': 0}
+        level4_data[level4]['max_year'] += row.Сумма or 0
+    
+    # Формируем результат
+    result = {
+        'level1': [],
+        'level2': [],
+        'level3': [],
+        'level4': []
+    }
+    
+    # Уровень 1
+    for name, data in level1_data.items():
+        deviation = data['max_year'] - data['min_year']
+        if deviation != 0:
+            result['level1'].append({
+                'name': name,
+                'min_year': data['min_year'],
+                'max_year': data['max_year'],
+                'deviation': deviation
+            })
+    
+    # Уровень 2
+    for name, data in level2_data.items():
+        deviation = data['max_year'] - data['min_year']
+        if deviation != 0:
+            result['level2'].append({
+                'name': name,
+                'min_year': data['min_year'],
+                'max_year': data['max_year'],
+                'deviation': deviation
+            })
+    
+    # Уровень 3
+    for name, data in level3_data.items():
+        deviation = data['max_year'] - data['min_year']
+        if deviation != 0:
+            result['level3'].append({
+                'name': name,
+                'min_year': data['min_year'],
+                'max_year': data['max_year'],
+                'deviation': deviation
+            })
+    
+    # Уровень 4
+    for name, data in level4_data.items():
+        deviation = data['max_year'] - data['min_year']
+        if deviation != 0:
+            result['level4'].append({
+                'name': name,
+                'min_year': data['min_year'],
+                'max_year': data['max_year'],
+                'deviation': deviation
+            })
+    
+    # Сортируем по отклонению
+    result['level1'].sort(key=lambda x: abs(x['deviation']), reverse=True)
+    result['level2'].sort(key=lambda x: abs(x['deviation']), reverse=True)
+    result['level3'].sort(key=lambda x: abs(x['deviation']), reverse=True)
+    result['level4'].sort(key=lambda x: abs(x['deviation']), reverse=True)
+    
+    return result
+
+def get_deviation_data_by_levels_all_projects(distributions, months, year_min, year_max, indicator_key):
+    """Получает данные для анализа отклонений по уровням (ВСЕ проекты)"""
+    # Определяем какие статьи анализировать
+    indicator_config = {
+        'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+        'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+        'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+        'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+        'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+        'fin_result': {'СтатьяУровень1': 'Финансы'},
+        'net_cash_flow': {},  # Все статьи
+        'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']}
+    }
+    
+    config = indicator_config.get(indicator_key, {})
+    
+    # Получаем данные за оба года
+    data_min_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_min, config)
+    data_max_year = get_year_data_for_hierarchy_all_projects(distributions, months, year_max, config)
     
     # Группируем по уровням
     level1_data = {}
@@ -983,6 +1895,113 @@ def get_monthly_comparison_data(projects, distributions, months, year_min, year_
     
     return monthly_data
 
+def get_monthly_comparison_data_all_projects(distributions, months, year_min, year_max, indicator_key):
+    """Получает данные по месяцам для таблицы сравнения (ВСЕ проекты)"""
+    # Определяем какие статьи анализировать
+    indicator_config = {
+        'od_income': {'СтатьяУровень1': 'Поступления по ОД'},
+        'od_expense': {'СтатьяУровень1': 'Отток по ОД'},
+        'variables': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (переменные)'},
+        'constants': {'СтатьяУровень1': 'Отток по ОД', 'СтатьяУровень2': 'Отток по ОД (постоянные)'},
+        'id_result': {'СтатьяУровень1': 'Результат по ИД'},
+        'fin_result': {'СтатьяУровень1': 'Финансы'},
+        'net_cash_flow': {},  # Все статьи
+        'od_result': {'СтатьяУровень1': ['Поступления по ОД', 'Отток по ОД']}
+    }
+    
+    config = indicator_config.get(indicator_key, {})
+    
+    # Получаем данные по месяцам
+    monthly_data = {year_min: {}, year_max: {}}
+    
+    for year in [year_min, year_max]:
+        # Делаем один запрос для всех месяцев года
+        query = db.session.query(
+            extract('month', FinancialData.Период).label('month'),
+            func.sum(FinancialData.Сумма).label('total')
+        ).filter(
+            FinancialData.Период.isnot(None),
+            extract('year', FinancialData.Период) == year,
+            extract('month', FinancialData.Период).in_(months)
+        )
+        
+        if distributions:
+            query = query.filter(FinancialData.Распределение.in_(distributions))
+        
+        if config:
+            if 'СтатьяУровень1' in config:
+                if isinstance(config['СтатьяУровень1'], list):
+                    query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+                else:
+                    query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+            if 'СтатьяУровень2' in config:
+                query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+        
+        query = query.group_by(extract('month', FinancialData.Период))
+        results = query.all()
+        
+        for month, total in results:
+            if month:
+                monthly_data[year][int(month)] = float(total or 0)
+    
+    return monthly_data
+
+def get_projects_comparison_data(distributions, months, year_min, year_max, config):
+    """Получает данные сравнения по проектам"""
+    projects_data = {}
+    
+    for year in [year_min, year_max]:
+        # Запрос для получения данных по проектам за год
+        query = db.session.query(
+            FinancialData.Проект,
+            func.sum(FinancialData.Сумма).label('total')
+        ).filter(
+            FinancialData.Период.isnot(None),
+            extract('year', FinancialData.Период) == year,
+            extract('month', FinancialData.Период).in_(months)
+        )
+        
+        if distributions:
+            query = query.filter(FinancialData.Распределение.in_(distributions))
+        
+        if config:
+            if 'СтатьяУровень1' in config:
+                if isinstance(config['СтатьяУровень1'], list):
+                    query = query.filter(FinancialData.СтатьяУровень1.in_(config['СтатьяУровень1']))
+                else:
+                    query = query.filter(FinancialData.СтатьяУровень1 == config['СтатьяУровень1'])
+            if 'СтатьяУровень2' in config:
+                query = query.filter(FinancialData.СтатьяУровень2 == config['СтатьяУровень2'])
+        
+        query = query.group_by(FinancialData.Проект)
+        results = query.all()
+        
+        for project, total in results:
+            project_name = project or 'Не указано'
+            if project_name not in projects_data:
+                projects_data[project_name] = {'min_year': 0, 'max_year': 0}
+            
+            if year == year_min:
+                projects_data[project_name]['min_year'] = float(total or 0)
+            else:
+                projects_data[project_name]['max_year'] = float(total or 0)
+    
+    # Форматируем результат
+    result = []
+    for project_name, data in projects_data.items():
+        deviation = data['max_year'] - data['min_year']
+        result.append({
+            'project': project_name,
+            'min_year': data['min_year'],
+            'max_year': data['max_year'],
+            'deviation': deviation
+        })
+    
+    # Сортируем по проекту
+    result.sort(key=lambda x: x['project'])
+    
+    return result
+
 def analyze_distributions(projects, distributions, months, year_min, year_max):
     """Анализирует распределения"""
     try:
@@ -996,6 +2015,67 @@ def analyze_distributions(projects, distributions, months, year_min, year_max):
             ).filter(
                 FinancialData.Период.isnot(None),
                 FinancialData.Проект.in_(projects),
+                extract('year', FinancialData.Период) == year,
+                extract('month', FinancialData.Период).in_(months)
+            )
+            
+            if distributions:
+                query = query.filter(FinancialData.Распределение.in_(distributions))
+            
+            query = query.group_by(FinancialData.Распределение)
+            results = query.all()
+            
+            for dist, total in results:
+                if dist not in distribution_stats:
+                    distribution_stats[dist] = {'min_year': 0, 'max_year': 0}
+                
+                if year == year_min:
+                    distribution_stats[dist]['min_year'] = float(total or 0)
+                else:
+                    distribution_stats[dist]['max_year'] = float(total or 0)
+        
+        # Формируем результат
+        result = []
+        for dist, data in distribution_stats.items():
+            deviation = data['max_year'] - data['min_year']
+            result.append({
+                'distribution': dist or 'Не указано',
+                'min_year': data['min_year'],
+                'max_year': data['max_year'],
+                'deviation': deviation
+            })
+        
+        # Сортируем по отклонению
+        result.sort(key=lambda x: abs(x['deviation']), reverse=True)
+        
+        # Рассчитываем общие суммы
+        total_min = sum(item['min_year'] for item in result)
+        total_max = sum(item['max_year'] for item in result)
+        total_deviation = total_max - total_min
+        
+        return {
+            'distributions': result,
+            'total_min': total_min,
+            'total_max': total_max,
+            'total_deviation': total_deviation
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing distributions: {str(e)}")
+        return {'distributions': [], 'total_min': 0, 'total_max': 0, 'total_deviation': 0}
+
+def analyze_distributions_all_projects(distributions, months, year_min, year_max):
+    """Анализирует распределения (ВСЕ проекты)"""
+    try:
+        # Суммы по распределениям за оба года
+        distribution_stats = {}
+        
+        for year in [year_min, year_max]:
+            query = db.session.query(
+                FinancialData.Распределение,
+                func.sum(FinancialData.Сумма).label('total')
+            ).filter(
+                FinancialData.Период.isnot(None),
                 extract('year', FinancialData.Период) == year,
                 extract('month', FinancialData.Период).in_(months)
             )
@@ -1088,24 +2168,6 @@ def debug_data():
             ]
         })
         
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/report2/data')
-@login_required
-def get_report2_data():
-    try:
-        # Здесь будет логика для отчета 2
-        return jsonify({'success': True, 'message': 'Report 2 data endpoint'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/report3/data')
-@login_required
-def get_report3_data():
-    try:
-        # Здесь будет логика для отчета 3
-        return jsonify({'success': True, 'message': 'Report 3 data endpoint'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

@@ -85,6 +85,16 @@
             margin: 0 auto;
         }
 
+        .projects-count {
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            color: var(--blue-dark);
+            display: inline-block;
+            margin-top: var(--spacing-sm);
+        }
+
         /* ====== FILTERS CARD ====== */
         .filters-card {
             background: var(--apple-card);
@@ -990,14 +1000,14 @@
             text-align: right;
         }
 
-        /* ====== CONTRAGENT ANALYSIS STYLES ====== */
-        .contragent-list {
+        /* ====== PROJECT ANALYSIS STYLES (вместо контрагентов) ====== */
+        .project-list {
             display: flex;
             flex-direction: column;
             gap: var(--spacing-sm);
         }
 
-        .contragent-item {
+        .project-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -1008,19 +1018,19 @@
             transition: var(--transition-fast);
         }
 
-        .contragent-item:hover {
+        .project-item:hover {
             background: rgba(0, 122, 255, 0.1);
             transform: translateX(2px);
         }
 
-        .contragent-info {
+        .project-info {
             flex: 1;
             display: flex;
             align-items: center;
             gap: var(--spacing-md);
         }
 
-        .contragent-rank {
+        .project-rank {
             width: 32px;
             height: 32px;
             background: var(--apple-blue);
@@ -1033,18 +1043,18 @@
             font-size: 0.9rem;
         }
 
-        .contragent-name {
+        .project-name {
             font-weight: 500;
         }
 
-        .contragent-value {
+        .project-value {
             font-weight: 600;
             font-size: 1.1rem;
             min-width: 120px;
             text-align: right;
         }
 
-        .contragent-percentage {
+        .project-percentage {
             font-size: 0.9rem;
             color: var(--apple-text-secondary);
             margin-top: var(--spacing-xs);
@@ -1151,11 +1161,15 @@
     <div class="container">
         <!-- Заголовок -->
         <div class="report-header">
-            <h1><i class="fas fa-chart-line"></i> Итоговая эффективность по всем проектам</h1>
-            <p class="subtitle">Настройте фильтры и нажмите "Загрузить отчет" для получения сводных данных по всем проектам</p>
+            <h1><i class="fas fa-chart-bar"></i> Итоговая эффективность по всем проектам</h1>
+            <p class="subtitle">Сводные данные по ВСЕМ проектам компании. Настройте фильтры и нажмите "Загрузить отчет"</p>
+            <div id="projects-count" class="projects-count hidden">
+                <i class="fas fa-project-diagram"></i>
+                <span id="projects-count-text">Проектов: 0</span>
+            </div>
         </div>
 
-        <!-- Фильтры (без проектов) -->
+        <!-- Фильтры (БЕЗ ВЫБОРА ПРОЕКТОВ) -->
         <div class="filters-card">
             <!-- Месяцы -->
             <div class="filter-section">
@@ -1179,7 +1193,7 @@
                 </div>
             </div>
 
-            <!-- Распределение (без проектов) -->
+            <!-- Только Распределение (без Проектов) -->
             <div class="filter-section">
                 <div class="filter-group">
                     <label><i class="fas fa-layer-group"></i> Распределение</label>
@@ -1237,7 +1251,7 @@
 
         <!-- Статистика распределений -->
         <div class="distribution-stats-container hidden" id="distribution-stats-container">
-            <h3 class="text-center"><i class="fas fa-chart-pie"></i> Статистика по распределениям</h3>
+            <h3 class="text-center"><i class="fas fa-chart-pie"></i> Статистика по распределениям (все проекты)</h3>
             
             <div id="distribution-loading" class="loading">
                 <div class="spinner"></div>
@@ -1315,8 +1329,8 @@
 
         <!-- Анализ отклонений по уровням -->
         <div class="deviation-analysis-container hidden" id="deviation-analysis">
-            <h3 class="text-center"><i class="fas fa-sitemap"></i> Анализ отклонений по выбранной статье</h3>
-            <p class="subtitle text-center">Кликните на статью для детального анализа или перехода к контрагентам</p>
+            <h3 class="text-center"><i class="fas fa-sitemap"></i> Анализ отклонений по выбранной статье (все проекты)</h3>
+            <p class="subtitle text-center">Кликните на статью для детального анализа или перехода к анализу проектов</p>
             
             <div id="deviation-loading" class="loading">
                 <div class="spinner"></div>
@@ -1344,8 +1358,8 @@
                 </div>
                 
                 <div class="filter-actions" style="margin-top: var(--spacing-lg);">
-                    <button class="btn-primary" onclick="showContragentAnalysisFromCurrentLevel()">
-                        <i class="fas fa-users"></i> Показать контрагентов по выбранной статье
+                    <button class="btn-primary" onclick="showProjectAnalysisFromCurrentLevel()">
+                        <i class="fas fa-project-diagram"></i> Анализ проектов по выбранной статье
                     </button>
                     <button class="btn-tertiary" onclick="showFactorAnalysisFromCurrent()">
                         <i class="fas fa-chart-pie"></i> Факторный анализ по статье
@@ -1359,7 +1373,7 @@
 
         <!-- Сравнение по месяцам -->
         <div class="monthly-comparison-container hidden" id="monthly-comparison">
-            <h3 class="text-center"><i class="fas fa-calendar-alt"></i> Сравнение по месяцам</h3>
+            <h3 class="text-center"><i class="fas fa-calendar-alt"></i> Сравнение по месяцам (все проекты)</h3>
             <p class="subtitle text-center">Детальное сравнение данных по месяцам за оба года</p>
             
             <div id="monthly-loading" class="loading">
@@ -1421,7 +1435,7 @@
         <div class="modal" id="factor-modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3><i class="fas fa-chart-pie"></i> Факторный анализ</h3>
+                    <h3><i class="fas fa-chart-pie"></i> Факторный анализ (все проекты)</h3>
                     <button class="modal-close" onclick="closeModal('factor-modal')">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -1431,32 +1445,32 @@
                     </div>
                     <div id="factor-content" class="hidden">
                         <h4 id="factor-title" class="text-center"></h4>
-                        <p class="subtitle text-center" id="factor-subtitle">Кликните на статью для анализа контрагентов</p>
+                        <p class="subtitle text-center" id="factor-subtitle">Кликните на статью для анализа проектов</p>
                         <div class="factor-list" id="factor-list"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Модальное окно анализа контрагентов -->
-        <div class="modal" id="contragent-modal">
+        <!-- Модальное окно анализа проектов (вместо контрагентов) -->
+        <div class="modal" id="project-modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3><i class="fas fa-users"></i> Анализ по контрагентам</h3>
-                    <button class="modal-close" onclick="closeModal('contragent-modal')">&times;</button>
+                    <h3><i class="fas fa-project-diagram"></i> Анализ по проектам</h3>
+                    <button class="modal-close" onclick="closeModal('project-modal')">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div id="contragent-loading" class="loading">
+                    <div id="project-loading" class="loading">
                         <div class="spinner"></div>
                         <p>Загрузка данных...</p>
                     </div>
-                    <div id="contragent-content" class="hidden">
-                        <h4 id="contragent-title" class="text-center"></h4>
-                        <p class="subtitle text-center" id="contragent-subtitle">Топ контрагентов по влиянию на отклонение</p>
-                        <div class="contragent-list" id="contragent-list"></div>
+                    <div id="project-content" class="hidden">
+                        <h4 id="project-title" class="text-center"></h4>
+                        <p class="subtitle text-center" id="project-subtitle">Топ проектов по влиянию на отклонение</p>
+                        <div class="project-list" id="project-list"></div>
                         <div class="filter-actions" style="margin-top: var(--spacing-lg);">
-                            <button class="btn-secondary" onclick="exportContragentsToExcel()">
-                                <i class="fas fa-file-export"></i> Экспорт контрагентов
+                            <button class="btn-secondary" onclick="exportProjectsToExcel()">
+                                <i class="fas fa-file-export"></i> Экспорт проектов
                             </button>
                         </div>
                     </div>
@@ -1490,7 +1504,8 @@
             currentAnalysisData: null,
             currentMonthlyIndicator: 'net_cash_flow',
             monthlySortColumn: null,
-            monthlySortDirection: 'asc'
+            monthlySortDirection: 'asc',
+            projectsCount: 0
         };
 
         // ====== INITIALIZATION ======
@@ -1519,6 +1534,13 @@
                     // Загружаем распределения
                     if (data.distributions) {
                         populateOptions('distribution', data.distributions);
+                    }
+                    
+                    // Показываем количество проектов
+                    if (data.projects_count) {
+                        state.projectsCount = data.projects_count;
+                        document.getElementById('projects-count').classList.remove('hidden');
+                        document.getElementById('projects-count-text').textContent = `Проектов: ${data.projects_count}`;
                     }
                 }
             } catch (error) {
@@ -1647,7 +1669,7 @@
 
         // ====== MULTISELECT FUNCTIONS ======
         function toggleOption(type, value) {
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const index = array.indexOf(value);
             
             if (index === -1) {
@@ -1661,7 +1683,7 @@
         }
 
         function updateMultiselectDisplay(type) {
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const input = document.querySelector(`#${type}-multiselect .multiselect-input`);
             const placeholder = input.querySelector('.placeholder');
             
@@ -1684,7 +1706,7 @@
 
         function updateMultiselectOptions(type) {
             const options = document.querySelectorAll(`#${type}-options .multiselect-option`);
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             
             options.forEach(option => {
                 const value = option.dataset.value;
@@ -1715,7 +1737,7 @@
 
         function removeOption(type, value, event) {
             event.stopPropagation();
-            const array = state.selectedDistributions;
+            const array = type === 'distribution' ? state.selectedDistributions : [];
             const index = array.indexOf(value);
             if (index > -1) {
                 array.splice(index, 1);
@@ -1738,13 +1760,14 @@
             document.getElementById('aggregated-table').classList.add('hidden');
             document.getElementById('deviation-analysis').classList.add('hidden');
             document.getElementById('monthly-comparison').classList.add('hidden');
+            document.getElementById('distribution-stats-container').classList.add('hidden');
             
             // Обновляем заголовки годов
             document.getElementById('min-year-header').textContent = state.minYear;
             document.getElementById('max-year-header').textContent = state.maxYear;
             
             try {
-                // Загружаем основные данные (все проекты)
+                // Загружаем основные данные
                 const response = await fetch('/api/report2/aggregated', {
                     method: 'POST',
                     headers: {
@@ -1762,9 +1785,15 @@
                 
                 if (data.success) {
                     state.reportData = data.data;
+                    state.projectsCount = data.projects_count || 0;
                     renderAggregatedTable();
                     document.getElementById('table-loading').classList.add('hidden');
                     document.getElementById('aggregated-table').classList.remove('hidden');
+                    
+                    // Обновляем счетчик проектов
+                    if (state.projectsCount > 0) {
+                        document.getElementById('projects-count-text').textContent = `Проектов: ${state.projectsCount}`;
+                    }
                     
                     // Загружаем статистику распределений
                     await loadDistributionStats();
@@ -1772,7 +1801,7 @@
                     // Загружаем данные по месяцам
                     await loadMonthlyData();
                     
-                    showNotification('Отчет успешно загружен', 'success');
+                    showNotification(`Отчет успешно загружен по ${state.projectsCount} проектам`, 'success');
                 } else {
                     throw new Error(data.error || 'Ошибка загрузки данных');
                 }
@@ -1861,13 +1890,12 @@
         // ====== DISTRIBUTION STATS ======
         async function loadDistributionStats() {
             try {
-                const response = await fetch('/api/report1/distribution-analysis', {
+                const response = await fetch('/api/report2/distribution-analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        projects: [], // Пустой массив = все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2136,7 +2164,7 @@
             renderAnalysisLevel('level4-analysis', analysis.level4 || []);
             
             // Обновляем заголовок
-            document.querySelector('#deviation-analysis h3').textContent = `Анализ отклонений: ${title}`;
+            document.querySelector('#deviation-analysis h3').textContent = `Анализ отклонений: ${title} (все проекты)`;
         }
 
         function renderAnalysisLevel(containerId, items) {
@@ -2158,9 +2186,9 @@
                 const div = document.createElement('div');
                 div.className = 'analysis-item';
                 div.onclick = () => {
-                    // Для уровня 4 - показываем контрагентов
+                    // Для уровня 4 - показываем проекты
                     if (containerId === 'level4-analysis') {
-                        showContragentAnalysisFromDeviation(item.name);
+                        showProjectAnalysisFromDeviation(item.name);
                     }
                     // Для других уровней - можно добавить дополнительную информацию
                     else {
@@ -2186,9 +2214,9 @@
             showNotification(`${levelName}: ${item.name} - Отклонение: ${formatCurrency(item.deviation, true)}`, 'info');
             
             // Можно добавить модальное окно с дополнительной информацией
-            // или сразу перейти к анализу контрагентов для этого уровня
+            // или сразу перейти к анализу проектов для этого уровня
             if (levelNumber >= 3) { // Для уровней 3 и 4
-                findAndShowContragentsForLevel(item.name, levelNumber);
+                findAndShowProjectsForLevel(item.name, levelNumber);
             }
         }
 
@@ -2202,11 +2230,11 @@
             return names[levelNumber] || `Уровень ${levelNumber}`;
         }
 
-        async function findAndShowContragentsForLevel(itemName, levelNumber) {
-            showNotification(`Поиск контрагентов для "${itemName}"...`, 'info');
+        async function findAndShowProjectsForLevel(itemName, levelNumber) {
+            showNotification(`Поиск проектов для "${itemName}"...`, 'info');
             
             try {
-                const response = await fetch('/api/report1/find-contragents-by-level', {
+                const response = await fetch('/api/report2/find-projects-by-level', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2214,7 +2242,6 @@
                     body: JSON.stringify({
                         level: levelNumber,
                         level_name: itemName,
-                        projects: [], // Все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2224,45 +2251,43 @@
                 
                 const data = await response.json();
                 
-                if (data.success && data.contragents && data.contragents.length > 0) {
-                    renderContragentAnalysis(data.contragents);
+                if (data.success && data.projects && data.projects.length > 0) {
+                    renderProjectAnalysis(data.projects);
                     
-                    // Показываем модальное окно с контрагентами
-                    document.getElementById('contragent-title').textContent = `Контрагенты: ${itemName}`;
-                    document.getElementById('contragent-content').classList.remove('hidden');
-                    document.getElementById('contragent-loading').classList.add('hidden');
+                    // Показываем модальное окно с проектами
+                    document.getElementById('project-title').textContent = `Проекты: ${itemName}`;
+                    document.getElementById('project-content').classList.remove('hidden');
+                    document.getElementById('project-loading').classList.add('hidden');
                     
-                    openModal('contragent-modal');
+                    openModal('project-modal');
                 } else {
-                    showNotification('Контрагенты не найдены для выбранной статьи', 'warning');
+                    showNotification('Проекты не найдены для выбранной статьи', 'warning');
                 }
                 
             } catch (error) {
-                console.error('Error finding contragents:', error);
-                showNotification('Ошибка поиска контрагентов', 'error');
+                console.error('Error finding projects:', error);
+                showNotification('Ошибка поиска проектов', 'error');
             }
         }
 
-        async function showContragentAnalysisFromDeviation(level4Name) {
-            showNotification(`Загрузка контрагентов для статьи: ${level4Name}`, 'info');
+        async function showProjectAnalysisFromDeviation(level4Name) {
+            showNotification(`Загрузка проектов для статьи: ${level4Name}`, 'info');
             
             // Показываем модальное окно
-            document.getElementById('contragent-title').textContent = `Контрагенты: ${level4Name}`;
-            document.getElementById('contragent-loading').classList.remove('hidden');
-            document.getElementById('contragent-content').classList.add('hidden');
+            document.getElementById('project-title').textContent = `Проекты: ${level4Name}`;
+            document.getElementById('project-loading').classList.remove('hidden');
+            document.getElementById('project-content').classList.add('hidden');
             
-            openModal('contragent-modal');
+            openModal('project-modal');
             
             try {
-                // Для Report 2 используем данные по всем проектам
-                const response = await fetch('/api/report1/contragent-analysis', {
+                const response = await fetch('/api/report2/project-analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         level4: level4Name,
-                        projects: [], // Все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2273,34 +2298,34 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    renderContragentAnalysis(data.contragents);
-                    document.getElementById('contragent-loading').classList.add('hidden');
-                    document.getElementById('contragent-content').classList.remove('hidden');
+                    renderProjectAnalysis(data.projects);
+                    document.getElementById('project-loading').classList.add('hidden');
+                    document.getElementById('project-content').classList.remove('hidden');
                 } else {
                     throw new Error(data.error || 'Ошибка загрузки данных');
                 }
                 
             } catch (error) {
-                console.error('Error loading contragent analysis:', error);
-                document.getElementById('contragent-loading').innerHTML = `
+                console.error('Error loading project analysis:', error);
+                document.getElementById('project-loading').innerHTML = `
                     <div class="text-center">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка загрузки контрагентов: ${error.message}</p>
+                        <p>Ошибка загрузки проектов: ${error.message}</p>
                     </div>
                 `;
             }
         }
 
-        function showContragentAnalysisFromCurrentLevel() {
+        function showProjectAnalysisFromCurrentLevel() {
             // Пытаемся найти статью уровня 4 для анализа
             const level4Items = document.querySelectorAll('#level4-analysis .analysis-item');
             if (level4Items.length > 0) {
                 // Берем первую (самую значимую) статью
                 const firstItem = level4Items[0];
                 const itemName = firstItem.querySelector('.analysis-name').textContent;
-                showContragentAnalysisFromDeviation(itemName);
+                showProjectAnalysisFromDeviation(itemName);
             } else {
-                showNotification('Выберите статью уровня 4 для анализа контрагентов', 'warning');
+                showNotification('Выберите статью уровня 4 для анализа проектов', 'warning');
                 
                 // Показываем подсказку
                 const level4Section = document.getElementById('level4-analysis');
@@ -2360,14 +2385,13 @@
             document.getElementById('monthly-content').classList.add('hidden');
             
             try {
-                const response = await fetch('/api/report1/monthly-data', {
+                const response = await fetch('/api/report2/monthly-data', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         indicator_key: indicatorKey,
-                        projects: [], // Все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2528,14 +2552,13 @@
             openModal('factor-modal');
             
             try {
-                const response = await fetch('/api/report1/factor-analysis', {
+                const response = await fetch('/api/report2/factor-analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         indicator_key: key,
-                        projects: [], // Все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2595,7 +2618,7 @@
                 
                 const item = document.createElement('div');
                 item.className = 'factor-item';
-                item.onclick = () => showContragentAnalysis(factor.level4, factor.level1, factor.level2, factor.level3);
+                item.onclick = () => showProjectAnalysis(factor.level4);
                 
                 item.innerHTML = `
                     <div class="factor-info">
@@ -2612,28 +2635,24 @@
             });
         }
 
-        // ====== CONTRAGENT ANALYSIS ======
-        async function showContragentAnalysis(level4, level1, level2, level3) {
-            const title = `Анализ контрагентов: ${level4}`;
-            document.getElementById('contragent-title').textContent = title;
-            document.getElementById('contragent-loading').classList.remove('hidden');
-            document.getElementById('contragent-content').classList.add('hidden');
+        // ====== PROJECT ANALYSIS (вместо контрагентов) ======
+        async function showProjectAnalysis(level4) {
+            const title = `Анализ проектов: ${level4}`;
+            document.getElementById('project-title').textContent = title;
+            document.getElementById('project-loading').classList.remove('hidden');
+            document.getElementById('project-content').classList.add('hidden');
             
             closeModal('factor-modal');
-            openModal('contragent-modal');
+            openModal('project-modal');
             
             try {
-                const response = await fetch('/api/report1/contragent-analysis', {
+                const response = await fetch('/api/report2/project-analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        level1: level1,
-                        level2: level2,
-                        level3: level3,
                         level4: level4,
-                        projects: [], // Все проекты
                         distributions: state.selectedDistributions,
                         months: state.selectedMonths,
                         year_min: state.minYear,
@@ -2644,38 +2663,38 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    renderContragentAnalysis(data.contragents);
-                    document.getElementById('contragent-loading').classList.add('hidden');
-                    document.getElementById('contragent-content').classList.remove('hidden');
+                    renderProjectAnalysis(data.projects);
+                    document.getElementById('project-loading').classList.add('hidden');
+                    document.getElementById('project-content').classList.remove('hidden');
                 } else {
                     throw new Error(data.error || 'Ошибка загрузки данных');
                 }
                 
             } catch (error) {
-                console.error('Error loading contragent analysis:', error);
-                document.getElementById('contragent-loading').innerHTML = `
+                console.error('Error loading project analysis:', error);
+                document.getElementById('project-loading').innerHTML = `
                     <div class="text-center">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка загрузки контрагентов: ${error.message}</p>
+                        <p>Ошибка загрузки проектов: ${error.message}</p>
                     </div>
                 `;
             }
         }
 
-        function renderContragentAnalysis(contragents) {
-            const container = document.getElementById('contragent-list');
+        function renderProjectAnalysis(projects) {
+            const container = document.getElementById('project-list');
             container.innerHTML = '';
             
-            if (!contragents || contragents.length === 0) {
-                container.innerHTML = '<p class="text-center">Нет данных по контрагентам</p>';
+            if (!projects || projects.length === 0) {
+                container.innerHTML = '<p class="text-center">Нет данных по проектам</p>';
                 return;
             }
             
             // Сортируем: если общее отклонение отрицательное - сначала минусы, если положительное - сначала плюсы
-            const totalDeviation = contragents.reduce((sum, c) => sum + c.deviation, 0);
+            const totalDeviation = projects.reduce((sum, p) => sum + p.deviation, 0);
             const sortDesc = totalDeviation < 0;
             
-            contragents.sort((a, b) => {
+            projects.sort((a, b) => {
                 if (sortDesc) {
                     return a.deviation - b.deviation;
                 } else {
@@ -2683,25 +2702,25 @@
                 }
             });
             
-            contragents.forEach((contragent, index) => {
-                const deviation = contragent.deviation;
+            projects.forEach((project, index) => {
+                const deviation = project.deviation;
                 const deviationClass = deviation > 0 ? 'positive' : deviation < 0 ? 'negative' : 'neutral';
-                const percentage = contragent.percentage || 0;
+                const percentage = project.percentage || 0;
                 
                 const item = document.createElement('div');
-                item.className = 'contragent-item';
+                item.className = 'project-item';
                 item.onclick = () => {
-                    showNotification(`Контрагент: ${contragent.contragent}\nОтклонение: ${formatCurrency(deviation, true)}`, 'info');
+                    showNotification(`Проект: ${project.project}\nОтклонение: ${formatCurrency(deviation, true)}`, 'info');
                 };
                 
                 item.innerHTML = `
-                    <div class="contragent-info">
-                        <div class="contragent-rank">${index + 1}</div>
-                        <div class="contragent-name">${contragent.contragent || 'Без названия'}</div>
+                    <div class="project-info">
+                        <div class="project-rank">${index + 1}</div>
+                        <div class="project-name">${project.project || 'Без названия'}</div>
                     </div>
-                    <div class="contragent-value ${deviationClass}">
+                    <div class="project-value ${deviationClass}">
                         ${formatCurrency(deviation, true)}
-                        <div class="contragent-percentage">${percentage}%</div>
+                        <div class="project-percentage">${percentage}%</div>
                     </div>
                 `;
                 
@@ -2709,8 +2728,8 @@
             });
         }
 
-        function exportContragentsToExcel() {
-            showNotification('Экспорт контрагентов в Excel будет реализован в следующей версии', 'info');
+        function exportProjectsToExcel() {
+            showNotification('Экспорт проектов в Excel будет реализован в следующей версии', 'info');
         }
 
         // ====== UTILITY FUNCTIONS ======
