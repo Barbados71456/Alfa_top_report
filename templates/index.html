@@ -1,323 +1,1138 @@
 {% extends "base.html" %}
 
-{% block title %}Главная - Аналитика финансов{% endblock %}
+{% block title %}Дашборд - Аналитика финансов{% endblock %}
 
 {% block content %}
-<div class="dashboard">
+<div class="dashboard-container">
+    <!-- Заголовок дашборда -->
     <div class="dashboard-header">
-        <h1><i class="fas fa-tachometer-alt"></i> Панель управления</h1>
-        <p class="subtitle">Мониторинг эффективности проектов в реальном времени</p>
-    </div>
-
-    <div class="quick-stats">
-        <div class="stat-card">
-            <div class="stat-icon income">
-                <i class="fas fa-arrow-up"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Общие поступления</h3>
-                <p class="stat-value" id="total-income">Загрузка...</p>
-                <p class="stat-change" id="income-change">по сравнению с прошлым месяцем</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon expense">
-                <i class="fas fa-arrow-down"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Общий отток</h3>
-                <p class="stat-value" id="total-expense">Загрузка...</p>
-                <p class="stat-change" id="expense-change">по сравнению с прошлым месяцем</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon profit">
-                <i class="fas fa-chart-line"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Чистая прибыль</h3>
-                <p class="stat-value" id="total-profit">Загрузка...</p>
-                <p class="stat-change" id="profit-change">по сравнению с прошлым месяцем</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon projects">
-                <i class="fas fa-project-diagram"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Активных проектов</h3>
-                <p class="stat-value" id="active-projects">Загрузка...</p>
-                <p class="stat-change" id="projects-change">всего в системе</p>
+        <h1><i class="fas fa-tachometer-alt"></i> Финансовый дашборд</h1>
+        <p class="dashboard-subtitle">Обзор ключевых показателей эффективности по проектам</p>
+        <div class="dashboard-actions">
+            <button class="btn btn-refresh" onclick="refreshDashboard()">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+            <div class="date-selector">
+                <select id="period-selector" onchange="changePeriod()">
+                    <option value="current_month">Текущий месяц</option>
+                    <option value="last_month">Прошлый месяц</option>
+                    <option value="quarter">Квартал</option>
+                    <option value="year">Год</option>
+                    <option value="custom">Произвольный период</option>
+                </select>
             </div>
         </div>
     </div>
 
-    <div class="dashboard-grid">
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3><i class="fas fa-exclamation-triangle"></i> Проблемные проекты</h3>
-                <a href="{{ url_for('report1') }}" class="card-link">Подробнее →</a>
+    <!-- Ключевые показатели (KPI) -->
+    <div class="kpi-section">
+        <h2 class="section-title">
+            <i class="fas fa-chart-line"></i> Ключевые показатели
+        </h2>
+        <div class="kpi-grid">
+            <div class="kpi-card positive">
+                <div class="kpi-icon">
+                    <i class="fas fa-money-bill-wave"></i>
+                </div>
+                <div class="kpi-content">
+                    <h3>Чистый денежный поток</h3>
+                    <div class="kpi-value" id="kpi-net-cash">0 ₽</div>
+                    <div class="kpi-change">
+                        <span class="change-value" id="kpi-net-cash-change">0%</span>
+                        <span class="change-label">за период</span>
+                    </div>
+                </div>
             </div>
-            <div class="card-content">
-                <div id="problem-projects" class="loading">
-                    <div class="spinner"></div>
-                    <p>Загрузка данных...</p>
+
+            <div class="kpi-card positive">
+                <div class="kpi-icon">
+                    <i class="fas fa-hand-holding-usd"></i>
+                </div>
+                <div class="kpi-content">
+                    <h3>Поступления по ОД</h3>
+                    <div class="kpi-value" id="kpi-od-income">0 ₽</div>
+                    <div class="kpi-change">
+                        <span class="change-value" id="kpi-od-income-change">0%</span>
+                        <span class="change-label">за период</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kpi-card negative">
+                <div class="kpi-icon">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <div class="kpi-content">
+                    <h3>Отток по ОД</h3>
+                    <div class="kpi-value" id="kpi-od-expense">0 ₽</div>
+                    <div class="kpi-change">
+                        <span class="change-value" id="kpi-od-expense-change">0%</span>
+                        <span class="change-label">за период</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kpi-card neutral">
+                <div class="kpi-icon">
+                    <i class="fas fa-percentage"></i>
+                </div>
+                <div class="kpi-content">
+                    <h3>Рентабельность</h3>
+                    <div class="kpi-value" id="kpi-profitability">0%</div>
+                    <div class="kpi-change">
+                        <span class="change-value" id="kpi-profitability-change">0 п.п.</span>
+                        <span class="change-label">изменение</span>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3><i class="fas fa-star"></i> Топ-5 по ROI</h3>
-                <a href="{{ url_for('report2') }}" class="card-link">Подробнее →</a>
-            </div>
-            <div class="card-content">
-                <div id="top-roi" class="loading">
-                    <div class="spinner"></div>
-                    <p>Загрузка данных...</p>
+    <!-- Основные графики и визуализации -->
+    <div class="visualization-section">
+        <div class="viz-row">
+            <!-- График денежного потока -->
+            <div class="viz-card large">
+                <div class="viz-header">
+                    <h3><i class="fas fa-chart-area"></i> Денежный поток по месяцам</h3>
+                    <div class="viz-actions">
+                        <button class="viz-btn active" data-period="3m">3 мес</button>
+                        <button class="viz-btn" data-period="6m">6 мес</button>
+                        <button class="viz-btn" data-period="1y">1 год</button>
+                    </div>
+                </div>
+                <div class="viz-content">
+                    <div class="chart-placeholder" id="cash-flow-chart">
+                        <div class="loading-chart">
+                            <div class="spinner"></div>
+                            <p>Загрузка графика...</p>
+                        </div>
+                    </div>
+                    <div class="chart-legend">
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: var(--apple-green);"></span>
+                            <span>Поступления</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: var(--apple-red);"></span>
+                            <span>Отток</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: var(--apple-blue);"></span>
+                            <span>Чистый поток</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="dashboard-card full-width">
-            <div class="card-header">
-                <h3><i class="fas fa-chart-bar"></i> Динамика за 6 месяцев</h3>
-                <div class="period-selector">
-                    <select id="period-select">
-                        <option value="6">6 месяцев</option>
-                        <option value="3">3 месяца</option>
-                        <option value="12">12 месяцев</option>
+            <!-- Круговой график структуры расходов -->
+            <div class="viz-card">
+                <div class="viz-header">
+                    <h3><i class="fas fa-chart-pie"></i> Структура расходов</h3>
+                    <select class="viz-select" id="expense-structure-selector">
+                        <option value="variables">Переменные vs Постоянные</option>
+                        <option value="projects">По проектам</option>
+                        <option value="distributions">По распределениям</option>
                     </select>
                 </div>
-            </div>
-            <div class="card-content">
-                <canvas id="trend-chart" height="250"></canvas>
+                <div class="viz-content">
+                    <div class="chart-placeholder" id="expense-structure-chart">
+                        <div class="loading-chart">
+                            <div class="spinner"></div>
+                            <p>Загрузка графика...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3><i class="fas fa-users"></i> Распределение по группам</h3>
-                <a href="{{ url_for('report4') }}" class="card-link">Подробнее →</a>
+        <div class="viz-row">
+            <!-- Топ проектов по эффективности -->
+            <div class="viz-card">
+                <div class="viz-header">
+                    <h3><i class="fas fa-trophy"></i> Топ-5 проектов по эффективности</h3>
+                    <select class="viz-select" id="top-projects-selector">
+                        <option value="net_cash">Чистый денежный поток</option>
+                        <option value="od_result">Результат ОД</option>
+                        <option value="profitability">Рентабельность</option>
+                    </select>
+                </div>
+                <div class="viz-content">
+                    <div class="top-projects-list" id="top-projects-list">
+                        <div class="loading-chart">
+                            <div class="spinner"></div>
+                            <p>Загрузка данных...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-content">
-                <canvas id="group-chart" height="200"></canvas>
-            </div>
-        </div>
 
-        <div class="dashboard-card">
-            <div class="card-header">
-                <h3><i class="fas fa-clock"></i> Последние действия</h3>
+            <!-- Последние значимые отклонения -->
+            <div class="viz-card">
+                <div class="viz-header">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Значимые отклонения</h3>
+                    <button class="viz-btn" onclick="refreshDeviations()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                <div class="viz-content">
+                    <div class="deviations-list" id="deviations-list">
+                        <div class="loading-chart">
+                            <div class="spinner"></div>
+                            <p>Загрузка отклонений...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-content">
-                <div class="activity-list">
-                    <div class="activity-item">
-                        <div class="activity-icon success">
-                            <i class="fas fa-database"></i>
-                        </div>
-                        <div class="activity-details">
-                            <p>Данные обновлены</p>
-                            <span class="activity-time">Сегодня, 00:00</span>
-                        </div>
-                    </div>
-                    <div class="activity-item">
-                        <div class="activity-icon warning">
-                            <i class="fas fa-exclamation-circle"></i>
-                        </div>
-                        <div class="activity-details">
-                            <p>Проект "Alpha DCA" требует внимания</p>
-                            <span class="activity-time">Вчера, 18:30</span>
-                        </div>
-                    </div>
-                    <div class="activity-item">
-                        <div class="activity-icon info">
-                            <i class="fas fa-user-plus"></i>
-                        </div>
-                        <div class="activity-details">
-                            <p>Новый пользователь добавлен</p>
-                            <span class="activity-time">2 дня назад</span>
-                        </div>
+
+            <!-- Быстрые действия -->
+            <div class="viz-card">
+                <div class="viz-header">
+                    <h3><i class="fas fa-bolt"></i> Быстрые действия</h3>
+                </div>
+                <div class="viz-content">
+                    <div class="quick-actions">
+                        <a href="{{ url_for('report1') }}" class="quick-action">
+                            <div class="action-icon">
+                                <i class="fas fa-filter"></i>
+                            </div>
+                            <div class="action-content">
+                                <h4>Детальный анализ</h4>
+                                <p>Полный отчет с фильтрами</p>
+                            </div>
+                        </a>
+                        
+                        <a href="{{ url_for('report3') }}" class="quick-action">
+                            <div class="action-icon">
+                                <i class="fas fa-project-diagram"></i>
+                            </div>
+                            <div class="action-content">
+                                <h4>Сравнение проектов</h4>
+                                <p>Анализ эффективности по проектам</p>
+                            </div>
+                        </a>
+                        
+                        <button class="quick-action" onclick="exportDashboard()">
+                            <div class="action-icon">
+                                <i class="fas fa-file-export"></i>
+                            </div>
+                            <div class="action-content">
+                                <h4>Экспорт отчета</h4>
+                                <p>Скачать PDF или Excel</p>
+                            </div>
+                        </button>
+                        
+                        <button class="quick-action" onclick="showAlerts()">
+                            <div class="action-icon">
+                                <i class="fas fa-bell"></i>
+                            </div>
+                            <div class="action-content">
+                                <h4>Настроить оповещения</h4>
+                                <p>Уведомления об отклонениях</p>
+                            </div>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="quick-actions">
-        <h3>Быстрые действия</h3>
-        <div class="actions-grid">
-            <a href="{{ url_for('report1') }}" class="action-btn">
-                <i class="fas fa-chart-pie"></i>
-                <span>Анализ эффективности</span>
-            </a>
-            <a href="{{ url_for('report2') }}" class="action-btn">
-                <i class="fas fa-file-export"></i>
-                <span>Экспорт данных</span>
-            </a>
-            <a href="{{ url_for('report3') }}" class="action-btn">
-                <i class="fas fa-search-dollar"></i>
-                <span>Детальный анализ</span>
-            </a>
-            <button class="action-btn" onclick="location.reload()">
-                <i class="fas fa-sync-alt"></i>
-                <span>Обновить данные</span>
-            </button>
+    <!-- Последние обновления данных -->
+    <div class="updates-section">
+        <h2 class="section-title">
+            <i class="fas fa-history"></i> Последние обновления
+        </h2>
+        <div class="updates-timeline">
+            <div class="timeline-item">
+                <div class="timeline-date">Сегодня, 10:30</div>
+                <div class="timeline-content">
+                    <i class="fas fa-database timeline-icon"></i>
+                    <div class="timeline-text">
+                        <strong>Обновлены данные за апрель 2024</strong>
+                        <p>Добавлено 156 новых транзакций</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-date">Вчера, 15:45</div>
+                <div class="timeline-content">
+                    <i class="fas fa-user timeline-icon"></i>
+                    <div class="timeline-text">
+                        <strong>Алексей Петров</strong>
+                        <p>Добавил комментарий к проекту "Смарт-офис"</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-date">2 дня назад</div>
+                <div class="timeline-content">
+                    <i class="fas fa-chart-bar timeline-icon"></i>
+                    <div class="timeline-text">
+                        <strong>Обнаружено отклонение</strong>
+                        <p>Проект "Реновация" превысил бюджет на 12%</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<!-- Стили для дашборда -->
+<style>
+.dashboard-container {
+    padding: var(--spacing-lg);
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.dashboard-header {
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--apple-border);
+}
+
+.dashboard-header h1 {
+    font-size: 2rem;
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.dashboard-subtitle {
+    color: var(--apple-text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: var(--spacing-lg);
+}
+
+.dashboard-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.btn-refresh {
+    background: var(--apple-blue);
+    color: white;
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    transition: var(--transition-fast);
+}
+
+.btn-refresh:hover {
+    background: #0056cc;
+    transform: translateY(-1px);
+}
+
+.date-selector select {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--apple-border);
+    border-radius: var(--radius-sm);
+    background: var(--apple-card);
+    color: var(--apple-text);
+    font-size: 0.9rem;
+    min-width: 200px;
+}
+
+/* KPI Cards */
+.kpi-section {
+    margin-bottom: var(--spacing-xl);
+}
+
+.section-title {
+    font-size: 1.3rem;
+    margin-bottom: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--apple-text);
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+.kpi-card {
+    background: var(--apple-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--apple-shadow);
+    border: 1px solid var(--apple-border);
+    transition: var(--transition-normal);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--apple-shadow-hover);
+}
+
+.kpi-card.positive {
+    border-top: 4px solid var(--apple-green);
+}
+
+.kpi-card.negative {
+    border-top: 4px solid var(--apple-red);
+}
+
+.kpi-card.neutral {
+    border-top: 4px solid var(--apple-blue);
+}
+
+.kpi-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--apple-bg);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: var(--apple-blue);
+}
+
+.kpi-card.positive .kpi-icon {
+    color: var(--apple-green);
+}
+
+.kpi-card.negative .kpi-icon {
+    color: var(--apple-red);
+}
+
+.kpi-content {
+    flex: 1;
+}
+
+.kpi-content h3 {
+    font-size: 0.9rem;
+    color: var(--apple-text-secondary);
+    margin-bottom: var(--spacing-xs);
+    font-weight: 500;
+}
+
+.kpi-value {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.kpi-change {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.85rem;
+}
+
+.change-value {
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--apple-bg);
+}
+
+.kpi-card.positive .change-value {
+    color: var(--apple-green);
+    background: rgba(52, 199, 89, 0.1);
+}
+
+.kpi-card.negative .change-value {
+    color: var(--apple-red);
+    background: rgba(255, 59, 48, 0.1);
+}
+
+.change-label {
+    color: var(--apple-text-secondary);
+}
+
+/* Visualization Cards */
+.visualization-section {
+    margin-bottom: var(--spacing-xl);
+}
+
+.viz-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.viz-row:last-child {
+    margin-bottom: 0;
+}
+
+.viz-card {
+    background: var(--apple-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--apple-shadow);
+    border: 1px solid var(--apple-border);
+}
+
+.viz-card.large {
+    grid-column: span 2;
+}
+
+.viz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--apple-border);
+}
+
+.viz-header h3 {
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.viz-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+.viz-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--apple-bg);
+    border: 1px solid var(--apple-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.viz-btn:hover {
+    background: var(--apple-border);
+}
+
+.viz-btn.active {
+    background: var(--apple-blue);
+    color: white;
+    border-color: var(--apple-blue);
+}
+
+.viz-select {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--apple-border);
+    border-radius: var(--radius-sm);
+    background: var(--apple-card);
+    font-size: 0.85rem;
+    min-width: 150px;
+}
+
+.viz-content {
+    height: 300px;
+}
+
+.viz-card.large .viz-content {
+    height: 400px;
+}
+
+.chart-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--apple-text-secondary);
+}
+
+.loading-chart {
+    text-align: center;
+}
+
+.loading-chart .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--apple-border);
+    border-top-color: var(--apple-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.chart-legend {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--apple-border);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.85rem;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+/* Top Projects List */
+.top-projects-list {
+    height: 100%;
+    overflow-y: auto;
+}
+
+.project-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--apple-border);
+}
+
+.project-item:last-child {
+    border-bottom: none;
+}
+
+.project-rank {
+    width: 24px;
+    height: 24px;
+    background: var(--apple-blue);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.project-info {
+    flex: 1;
+    margin-left: var(--spacing-md);
+}
+
+.project-name {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.project-metric {
+    font-size: 0.85rem;
+    color: var(--apple-text-secondary);
+}
+
+.project-value {
+    font-weight: 600;
+    text-align: right;
+    min-width: 80px;
+}
+
+.project-value.positive {
+    color: var(--apple-green);
+}
+
+.project-value.negative {
+    color: var(--apple-red);
+}
+
+/* Deviations List */
+.deviations-list {
+    height: 100%;
+    overflow-y: auto;
+}
+
+.deviation-item {
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--apple-border);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.deviation-item:hover {
+    background: rgba(255, 59, 48, 0.05);
+}
+
+.deviation-item:last-child {
+    border-bottom: none;
+}
+
+.deviation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
+}
+
+.deviation-title {
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.deviation-value {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.deviation-value.negative {
+    color: var(--apple-red);
+}
+
+.deviation-value.positive {
+    color: var(--apple-green);
+}
+
+.deviation-details {
+    font-size: 0.85rem;
+    color: var(--apple-text-secondary);
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    height: 100%;
+}
+
+.quick-action {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--apple-bg);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    border: none;
+    width: 100%;
+    text-align: left;
+}
+
+.quick-action:hover {
+    background: rgba(0, 122, 255, 0.1);
+    transform: translateX(4px);
+}
+
+.action-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--apple-blue);
+    color: white;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.action-content {
+    flex: 1;
+}
+
+.action-content h4 {
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+
+.action-content p {
+    font-size: 0.85rem;
+    color: var(--apple-text-secondary);
+}
+
+/* Updates Timeline */
+.updates-section {
+    background: var(--apple-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--apple-shadow);
+    border: 1px solid var(--apple-border);
+}
+
+.updates-timeline {
+    margin-top: var(--spacing-lg);
+}
+
+.timeline-item {
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--apple-border);
+    position: relative;
+    padding-left: 40px;
+}
+
+.timeline-item:last-child {
+    border-bottom: none;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: var(--apple-blue);
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--apple-border);
+}
+
+.timeline-date {
+    font-size: 0.85rem;
+    color: var(--apple-text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.timeline-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+}
+
+.timeline-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--apple-bg);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--apple-blue);
+    flex-shrink: 0;
+}
+
+.timeline-text strong {
+    display: block;
+    margin-bottom: 2px;
+}
+
+.timeline-text p {
+    font-size: 0.9rem;
+    color: var(--apple-text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .viz-card.large {
+        grid-column: span 1;
+    }
+    
+    .viz-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: var(--spacing-md);
+    }
+    
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .dashboard-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .date-selector select {
+        width: 100%;
+    }
+}
+</style>
+
 <script>
+// Инициализация дашборда
 document.addEventListener('DOMContentLoaded', function() {
     loadDashboardData();
-    
-    // Обновляем данные каждые 5 минут
-    setInterval(loadDashboardData, 300000);
+    setupDashboardListeners();
 });
 
-function loadDashboardData() {
-    fetch('/api/report2/data')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateDashboardStats(data.projects);
-                updateProblemProjects(data.projects);
-                updateTopROI(data.projects);
-                updateCharts(data.projects);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-}
-
-function updateDashboardStats(projects) {
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let positiveProjects = 0;
-    
-    projects.forEach(project => {
-        totalIncome += project.income;
-        totalExpense += project.expense;
-        if (project.net > 0) positiveProjects++;
-    });
-    
-    const totalProfit = totalIncome - totalExpense;
-    const profitMargin = totalIncome > 0 ? (totalProfit / totalIncome * 100) : 0;
-    
-    document.getElementById('total-income').textContent = formatCurrency(totalIncome);
-    document.getElementById('total-expense').textContent = formatCurrency(totalExpense);
-    document.getElementById('total-profit').textContent = formatCurrency(totalProfit);
-    document.getElementById('active-projects').textContent = projects.length;
-    
-    // Добавляем индикаторы
-    const profitChange = document.getElementById('profit-change');
-    if (profitMargin > 0) {
-        profitChange.innerHTML = `<span class="positive">+${profitMargin.toFixed(1)}% рентабельность</span>`;
-    } else {
-        profitChange.innerHTML = `<span class="negative">${profitMargin.toFixed(1)}% убыточность</span>`;
+// Загрузка данных дашборда
+async function loadDashboardData() {
+    try {
+        // Загружаем KPI
+        await loadKPIData();
+        
+        // Загружаем топ проекты
+        await loadTopProjects();
+        
+        // Загружаем значимые отклонения
+        await loadDeviations();
+        
+        // Обновляем таймлайн
+        updateTimeline();
+        
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        showNotification('Ошибка загрузки данных дашборда', 'error');
     }
 }
 
-function updateProblemProjects(projects) {
-    const problemContainer = document.getElementById('problem-projects');
-    const negativeProjects = projects.filter(p => p.net < 0);
-    
-    if (negativeProjects.length === 0) {
-        problemContainer.innerHTML = '<p class="no-problems">Все проекты прибыльны 🎉</p>';
-        return;
+// Загрузка KPI данных
+async function loadKPIData() {
+    try {
+        // Загружаем данные за текущий и предыдущий период
+        const currentDate = new Date();
+        const lastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+        
+        // Здесь будут реальные запросы к API
+        // Для примера используем мок данные
+        const kpiData = {
+            net_cash_flow: { current: 2450000, previous: 2100000 },
+            od_income: { current: 4500000, previous: 3800000 },
+            od_expense: { current: -2050000, previous: -1700000 },
+            profitability: { current: 8.9, previous: 7.5 }
+        };
+        
+        // Обновляем KPI
+        updateKPI('net-cash', kpiData.net_cash_flow);
+        updateKPI('od-income', kpiData.od_income);
+        updateKPI('od-expense', kpiData.od_expense);
+        updateKPI('profitability', kpiData.profitability, '%', 'п.п.');
+        
+    } catch (error) {
+        console.error('Error loading KPI data:', error);
     }
+}
+
+function updateKPI(kpiId, data, suffix = ' ₽', changeSuffix = '%') {
+    const valueElement = document.getElementById(`kpi-${kpiId}`);
+    const changeElement = document.getElementById(`kpi-${kpiId}-change`);
     
-    let html = '<div class="problem-list">';
-    negativeProjects.slice(0, 5).forEach(project => {
-        html += `
-            <div class="problem-item">
-                <span class="project-name">${project.project}</span>
-                <span class="project-loss">${formatCurrency(project.net)}</span>
+    if (valueElement && changeElement) {
+        // Форматируем значение
+        const formattedValue = new Intl.NumberFormat('ru-RU').format(Math.abs(data.current));
+        valueElement.textContent = `${data.current >= 0 ? '' : '-'}${formattedValue}${suffix}`;
+        
+        // Рассчитываем изменение
+        if (data.previous !== 0) {
+            const changePercent = ((data.current - data.previous) / Math.abs(data.previous)) * 100;
+            const changeText = changePercent > 0 ? `+${changePercent.toFixed(1)}` : changePercent.toFixed(1);
+            changeElement.textContent = `${changeText}${changeSuffix}`;
+            
+            // Обновляем цвет
+            changeElement.className = `change-value ${changePercent >= 0 ? 'positive' : 'negative'}`;
+        }
+    }
+}
+
+// Загрузка топ проектов
+async function loadTopProjects() {
+    try {
+        // Здесь будет запрос к API отчетов
+        // Для примепа используем мок данные
+        const projects = [
+            { name: "Реновация бизнес-центра", metric: "Чистый поток", value: 1250000, change: 15.2 },
+            { name: "Смарт-офис", metric: "Результат ОД", value: 890000, change: 8.7 },
+            { name: "Цифровая трансформация", metric: "Рентабельность", value: 12.5, change: 3.2 },
+            { name: "Модернизация ИТ", metric: "Чистый поток", value: -450000, change: -5.8 },
+            { name: "Облачная инфраструктура", metric: "Результат ОД", value: 620000, change: 12.1 }
+        ];
+        
+        renderTopProjects(projects);
+        
+    } catch (error) {
+        console.error('Error loading top projects:', error);
+    }
+}
+
+function renderTopProjects(projects) {
+    const container = document.getElementById('top-projects-list');
+    container.innerHTML = '';
+    
+    projects.forEach((project, index) => {
+        const isPositive = project.value >= 0;
+        
+        const projectElement = document.createElement('div');
+        projectElement.className = 'project-item';
+        projectElement.innerHTML = `
+            <div class="project-rank">${index + 1}</div>
+            <div class="project-info">
+                <div class="project-name">${project.name}</div>
+                <div class="project-metric">${project.metric}</div>
+            </div>
+            <div class="project-value ${isPositive ? 'positive' : 'negative'}">
+                ${isPositive ? '+' : ''}${formatCurrency(project.value, false)}
+                <div style="font-size: 0.8rem; color: var(--apple-text-secondary);">
+                    ${project.change > 0 ? '+' : ''}${project.change}%
+                </div>
             </div>
         `;
+        
+        container.appendChild(projectElement);
     });
-    html += '</div>';
-    
-    if (negativeProjects.length > 5) {
-        html += `<p class="more-problems">...и еще ${negativeProjects.length - 5} проектов</p>`;
-    }
-    
-    problemContainer.innerHTML = html;
 }
 
-function updateTopROI(projects) {
-    const topROIContainer = document.getElementById('top-roi');
-    const sortedByROI = [...projects].sort((a, b) => b.roi - a.roi);
+// Загрузка значимых отклонений
+async function loadDeviations() {
+    try {
+        // Мок данные отклонений
+        const deviations = [
+            { title: "Превышение бюджета", project: "Модернизация ИТ", value: -245000, details: "Переменные расходы на 45% выше плана" },
+            { title: "Неожиданные поступления", project: "Смарт-офис", value: 180000, details: "Досрочная оплата контракта" },
+            { title: "Задержка поставок", project: "Реновация бизнес-центра", value: -89000, details: "Перенос сроков на 2 недели" },
+            { title: "Экономия на материалах", project: "Цифровая трансформация", value: 56000, details: "Новый поставщик" }
+        ];
+        
+        renderDeviations(deviations);
+        
+    } catch (error) {
+        console.error('Error loading deviations:', error);
+    }
+}
+
+function renderDeviations(deviations) {
+    const container = document.getElementById('deviations-list');
+    container.innerHTML = '';
     
-    let html = '<div class="roi-list">';
-    sortedByROI.slice(0, 5).forEach(project => {
-        const roiClass = project.roi > 0 ? 'positive' : 'negative';
-        html += `
-            <div class="roi-item">
-                <span class="project-name">${project.project}</span>
-                <span class="roi-value ${roiClass}">${project.roi.toFixed(1)}%</span>
+    deviations.forEach(deviation => {
+        const isPositive = deviation.value >= 0;
+        
+        const deviationElement = document.createElement('div');
+        deviationElement.className = 'deviation-item';
+        deviationElement.onclick = () => showDeviationDetails(deviation);
+        
+        deviationElement.innerHTML = `
+            <div class="deviation-header">
+                <div class="deviation-title">${deviation.title}</div>
+                <div class="deviation-value ${isPositive ? 'positive' : 'negative'}">
+                    ${isPositive ? '+' : ''}${formatCurrency(deviation.value, true)}
+                </div>
+            </div>
+            <div class="deviation-details">
+                <strong>${deviation.project}</strong> • ${deviation.details}
             </div>
         `;
-    });
-    html += '</div>';
-    
-    topROIContainer.innerHTML = html;
-}
-
-function updateCharts(projects) {
-    // Группируем проекты по группам
-    const groups = {};
-    projects.forEach(project => {
-        if (!groups[project.group]) {
-            groups[project.group] = {
-                count: 0,
-                income: 0,
-                expense: 0
-            };
-        }
-        groups[project.group].count++;
-        groups[project.group].income += project.income;
-        groups[project.group].expense += project.expense;
-    });
-    
-    // Круговая диаграмма групп
-    const groupCtx = document.getElementById('group-chart').getContext('2d');
-    new Chart(groupCtx, {
-        type: 'doughnut',
-        data: {
-            labels: Object.keys(groups),
-            datasets: [{
-                data: Object.values(groups).map(g => g.count),
-                backgroundColor: [
-                    'rgba(0, 122, 255, 0.8)',
-                    'rgba(52, 199, 89, 0.8)',
-                    'rgba(255, 149, 0, 0.8)'
-                ],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
+        
+        container.appendChild(deviationElement);
     });
 }
 
-function formatCurrency(value) {
-    return new Intl.NumberFormat('ru-RU', {
-        style: 'currency',
-        currency: 'RUB',
+// Обновление таймлайна
+function updateTimeline() {
+    // В реальном приложении здесь будет запрос к API
+    // пока оставляем статический контент
+}
+
+// Утилиты
+function formatCurrency(value, showSign = false) {
+    if (value === null || value === undefined) return '0 ₽';
+    
+    const num = parseFloat(value);
+    if (isNaN(num)) return '0 ₽';
+    
+    const absValue = Math.abs(num);
+    const sign = num > 0 ? '+' : num < 0 ? '-' : '';
+    
+    const formatted = new Intl.NumberFormat('ru-RU', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
-    }).format(value);
+    }).format(absValue);
+    
+    return showSign ? `${sign}${formatted} ₽` : `${formatted} ₽`;
+}
+
+function showDeviationDetails(deviation) {
+    // В реальном приложении здесь будет переход к детальному анализу
+    alert(`Детали отклонения:\n\n${deviation.title}\nПроект: ${deviation.project}\nСумма: ${formatCurrency(deviation.value, true)}\n${deviation.details}`);
+}
+
+function refreshDashboard() {
+    loadDashboardData();
+    showNotification('Дашборд обновлен', 'success');
+}
+
+function changePeriod() {
+    const selector = document.getElementById('period-selector');
+    console.log('Изменен период на:', selector.value);
+    loadDashboardData();
+}
+
+function exportDashboard() {
+    showNotification('Экспорт дашборда в разработке', 'info');
+}
+
+function showAlerts() {
+    showNotification('Настройка оповещений в разработке', 'info');
+}
+
+function setupDashboardListeners() {
+    // Кнопки периода графика
+    document.querySelectorAll('.viz-btn[data-period]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.viz-btn[data-period]').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            // Здесь будет обновление графика
+            console.log('Изменен период графика:', this.dataset.period);
+        });
+    });
+    
+    // Селекторы визуализаций
+    document.getElementById('expense-structure-selector')?.addEventListener('change', function() {
+        console.log('Изменена структура расходов:', this.value);
+        // Обновляем график
+    });
+    
+    document.getElementById('top-projects-selector')?.addEventListener('change', function() {
+        console.log('Изменен критерий топ проектов:', this.value);
+        loadTopProjects();
+    });
+}
+
+function refreshDeviations() {
+    loadDeviations();
+    showNotification('Отклонения обновлены', 'success');
+}
+
+function showNotification(message, type = 'info') {
+    // Простая реализация уведомления
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--apple-card);
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        border-left: 4px solid var(--apple-${type});
+        z-index: 10000;
+        max-width: 400px;
+    `;
+    
+    notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}" 
+               style="color: var(--apple-${type});"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
 }
 </script>
 {% endblock %}

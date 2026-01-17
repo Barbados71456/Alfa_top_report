@@ -99,9 +99,6 @@
         <a href="{{ url_for('report3') }}" class="mobile-nav-item">
             <i class="fas fa-sun"></i> Анализ статей
         </a>
-        <a href="{{ url_for('report4') }}" class="mobile-nav-item">
-            <i class="fas fa-users"></i> ФОТ
-        </a>
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('auth.logout') }}" class="mobile-nav-item logout">
             <i class="fas fa-sign-out-alt"></i> Выйти
