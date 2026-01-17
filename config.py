@@ -24,7 +24,7 @@ class Config:
         'pool_timeout': 30,
         'connect_args': {
             'connect_timeout': 10,
-            'statement_timeout': 30000,  # 30 секунд
+            # Убрать statement_timeout - он не поддерживается psycopg2
         }
     }
     
