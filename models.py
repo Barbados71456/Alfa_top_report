@@ -52,3 +52,60 @@ class FinancialData(db.Model):
     
     def __repr__(self):
         return f'<FinancialData {self.Проект}: {self.Сумма}>'
+
+
+# ====== МОДЕЛИ ДЛЯ ПРЕДСТАВЛЕНИЙ (VIEWS) ======
+
+class FinancialDataAggregated(db.Model):
+    """Модель для агрегированного представления данных"""
+    __tablename__ = 'financial_data_aggregated'
+    __table_args__ = {'info': {'is_view': True}}  # Указываем что это представление
+    
+    id = db.Column(db.Integer, primary_key=True)  # Виртуальный ID для ORM
+    СтатьяУровень1 = db.Column(db.String(255))
+    СтатьяУровень2 = db.Column(db.String(255))
+    СтатьяУровень3 = db.Column(db.String(255))
+    СтатьяУровень4 = db.Column(db.String(255))
+    Проект = db.Column(db.String(255))
+    Контрагент = db.Column(db.String(255))
+    Распределение = db.Column(db.String(100))
+    год = db.Column(db.Integer)
+    месяц = db.Column(db.Integer)
+    сумма_итого = db.Column(db.Float)
+    количество_записей = db.Column(db.Integer)
+    
+    def __repr__(self):
+        return f'<FinancialDataAggregated {self.Проект} {self.год}:{self.месяц}>'
+
+
+class ContragentSummaryView(db.Model):
+    """Модель для представления сводки по контрагентам"""
+    __tablename__ = 'contragent_summary_view'
+    __table_args__ = {'info': {'is_view': True}}
+    
+    id = db.Column(db.Integer, primary_key=True)  # Виртуальный ID для ORM
+    Контрагент = db.Column(db.String(255))
+    Проект = db.Column(db.String(255))
+    СтатьяУровень1 = db.Column(db.String(255))
+    СтатьяУровень2 = db.Column(db.String(255))
+    СтатьяУровень3 = db.Column(db.String(255))
+    СтатьяУровень4 = db.Column(db.String(255))
+    год = db.Column(db.Integer)
+    сумма_итого = db.Column(db.Float)
+    
+    def __repr__(self):
+        return f'<ContragentSummaryView {self.Контрагент}: {self.сумма_итого}>'
+
+
+class FinancialFiltersView(db.Model):
+    """Модель для представления фильтров"""
+    __tablename__ = 'financial_filters_view'
+    __table_args__ = {'info': {'is_view': True}}
+    
+    id = db.Column(db.Integer, primary_key=True)  # Виртуальный ID для ORM
+    Проект = db.Column(db.String(255))
+    Распределение = db.Column(db.String(100))
+    год = db.Column(db.Integer)
+    
+    def __repr__(self):
+        return f'<FinancialFiltersView {self.Проект} {self.год}>'
