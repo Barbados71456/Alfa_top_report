@@ -267,6 +267,16 @@ def index():
             LEFT JOIN wallets w ON e.wallet_id = w.id
             ORDER BY e.date DESC
         ''')
+        expenses = cur.fetchall()
+        
+        # Подсчет сумм для админа (все записи)
+        cur.execute('''
+            SELECT 
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_out,
+                COALESCE(SUM(amount), 0) as total_balance
+            FROM expenses
+        ''')
     else:
         cur.execute('''
             SELECT e.*, u.username, s.name as sign_name, c.name as category_name,
@@ -284,8 +294,19 @@ def index():
             WHERE e.user_id = %s
             ORDER BY e.date DESC
         ''', (session['user_id'],))
+        expenses = cur.fetchall()
+        
+        # Подсчет сумм для конкретного пользователя
+        cur.execute('''
+            SELECT 
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_out,
+                COALESCE(SUM(amount), 0) as total_balance
+            FROM expenses
+            WHERE user_id = %s
+        ''', (session['user_id'],))
     
-    expenses = cur.fetchall()
+    totals = cur.fetchone()
     
     # Добавляем название месяца к каждой записи
     for expense in expenses:
@@ -294,7 +315,11 @@ def index():
     cur.close()
     conn.close()
     
-    return render_template('index.html', expenses=expenses)
+    return render_template('index.html', 
+                         expenses=expenses,
+                         total_in=totals['total_in'],
+                         total_out=totals['total_out'],
+                         total_balance=totals['total_balance'])
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -334,6 +359,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
+@admin_required  # Добавляем требование прав администратора
 def register():
     if request.method == 'POST':
         username = request.form['username']
@@ -348,8 +374,8 @@ def register():
                     (username, password)
                 )
                 conn.commit()
-                flash('Регистрация успешна. Войдите в систему.', 'success')
-                return redirect(url_for('login'))
+                flash(f'Пользователь {username} успешно создан', 'success')
+                return redirect(url_for('manage_users'))
             except psycopg2.IntegrityError:
                 conn.rollback()
                 flash('Пользователь с таким именем уже существует', 'danger')

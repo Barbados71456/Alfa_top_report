@@ -3,29 +3,36 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-table"></i> Список операций</h2>
-    <a href="{{ url_for('add_expense') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Добавить запись
-    </a>
+    <div>
+        <span class="me-3">
+            <span class="text-success fw-bold">IN: {{ "%.2f"|format(total_in) }} ₽</span>
+            <span class="text-danger fw-bold ms-2">OUT: {{ "%.2f"|format(total_out) }} ₽</span>
+            <span class="fw-bold ms-2">БАЛАНС: {{ "%.2f"|format(total_balance) }} ₽</span>
+        </span>
+        <a href="{{ url_for('add_expense') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Добавить запись
+        </a>
+    </div>
 </div>
 
 <div class="table-responsive">
     <table class="table table-striped table-hover">
         <thead>
             <tr>
-                <th>Дата</th>
-                <th>Год</th>
-                <th>Месяц</th>
-                <th>Признак</th>
-                <th>Категория</th>
-                <th>Статья</th>
-                <th>Проект</th>
-                <th>Контрагент</th>
-                <th>Тип кошелька</th>
-                <th>Кошелек</th>
-                <th>Сумма</th>
-                <th>Комментарии</th>
-                <th>P&L</th>
-                <th>Пользователь</th>
+                <th class="sortable" data-sort="date">Дата</th>
+                <th class="sortable" data-sort="year">Год</th>
+                <th class="sortable" data-sort="month">Месяц</th>
+                <th class="sortable" data-sort="sign">Признак</th>
+                <th class="sortable" data-sort="category">Категория</th>
+                <th class="sortable" data-sort="article">Статья</th>
+                <th class="sortable" data-sort="project">Проект</th>
+                <th class="sortable" data-sort="counterparty">Контрагент</th>
+                <th class="sortable" data-sort="wallet_type">Тип кошелька</th>
+                <th class="sortable" data-sort="wallet">Кошелек</th>
+                <th class="sortable" data-sort="amount">Сумма</th>
+                <th class="sortable" data-sort="comments">Комментарии</th>
+                <th class="sortable" data-sort="pl">P&L</th>
+                <th class="sortable" data-sort="user">Пользователь</th>
                 <th>Действия</th>
             </tr>
         </thead>
@@ -73,4 +80,56 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Сортировка таблицы
+    $('.sortable').click(function() {
+        var table = $(this).closest('table');
+        var tbody = table.find('tbody');
+        var rows = tbody.find('tr').toArray();
+        var index = $(this).index();
+        var isAsc = $(this).hasClass('asc');
+        
+        table.find('.sortable').removeClass('asc desc');
+        
+        if (isAsc) {
+            $(this).addClass('desc');
+        } else {
+            $(this).addClass('asc');
+        }
+        
+        rows.sort(function(a, b) {
+            var aValue = $(a).find('td').eq(index).text().trim();
+            var bValue = $(b).find('td').eq(index).text().trim();
+            
+            // Специальная обработка для суммы (убираем символ ₽ и пробелы)
+            if (index === 10) { // колонка суммы
+                aValue = parseFloat(aValue.replace('₽', '').replace(',', '.').trim());
+                bValue = parseFloat(bValue.replace('₽', '').replace(',', '.').trim());
+            }
+            // Для даты
+            else if (index === 0) {
+                aValue = new Date(aValue.split('.').reverse().join('-'));
+                bValue = new Date(bValue.split('.').reverse().join('-'));
+            }
+            // Для чисел
+            else if (!isNaN(parseFloat(aValue)) && !isNaN(parseFloat(bValue))) {
+                aValue = parseFloat(aValue);
+                bValue = parseFloat(bValue);
+            }
+            
+            if (isAsc) {
+                return aValue > bValue ? 1 : -1;
+            } else {
+                return aValue < bValue ? 1 : -1;
+            }
+        });
+        
+        tbody.empty().append(rows);
+    });
+});
+</script>
 {% endblock %}
