@@ -48,14 +48,19 @@
                     </td>
                     <td>{{ user.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                     <td>
-                        <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-warning">
-                            <i class="bi bi-pencil"></i> Изменить роль
+                        <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-warning" title="Изменить роль">
+                            <i class="bi bi-pencil"></i>
                         </a>
+                        <button type="button" class="btn btn-sm btn-info" title="Сбросить пароль" 
+                                onclick="resetPassword({{ user.id }}, '{{ user.username }}')">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
                         {% if user.id != session.user_id %}
                         <a href="{{ url_for('delete_user', user_id=user.id) }}" 
                            class="btn btn-sm btn-danger"
+                           title="Удалить пользователя"
                            onclick="return confirm('Вы уверены, что хотите удалить этого пользователя и все его записи?')">
-                            <i class="bi bi-trash"></i> Удалить
+                            <i class="bi bi-trash"></i>
                         </a>
                         {% endif %}
                     </td>
@@ -63,6 +68,40 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Модальное окно для сброса пароля -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> Сброс пароля</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('reset_password') }}" id="resetPasswordForm">
+                <div class="modal-body">
+                    <input type="hidden" name="user_id" id="reset_user_id">
+                    <p>Вы собираетесь сбросить пароль для пользователя <strong id="reset_username"></strong></p>
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">Новый пароль</label>
+                        <input type="password" class="form-control" id="reset_new_password" name="new_password" required minlength="6">
+                        <div class="form-text">Минимум 6 символов</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Подтверждение пароля</label>
+                        <input type="password" class="form-control" id="reset_confirm_password" name="confirm_password" required>
+                        <div class="invalid-feedback" id="resetPasswordMismatch" style="display: none;">
+                            Пароли не совпадают
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-info" id="resetSubmitBtn">Сбросить пароль</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -112,6 +151,52 @@ $(document).ready(function() {
             $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
         });
     });
+    
+    // Валидация в модальном окне
+    $('#reset_new_password, #reset_confirm_password').on('keyup', function() {
+        var newPassword = $('#reset_new_password').val();
+        var confirmPassword = $('#reset_confirm_password').val();
+        
+        if (confirmPassword.length > 0) {
+            if (newPassword === confirmPassword) {
+                $('#reset_confirm_password').removeClass('is-invalid').addClass('is-valid');
+                $('#resetPasswordMismatch').hide();
+                $('#resetSubmitBtn').prop('disabled', false);
+            } else {
+                $('#reset_confirm_password').removeClass('is-valid').addClass('is-invalid');
+                $('#resetPasswordMismatch').show();
+                $('#resetSubmitBtn').prop('disabled', true);
+            }
+        } else {
+            $('#reset_confirm_password').removeClass('is-valid is-invalid');
+            $('#resetPasswordMismatch').hide();
+            $('#resetSubmitBtn').prop('disabled', false);
+        }
+    });
+    
+    $('#reset_new_password').on('keyup', function() {
+        if ($(this).val().length < 6 && $(this).val().length > 0) {
+            $(this).removeClass('is-valid').addClass('is-invalid');
+        } else if ($(this).val().length >= 6) {
+            $(this).removeClass('is-invalid').addClass('is-valid');
+        } else {
+            $(this).removeClass('is-valid is-invalid');
+        }
+    });
 });
+
+// Функция для открытия модального окна сброса пароля
+function resetPassword(userId, username) {
+    $('#reset_user_id').val(userId);
+    $('#reset_username').text(username);
+    $('#reset_new_password').val('');
+    $('#reset_confirm_password').val('');
+    $('#reset_new_password, #reset_confirm_password').removeClass('is-valid is-invalid');
+    $('#resetPasswordMismatch').hide();
+    $('#resetSubmitBtn').prop('disabled', false);
+    
+    var modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+    modal.show();
+}
 </script>
 {% endblock %}
