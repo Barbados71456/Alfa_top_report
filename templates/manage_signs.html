@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-sign-turn-right"></i> Управление признаками</h2>
+<div class="d-flex justify-content-between align-items-center mb-5">
+    <h2 style="font-weight: 600; color: #1d1d1f;">
+        <i class="bi bi-sign-turn-right" style="color: #0071e3;"></i> Управление признаками
+    </h2>
     <div>
         <a href="{{ url_for('export_reference', ref_type='signs') }}" class="btn btn-success me-2">
             <i class="bi bi-download"></i> Экспорт
@@ -16,16 +18,19 @@
 <div class="row mb-4">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header">
                 <h5 class="mb-0">Добавить новый признак</h5>
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('add_sign') }}" class="row g-3">
                     <div class="col-md-8">
-                        <input type="text" class="form-control" name="name" placeholder="Название признака" required>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-tag"></i></span>
+                            <input type="text" class="form-control" name="name" placeholder="Название признака" required>
+                        </div>
                     </div>
                     <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary w-100">
                             <i class="bi bi-plus-circle"></i> Добавить
                         </button>
                     </div>
@@ -36,8 +41,8 @@
     
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">Импорт признаков из Excel</h5>
+            <div class="card-header" style="background: linear-gradient(135deg, #5ac8fa, #0071e3);">
+                <h5 class="mb-0 text-white">Импорт признаков из Excel</h5>
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('import_reference', ref_type='signs') }}" enctype="multipart/form-data" class="row g-3">
@@ -46,7 +51,7 @@
                         <small class="text-muted">Формат файла: колонка "Признак"</small>
                     </div>
                     <div class="col-md-4">
-                        <button type="submit" class="btn btn-info text-white">
+                        <button type="submit" class="btn btn-info text-white w-100">
                             <i class="bi bi-upload"></i> Импорт
                         </button>
                     </div>
@@ -59,44 +64,49 @@
 <div class="card">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Список признаков</h5>
+            <h5 class="mb-0 text-white">Список признаков</h5>
             <div class="input-group" style="width: 300px;">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                 <input type="text" class="form-control" id="tableSearch" placeholder="Поиск...">
             </div>
         </div>
     </div>
-    <div class="card-body">
-        <table class="table table-striped" id="dataTable">
-            <thead>
-                <tr>
-                    <th class="sortable" data-sort="id">ID</th>
-                    <th class="sortable" data-sort="name">Название</th>
-                    <th class="sortable" data-sort="categories">Количество категорий</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for sign in signs %}
-                <tr>
-                    <td>{{ sign.id }}</td>
-                    <td>{{ sign.name }}</td>
-                    <td>{{ sign.categories_count }}</td>
-                    <td>
-                        <a href="{{ url_for('delete_sign', sign_id=sign.id) }}" 
-                           class="btn btn-sm btn-danger"
-                           onclick="return confirm('Вы уверены, что хотите удалить этот признак?')">
-                            <i class="bi bi-trash"></i> Удалить
-                        </a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4" class="text-center">Нет признаков</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="dataTable">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="id">ID</th>
+                        <th class="sortable" data-sort="name">Название</th>
+                        <th class="sortable" data-sort="categories">Количество категорий</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sign in signs %}
+                    <tr>
+                        <td>{{ sign.id }}</td>
+                        <td>{{ sign.name }}</td>
+                        <td>{{ sign.categories_count }}</td>
+                        <td>
+                            <a href="{{ url_for('delete_sign', sign_id=sign.id) }}" 
+                               class="btn btn-sm btn-danger"
+                               onclick="return confirm('Вы уверены, что хотите удалить этот признак?')">
+                                <i class="bi bi-trash"></i> Удалить
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4" style="color: #86868b;">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Нет признаков</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -112,22 +122,18 @@ $(document).ready(function() {
         var index = $(this).index();
         var isAsc = $(this).hasClass('asc');
         
-        // Убираем классы сортировки у всех заголовков
         table.find('.sortable').removeClass('asc desc');
         
-        // Устанавливаем новый класс сортировки
         if (isAsc) {
             $(this).addClass('desc');
         } else {
             $(this).addClass('asc');
         }
         
-        // Сортируем строки
         rows.sort(function(a, b) {
             var aValue = $(a).find('td').eq(index).text().trim();
             var bValue = $(b).find('td').eq(index).text().trim();
             
-            // Проверяем, являются ли значения числами
             if (!isNaN(parseFloat(aValue)) && !isNaN(parseFloat(bValue))) {
                 aValue = parseFloat(aValue);
                 bValue = parseFloat(bValue);
@@ -140,7 +146,6 @@ $(document).ready(function() {
             }
         });
         
-        // Перестраиваем таблицу
         tbody.empty().append(rows);
     });
     

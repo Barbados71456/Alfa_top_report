@@ -4,20 +4,23 @@
 <div class="row justify-content-center">
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header">
                 <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Добавление новой записи</h4>
             </div>
             <div class="card-body">
                 <form method="POST" id="expenseForm">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="date" class="form-label">Дата *</label>
-                            <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-calendar"></i></span>
+                                <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                            </div>
                         </div>
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="sign_id" class="form-label">Признак *</label>
                             <select class="form-select" id="sign_id" name="sign_id" required>
                                 <option value="">Выберите признак</option>
@@ -27,7 +30,7 @@
                             </select>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="category_id" class="form-label">Категория *</label>
                             <select class="form-select" id="category_id" name="category_id" required disabled>
                                 <option value="">Сначала выберите признак</option>
@@ -36,14 +39,14 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="article_id" class="form-label">Статья *</label>
                             <select class="form-select" id="article_id" name="article_id" required disabled>
                                 <option value="">Сначала выберите категорию</option>
                             </select>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="project_id" class="form-label">Проект</label>
                             <select class="form-select" id="project_id" name="project_id">
                                 <option value="">Не выбрано</option>
@@ -55,7 +58,7 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="counterparty_id" class="form-label">Контрагент</label>
                             <select class="form-select" id="counterparty_id" name="counterparty_id">
                                 <option value="">Не выбрано</option>
@@ -65,7 +68,7 @@
                             </select>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="wallet_type_id" class="form-label">Тип кошелька</label>
                             <select class="form-select" id="wallet_type_id" name="wallet_type_id">
                                 <option value="">Не выбрано</option>
@@ -77,28 +80,31 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="wallet_id" class="form-label">Кошелек</label>
                             <select class="form-select" id="wallet_id" name="wallet_id" disabled>
                                 <option value="">Сначала выберите тип кошелька</option>
                             </select>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="amount" class="form-label">Сумма (руб) *</label>
-                            <input type="number" step="0.01" class="form-control" id="amount" name="amount" required>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-currency-ruble"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="amount" name="amount" required>
+                            </div>
                         </div>
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="comments" class="form-label">Комментарии</label>
-                            <textarea class="form-control" id="comments" name="comments" rows="3"></textarea>
+                            <textarea class="form-control" id="comments" name="comments" rows="3" placeholder="Введите комментарий..."></textarea>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-4">
                             <label for="pl" class="form-label">P&L</label>
-                            <input type="text" class="form-control" id="pl" name="pl">
+                            <input type="text" class="form-control" id="pl" name="pl" placeholder="PL1">
                         </div>
                     </div>
 

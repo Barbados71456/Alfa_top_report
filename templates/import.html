@@ -2,9 +2,9 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header">
                 <h4 class="mb-0"><i class="bi bi-file-earmark-excel"></i> Импорт записей из Excel</h4>
             </div>
             <div class="card-body">
@@ -33,7 +33,7 @@
                 </div>
 
                 <form method="POST" enctype="multipart/form-data" class="mt-4">
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label for="file" class="form-label">Выберите файл Excel (.xlsx, .xls) или CSV</label>
                         <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls,.csv" required>
                     </div>
@@ -48,87 +48,89 @@
                     </div>
                 </form>
 
-                <hr>
+                <hr class="my-4">
 
-                <h5>Структура файла:</h5>
-                <table class="table table-sm table-bordered">
-                    <thead>
-                        <tr>
-                            <th>Колонка</th>
-                            <th>Описание</th>
-                            <th>Обязательная</th>
-                            <th>Пример</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>date</code></td>
-                            <td>Дата операции</td>
-                            <td><span class="badge bg-danger">Да</span></td>
-                            <td>2024-01-15</td>
-                        </tr>
-                        <tr>
-                            <td><code>amount</code></td>
-                            <td>Сумма</td>
-                            <td><span class="badge bg-danger">Да</span></td>
-                            <td>1000.50 или -500.25</td>
-                        </tr>
-                        <tr>
-                            <td><code>sign</code></td>
-                            <td>Признак (IN/OUT) - если не указан, определяется по сумме</td>
-                            <td><span class="badge bg-warning">Опционально</span></td>
-                            <td>IN или OUT</td>
-                        </tr>
-                        <tr>
-                            <td><code>category</code></td>
-                            <td>Категория</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Доходы</td>
-                        </tr>
-                        <tr>
-                            <td><code>article</code></td>
-                            <td>Статья</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Зарплата</td>
-                        </tr>
-                        <tr>
-                            <td><code>project</code></td>
-                            <td>Проект</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Основной</td>
-                        </tr>
-                        <tr>
-                            <td><code>counterparty</code></td>
-                            <td>Контрагент</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Клиент 1</td>
-                        </tr>
-                        <tr>
-                            <td><code>wallet_type</code></td>
-                            <td>Тип кошелька</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Банковская карта</td>
-                        </tr>
-                        <tr>
-                            <td><code>wallet</code></td>
-                            <td>Кошелек</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Основная карта</td>
-                        </tr>
-                        <tr>
-                            <td><code>comments</code></td>
-                            <td>Комментарии</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>Зарплата за январь</td>
-                        </tr>
-                        <tr>
-                            <td><code>pl</code></td>
-                            <td>P&L</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>PL1</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <h5 style="color: #0071e3;">Структура файла:</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Колонка</th>
+                                <th>Описание</th>
+                                <th>Обязательная</th>
+                                <th>Пример</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>date</code></td>
+                                <td>Дата операции</td>
+                                <td><span class="badge bg-danger">Да</span></td>
+                                <td>2024-01-15</td>
+                            </tr>
+                            <tr>
+                                <td><code>amount</code></td>
+                                <td>Сумма</td>
+                                <td><span class="badge bg-danger">Да</span></td>
+                                <td>1000.50 или -500.25</td>
+                            </tr>
+                            <tr>
+                                <td><code>sign</code></td>
+                                <td>Признак (IN/OUT) - если не указан, определяется по сумме</td>
+                                <td><span class="badge bg-warning">Опционально</span></td>
+                                <td>IN или OUT</td>
+                            </tr>
+                            <tr>
+                                <td><code>category</code></td>
+                                <td>Категория</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Доходы</td>
+                            </tr>
+                            <tr>
+                                <td><code>article</code></td>
+                                <td>Статья</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Зарплата</td>
+                            </tr>
+                            <tr>
+                                <td><code>project</code></td>
+                                <td>Проект</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Основной</td>
+                            </tr>
+                            <tr>
+                                <td><code>counterparty</code></td>
+                                <td>Контрагент</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Клиент 1</td>
+                            </tr>
+                            <tr>
+                                <td><code>wallet_type</code></td>
+                                <td>Тип кошелька</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Банковская карта</td>
+                            </tr>
+                            <tr>
+                                <td><code>wallet</code></td>
+                                <td>Кошелек</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Основная карта</td>
+                            </tr>
+                            <tr>
+                                <td><code>comments</code></td>
+                                <td>Комментарии</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>Зарплата за январь</td>
+                            </tr>
+                            <tr>
+                                <td><code>pl</code></td>
+                                <td>P&L</td>
+                                <td><span class="badge bg-secondary">Нет</span></td>
+                                <td>PL1</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

@@ -1,84 +1,99 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-table"></i> Список операций</h2>
-    <div>
-        <span class="me-3">
-            <span class="text-success fw-bold">IN: {{ "%.2f"|format(total_in) }} ₽</span>
-            <span class="text-danger fw-bold ms-2">OUT: {{ "%.2f"|format(total_out) }} ₽</span>
-            <span class="fw-bold ms-2">БАЛАНС: {{ "%.2f"|format(total_balance) }} ₽</span>
-        </span>
+<div class="d-flex justify-content-between align-items-center mb-5">
+    <h2 style="font-weight: 600; color: #1d1d1f;">
+        <i class="bi bi-table" style="color: #0071e3;"></i> Список операций
+    </h2>
+    <div class="d-flex align-items-center">
+        <div class="balance-stats me-4">
+            <span class="text-success me-3">
+                <i class="bi bi-arrow-up-circle-fill"></i> IN: {{ "%.2f"|format(total_in) }} ₽
+            </span>
+            <span class="text-danger me-3">
+                <i class="bi bi-arrow-down-circle-fill"></i> OUT: {{ "%.2f"|format(total_out) }} ₽
+            </span>
+            <span style="color: #0071e3; font-weight: 700;">
+                <i class="bi bi-pie-chart-fill"></i> БАЛАНС: {{ "%.2f"|format(total_balance) }} ₽
+            </span>
+        </div>
         <a href="{{ url_for('add_expense') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> Добавить запись
         </a>
     </div>
 </div>
 
-<div class="table-responsive">
-    <table class="table table-striped table-hover">
-        <thead>
-            <tr>
-                <th class="sortable" data-sort="date">Дата</th>
-                <th class="sortable" data-sort="year">Год</th>
-                <th class="sortable" data-sort="month">Месяц</th>
-                <th class="sortable" data-sort="sign">Признак</th>
-                <th class="sortable" data-sort="category">Категория</th>
-                <th class="sortable" data-sort="article">Статья</th>
-                <th class="sortable" data-sort="project">Проект</th>
-                <th class="sortable" data-sort="counterparty">Контрагент</th>
-                <th class="sortable" data-sort="wallet_type">Тип кошелька</th>
-                <th class="sortable" data-sort="wallet">Кошелек</th>
-                <th class="sortable" data-sort="amount">Сумма</th>
-                <th class="sortable" data-sort="comments">Комментарии</th>
-                <th class="sortable" data-sort="pl">P&L</th>
-                <th class="sortable" data-sort="user">Пользователь</th>
-                <th>Действия</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for expense in expenses %}
-            <tr>
-                <td>{{ expense.date.strftime('%d.%m.%Y') }}</td>
-                <td>{{ expense.year }}</td>
-                <td>{{ expense.month_name }}</td>
-                <td>
-                    {% if expense.sign_name == 'IN' %}
-                    <span class="badge bg-success">IN</span>
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="date">Дата</th>
+                        <th class="sortable" data-sort="year">Год</th>
+                        <th class="sortable" data-sort="month">Месяц</th>
+                        <th class="sortable" data-sort="sign">Признак</th>
+                        <th class="sortable" data-sort="category">Категория</th>
+                        <th class="sortable" data-sort="article">Статья</th>
+                        <th class="sortable" data-sort="project">Проект</th>
+                        <th class="sortable" data-sort="counterparty">Контрагент</th>
+                        <th class="sortable" data-sort="wallet_type">Тип кошелька</th>
+                        <th class="sortable" data-sort="wallet">Кошелек</th>
+                        <th class="sortable" data-sort="amount">Сумма</th>
+                        <th class="sortable" data-sort="comments">Комментарии</th>
+                        <th class="sortable" data-sort="pl">P&L</th>
+                        <th class="sortable" data-sort="user">Пользователь</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in expenses %}
+                    <tr>
+                        <td>{{ expense.date.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ expense.year }}</td>
+                        <td>{{ expense.month_name }}</td>
+                        <td>
+                            {% if expense.sign_name == 'IN' %}
+                            <span class="badge bg-success">IN</span>
+                            {% else %}
+                            <span class="badge bg-danger">OUT</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ expense.category_name or '-' }}</td>
+                        <td>{{ expense.article_name or '-' }}</td>
+                        <td>{{ expense.project_name or '-' }}</td>
+                        <td>{{ expense.counterparty_name or '-' }}</td>
+                        <td>{{ expense.wallet_type_name or '-' }}</td>
+                        <td>{{ expense.wallet_name or '-' }}</td>
+                        <td class="{% if expense.amount > 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                            {{ "%.2f"|format(expense.amount) }} ₽
+                        </td>
+                        <td>{{ expense.comments or '-' }}</td>
+                        <td>{{ expense.pl or '-' }}</td>
+                        <td>{{ expense.username }}</td>
+                        <td>
+                            <a href="{{ url_for('edit_expense', expense_id=expense.id) }}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <a href="{{ url_for('delete_expense', expense_id=expense.id) }}" 
+                               class="btn btn-sm btn-danger"
+                               onclick="return confirm('Вы уверены, что хотите удалить эту запись?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
                     {% else %}
-                    <span class="badge bg-danger">OUT</span>
-                    {% endif %}
-                </td>
-                <td>{{ expense.category_name or '-' }}</td>
-                <td>{{ expense.article_name or '-' }}</td>
-                <td>{{ expense.project_name or '-' }}</td>
-                <td>{{ expense.counterparty_name or '-' }}</td>
-                <td>{{ expense.wallet_type_name or '-' }}</td>
-                <td>{{ expense.wallet_name or '-' }}</td>
-                <td class="{% if expense.amount > 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
-                    {{ "%.2f"|format(expense.amount) }} ₽
-                </td>
-                <td>{{ expense.comments or '-' }}</td>
-                <td>{{ expense.pl or '-' }}</td>
-                <td>{{ expense.username }}</td>
-                <td>
-                    <a href="{{ url_for('edit_expense', expense_id=expense.id) }}" class="btn btn-sm btn-warning">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                    <a href="{{ url_for('delete_expense', expense_id=expense.id) }}" 
-                       class="btn btn-sm btn-danger"
-                       onclick="return confirm('Вы уверены, что хотите удалить эту запись?')">
-                        <i class="bi bi-trash"></i>
-                    </a>
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="15" class="text-center">Нет записей</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    <tr>
+                        <td colspan="15" class="text-center py-4" style="color: #86868b;">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Нет записей</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
 

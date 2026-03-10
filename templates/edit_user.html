@@ -2,19 +2,22 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-md-6 col-lg-5">
         <div class="card">
-            <div class="card-header bg-warning">
+            <div class="card-header text-center">
                 <h4 class="mb-0"><i class="bi bi-pencil"></i> Редактирование пользователя</h4>
             </div>
             <div class="card-body">
                 <form method="POST">
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label">Имя пользователя</label>
-                        <input type="text" class="form-control" value="{{ user.username }}" readonly disabled>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control" value="{{ user.username }}" readonly disabled>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label for="role" class="form-label">Роль</label>
                         <select class="form-select" id="role" name="role">
                             <option value="user" {% if user.role == 'user' %}selected{% endif %}>Пользователь</option>
@@ -22,8 +25,8 @@
                         </select>
                     </div>
                     
-                    <div class="text-end">
-                        <button type="submit" class="btn btn-warning">
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">
                             <i class="bi bi-save"></i> Сохранить
                         </button>
                         <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
