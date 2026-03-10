@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="form-container">
+<div class="container py-4">
     <div class="row justify-content-center">
         <div class="col-12 col-lg-10 col-xl-8">
-            <div class="card fullscreen-form">
+            <div class="card">
                 <div class="card-header">
                     <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Добавление новой записи</h4>
                 </div>
                 <div class="card-body">
                     <form method="POST" id="expenseForm">
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Дата -->
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6">
                                 <label for="date" class="form-label">Дата *</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="bi bi-calendar"></i></span>
@@ -20,8 +21,9 @@
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Признак и Категория -->
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6 mb-3 mb-md-0">
                                 <label for="sign_id" class="form-label">Признак *</label>
                                 <select class="form-select" id="sign_id" name="sign_id" required>
                                     <option value="">Выберите признак</option>
@@ -31,7 +33,7 @@
                                 </select>
                             </div>
                             
-                            <div class="col-md-6 mb-4">
+                            <div class="col-12 col-md-6">
                                 <label for="category_id" class="form-label">Категория *</label>
                                 <select class="form-select" id="category_id" name="category_id" required disabled>
                                     <option value="">Сначала выберите признак</option>
@@ -39,15 +41,16 @@
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Статья и Проект -->
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6 mb-3 mb-md-0">
                                 <label for="article_id" class="form-label">Статья *</label>
                                 <select class="form-select" id="article_id" name="article_id" required disabled>
                                     <option value="">Сначала выберите категорию</option>
                                 </select>
                             </div>
                             
-                            <div class="col-md-6 mb-4">
+                            <div class="col-12 col-md-6">
                                 <label for="project_id" class="form-label">Проект</label>
                                 <select class="form-select" id="project_id" name="project_id">
                                     <option value="">Не выбрано</option>
@@ -58,8 +61,9 @@
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Контрагент и Тип кошелька -->
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6 mb-3 mb-md-0">
                                 <label for="counterparty_id" class="form-label">Контрагент</label>
                                 <select class="form-select" id="counterparty_id" name="counterparty_id">
                                     <option value="">Не выбрано</option>
@@ -69,7 +73,7 @@
                                 </select>
                             </div>
                             
-                            <div class="col-md-6 mb-4">
+                            <div class="col-12 col-md-6">
                                 <label for="wallet_type_id" class="form-label">Тип кошелька</label>
                                 <select class="form-select" id="wallet_type_id" name="wallet_type_id">
                                     <option value="">Не выбрано</option>
@@ -80,15 +84,16 @@
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Кошелек и Сумма -->
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6 mb-3 mb-md-0">
                                 <label for="wallet_id" class="form-label">Кошелек</label>
                                 <select class="form-select" id="wallet_id" name="wallet_id" disabled>
                                     <option value="">Сначала выберите тип кошелька</option>
                                 </select>
                             </div>
                             
-                            <div class="col-md-6 mb-4">
+                            <div class="col-12 col-md-6">
                                 <label for="amount" class="form-label">Сумма (руб) *</label>
                                 <div class="input-group">
                                     <span class="input-group-text"><i class="bi bi-currency-ruble"></i></span>
@@ -97,25 +102,29 @@
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
+                        <!-- Комментарии и P&L -->
+                        <div class="row mb-4">
+                            <div class="col-12 col-md-6 mb-3 mb-md-0">
                                 <label for="comments" class="form-label">Комментарии</label>
                                 <textarea class="form-control" id="comments" name="comments" rows="3" placeholder="Введите комментарий..."></textarea>
                             </div>
                             
-                            <div class="col-md-6 mb-4">
+                            <div class="col-12 col-md-6">
                                 <label for="pl" class="form-label">P&L</label>
                                 <input type="text" class="form-control" id="pl" name="pl" placeholder="PL1">
                             </div>
                         </div>
 
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-save"></i> Сохранить
-                            </button>
-                            <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                                <i class="bi bi-x-circle"></i> Отмена
-                            </a>
+                        <!-- Кнопки -->
+                        <div class="row">
+                            <div class="col-12 d-flex justify-content-end gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Сохранить
+                                </button>
+                                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                                    <i class="bi bi-x-circle"></i> Отмена
+                                </a>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -123,12 +132,59 @@
         </div>
     </div>
 </div>
+
+<style>
+/* Специально для формы добавления */
+@media (min-width: 992px) {
+    .container.py-4 {
+        max-width: 1200px;
+    }
+    
+    .card-body {
+        padding: 2rem;
+    }
+    
+    .form-label {
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .input-group-text, .form-control, .form-select {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    .form-label {
+        font-size: 0.95rem;
+    }
+    
+    .input-group-text, .form-control, .form-select {
+        font-size: 16px; /* предотвращает зум на iOS */
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .d-flex.justify-content-end {
+        flex-direction: column;
+    }
+    
+    .d-flex.justify-content-end .btn {
+        width: 100%;
+        margin: 0.25rem 0;
+    }
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script>
 $(document).ready(function() {
-    // Инициализируем Select2 для всех select
+    // Инициализация Select2 с правильным z-index
     $('#sign_id, #project_id, #counterparty_id, #wallet_type_id').select2({
         theme: 'bootstrap-5',
         language: 'ru',
@@ -137,10 +193,11 @@ $(document).ready(function() {
             return $(this).find('option:first').text();
         },
         allowClear: true,
-        dropdownParent: $('#sign_id, #project_id, #counterparty_id, #wallet_type_id').parent()
+        dropdownParent: $('body'), // Важно! Прикрепляем к body для правильного отображения
+        dropdownCssClass: 'select2-dropdown--above' // Убеждаемся что дропдаун сверху
     });
     
-    // Load categories when sign changes
+    // Загрузка категорий при выборе признака
     $('#sign_id').change(function() {
         var signId = $(this).val();
         if (signId) {
@@ -158,7 +215,7 @@ $(document).ready(function() {
                     width: '100%',
                     placeholder: 'Выберите категорию',
                     allowClear: true,
-                    dropdownParent: categorySelect.parent()
+                    dropdownParent: $('body')
                 });
             });
         } else {
@@ -173,7 +230,7 @@ $(document).ready(function() {
         }
     });
     
-    // Load articles when category changes
+    // Загрузка статей при выборе категории
     $('#category_id').change(function() {
         var categoryId = $(this).val();
         if (categoryId) {
@@ -191,7 +248,7 @@ $(document).ready(function() {
                     width: '100%',
                     placeholder: 'Выберите статью',
                     allowClear: true,
-                    dropdownParent: articleSelect.parent()
+                    dropdownParent: $('body')
                 });
             });
         } else {
@@ -202,7 +259,7 @@ $(document).ready(function() {
         }
     });
     
-    // Load wallets when wallet type changes
+    // Загрузка кошельков при выборе типа
     $('#wallet_type_id').change(function() {
         var walletTypeId = $(this).val();
         if (walletTypeId) {
@@ -220,7 +277,7 @@ $(document).ready(function() {
                     width: '100%',
                     placeholder: 'Выберите кошелек',
                     allowClear: true,
-                    dropdownParent: walletSelect.parent()
+                    dropdownParent: $('body')
                 });
             });
         } else {
