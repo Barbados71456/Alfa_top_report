@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Добавление новой записи</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="expenseForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="date" class="form-label">Дата *</label>
+                            <input type="date" class="form-control" id="date" name="date" value="{{ today }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="sign_id" class="form-label">Признак *</label>
+                            <select class="form-select" id="sign_id" name="sign_id" required>
+                                <option value="">Выберите признак</option>
+                                {% for sign in signs %}
+                                <option value="{{ sign.id }}">{{ sign.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="category_id" class="form-label">Категория *</label>
+                            <select class="form-select" id="category_id" name="category_id" required disabled>
+                                <option value="">Сначала выберите признак</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="article_id" class="form-label">Статья *</label>
+                            <select class="form-select" id="article_id" name="article_id" required disabled>
+                                <option value="">Сначала выберите категорию</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="project_id" class="form-label">Проект</label>
+                            <select class="form-select" id="project_id" name="project_id">
+                                <option value="">Не выбрано</option>
+                                {% for project in projects %}
+                                <option value="{{ project.id }}">{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="counterparty_id" class="form-label">Контрагент</label>
+                            <select class="form-select" id="counterparty_id" name="counterparty_id">
+                                <option value="">Не выбрано</option>
+                                {% for counterparty in counterparties %}
+                                <option value="{{ counterparty.id }}">{{ counterparty.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="wallet_type_id" class="form-label">Тип кошелька</label>
+                            <select class="form-select" id="wallet_type_id" name="wallet_type_id">
+                                <option value="">Не выбрано</option>
+                                {% for wt in wallet_types %}
+                                <option value="{{ wt.id }}">{{ wt.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="wallet_id" class="form-label">Кошелек</label>
+                            <select class="form-select" id="wallet_id" name="wallet_id" disabled>
+                                <option value="">Сначала выберите тип кошелька</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="amount" class="form-label">Сумма (руб) *</label>
+                            <input type="number" step="0.01" class="form-control" id="amount" name="amount" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="comments" class="form-label">Комментарии</label>
+                            <textarea class="form-control" id="comments" name="comments" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="pl" class="form-label">P&L</label>
+                            <input type="text" class="form-control" id="pl" name="pl">
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Сохранить
+                        </button>
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Отмена
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Load categories when sign changes
+    $('#sign_id').change(function() {
+        var signId = $(this).val();
+        if (signId) {
+            $.get('/get_categories/' + signId, function(data) {
+                var categorySelect = $('#category_id');
+                categorySelect.empty();
+                categorySelect.append('<option value="">Выберите категорию</option>');
+                $.each(data.categories, function(index, category) {
+                    categorySelect.append('<option value="' + category.id + '">' + category.name + '</option>');
+                });
+                categorySelect.prop('disabled', false);
+            });
+        } else {
+            $('#category_id').empty().append('<option value="">Сначала выберите признак</option>').prop('disabled', true);
+            $('#article_id').empty().append('<option value="">Сначала выберите категорию</option>').prop('disabled', true);
+        }
+    });
+    
+    // Load articles when category changes
+    $('#category_id').change(function() {
+        var categoryId = $(this).val();
+        if (categoryId) {
+            $.get('/get_articles/' + categoryId, function(data) {
+                var articleSelect = $('#article_id');
+                articleSelect.empty();
+                articleSelect.append('<option value="">Выберите статью</option>');
+                $.each(data.articles, function(index, article) {
+                    articleSelect.append('<option value="' + article.id + '">' + article.name + '</option>');
+                });
+                articleSelect.prop('disabled', false);
+            });
+        } else {
+            $('#article_id').empty().append('<option value="">Сначала выберите категорию</option>').prop('disabled', true);
+        }
+    });
+    
+    // Load wallets when wallet type changes
+    $('#wallet_type_id').change(function() {
+        var walletTypeId = $(this).val();
+        if (walletTypeId) {
+            $.get('/get_wallets/' + walletTypeId, function(data) {
+                var walletSelect = $('#wallet_id');
+                walletSelect.empty();
+                walletSelect.append('<option value="">Выберите кошелек</option>');
+                $.each(data.wallets, function(index, wallet) {
+                    walletSelect.append('<option value="' + wallet.id + '">' + wallet.name + '</option>');
+                });
+                walletSelect.prop('disabled', false);
+            });
+        } else {
+            $('#wallet_id').empty().append('<option value="">Сначала выберите тип кошелька</option>').prop('disabled', true);
+        }
+    });
+});
+</script>
+{% endblock %}

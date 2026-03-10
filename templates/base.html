@@ -3,139 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Аналитика финансов{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    {% block head_extra %}{% endblock %}
+    <title>Учет затрат</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: #f8f9fa;
+        }
+        .table th {
+            background-color: #f8f9fa;
+        }
+        .btn-group-sm > .btn, .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+    </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="apple-header">
-        <div class="header-container">
-            <div class="logo">
-                <i class="fas fa-chart-line"></i>
-                <span>Finance Analytics</span>
-            </div>
-            
-            <nav class="main-nav">
-                <a href="{{ url_for('index') }}" class="nav-item {% if request.path == '/' %}active{% endif %}">
-                    <i class="fas fa-home"></i>
-                    <span>Главная</span>
-                </a>
-                <a href="{{ url_for('report1') }}" class="nav-item {% if request.path == '/report1' %}active{% endif %}">
-                    <i class="fas fa-project-diagram"></i>
-                    <span>Оценка эффективности по выбранным проектам</span>
-                </a>
-                <a href="{{ url_for('report2') }}" class="nav-item {% if request.path == '/report2' %}active{% endif %}">
-                    <i class="fas fa-table"></i>
-                    <span>Итоговая эффективность по всем проектам</span>
-                </a>
-                <a href="{{ url_for('report3') }}" class="nav-item {% if request.path == '/report3' %}active{% endif %}">
-                    <i class="fas fa-sun"></i>
-                    <span>Анализ эффективности по проектам</span>
-                </a>
-            </nav>
-            
-            <div class="user-menu">
-                {% if current_user.is_authenticated %}
-                <div class="dropdown">
-                    <button class="user-btn">
-                        <i class="fas fa-user-circle"></i>
-                        <span>{{ current_user.username }}</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                    <div class="dropdown-content">
-                        {% if current_user.is_admin() %}
-                        <div class="admin-section">
-                            <h4>Администрирование</h4>
-                            <form id="addUserForm" class="admin-form">
-                                <input type="text" name="username" placeholder="Имя пользователя" required>
-                                <input type="password" name="password" placeholder="Пароль" required>
-                                <input type="email" name="email" placeholder="Email">
-                                <select name="role">
-                                    <option value="user">Пользователь</option>
-                                    <option value="admin">Администратор</option>
-                                </select>
-                                <button type="submit" class="btn-add">
-                                    <i class="fas fa-user-plus"></i> Добавить
-                                </button>
-                            </form>
-                        </div>
-                        {% endif %}
-                        <a href="{{ url_for('auth.logout') }}" class="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Выйти
-                        </a>
-                    </div>
-                </div>
-                {% else %}
-                <a href="{{ url_for('auth.login') }}" class="login-btn">
-                    <i class="fas fa-sign-in-alt"></i> Войти
-                </a>
-                {% endif %}
-            </div>
-            
-            <button class="mobile-menu-btn">
-                <i class="fas fa-bars"></i>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-wallet2"></i> Учет затрат
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
             </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="bi bi-house-door"></i> Главная
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('add_expense') }}">
+                            <i class="bi bi-plus-circle"></i> Добавить запись
+                        </a>
+                    </li>
+                    {% if session.role == 'admin' %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Администрирование
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('manage_periods') }}">
+                                <i class="bi bi-calendar-range"></i> Управление периодами
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_users') }}">
+                                <i class="bi bi-people"></i> Управление пользователями
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <span class="nav-link text-light">
+                            <i class="bi bi-person-circle"></i> {{ session.username }} ({{ session.role }})
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right"></i> Выход
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
-    </header>
+    </nav>
 
-    <!-- Mobile Menu -->
-    <div class="mobile-menu">
-        <a href="{{ url_for('index') }}" class="mobile-nav-item">
-            <i class="fas fa-home"></i> Главная
-        </a>
-        <a href="{{ url_for('report1') }}" class="mobile-nav-item">
-            <i class="fas fa-project-diagram"></i> Оценка эффективности по выбранным проектам
-        </a>
-        <a href="{{ url_for('report2') }}" class="mobile-nav-item">
-            <i class="fas fa-table"></i> Итоговая эффективность по всем проектам
-        </a>
-        <a href="{{ url_for('report3') }}" class="mobile-nav-item">
-            <i class="fas fa-sun"></i> Анализ эффективности по проектам
-        </a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('auth.logout') }}" class="mobile-nav-item logout">
-            <i class="fas fa-sign-out-alt"></i> Выйти
-        </a>
-        {% endif %}
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
     </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="container">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <i class="fas fa-{% if category == 'success' %}check-circle{% else %}exclamation-circle{% endif %}"></i>
-                        {{ message }}
-                        <button class="alert-close">&times;</button>
-                    </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            
-            {% block content %}{% endblock %}
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="apple-footer">
-        <div class="footer-container">
-            <div class="footer-info">
-                <p>&copy; 2024 Finance Analytics. Все права защищены.</p>
-                <p>Данные обновляются ежедневно в 00:00</p>
-            </div>
-            <div class="footer-stats">
-                <span id="data-update-time">Обновлено: --:--</span>
-                <span id="online-users">Онлайн: 1</span>
-            </div>
+    <footer class="footer">
+        <div class="container text-center">
+            <span class="text-muted">Система учета затрат &copy; 2024</span>
         </div>
     </footer>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
