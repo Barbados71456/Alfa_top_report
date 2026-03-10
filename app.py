@@ -1337,6 +1337,231 @@ def export_reference(ref_type):
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
+# ==================== ИМПОРТ СПРАВОЧНИКОВ ====================
+
+@app.route('/admin/references/import/<string:ref_type>', methods=['POST'])
+@admin_required
+def import_reference(ref_type):
+    """Импорт справочника из Excel"""
+    if 'file' not in request.files:
+        flash('Файл не выбран', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('Файл не выбран', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls)', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    try:
+        # Читаем файл
+        df = pd.read_excel(file)
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        successful = 0
+        errors = []
+        
+        if ref_type == 'signs':
+            # Ожидаемые колонки: Признак
+            if 'Признак' not in df.columns:
+                flash('В файле отсутствует колонка "Признак"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Признак']
+                    cur.execute(
+                        "INSERT INTO signs (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано признаков: {successful}', 'success')
+            
+        elif ref_type == 'categories':
+            # Ожидаемые колонки: Категория, Признак
+            if 'Категория' not in df.columns or 'Признак' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Категория", "Признак")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем словарь признаков
+            cur.execute("SELECT id, name FROM signs")
+            signs = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Категория']
+                    sign_name = row['Признак']
+                    
+                    if sign_name not in signs:
+                        errors.append(f"Строка {index + 2}: Признак '{sign_name}' не найден")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO categories (name, sign_id) VALUES (%s, %s) ON CONFLICT (name, sign_id) DO NOTHING",
+                        (name, signs[sign_name])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано категорий: {successful}', 'success')
+            
+        elif ref_type == 'articles':
+            # Ожидаемые колонки: Статья, Категория, Признак
+            if 'Статья' not in df.columns or 'Категория' not in df.columns or 'Признак' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Статья", "Категория", "Признак")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем соответствия категорий
+            cur.execute("""
+                SELECT c.id, c.name, s.name as sign_name 
+                FROM categories c
+                JOIN signs s ON c.sign_id = s.id
+            """)
+            categories = {(row['name'], row['sign_name']): row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Статья']
+                    category_name = row['Категория']
+                    sign_name = row['Признак']
+                    
+                    category_key = (category_name, sign_name)
+                    if category_key not in categories:
+                        errors.append(f"Строка {index + 2}: Категория '{category_name}' с признаком '{sign_name}' не найдена")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO articles (name, category_id) VALUES (%s, %s) ON CONFLICT (name, category_id) DO NOTHING",
+                        (name, categories[category_key])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано статей: {successful}', 'success')
+            
+        elif ref_type == 'projects':
+            # Ожидаемые колонки: Проект
+            if 'Проект' not in df.columns:
+                flash('В файле отсутствует колонка "Проект"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Проект']
+                    cur.execute(
+                        "INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано проектов: {successful}', 'success')
+            
+        elif ref_type == 'counterparties':
+            # Ожидаемые колонки: Контрагент
+            if 'Контрагент' not in df.columns:
+                flash('В файле отсутствует колонка "Контрагент"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Контрагент']
+                    cur.execute(
+                        "INSERT INTO counterparties (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано контрагентов: {successful}', 'success')
+            
+        elif ref_type == 'wallet_types':
+            # Ожидаемые колонки: Тип кошелька
+            if 'Тип кошелька' not in df.columns:
+                flash('В файле отсутствует колонка "Тип кошелька"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Тип кошелька']
+                    cur.execute(
+                        "INSERT INTO wallet_types (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано типов кошельков: {successful}', 'success')
+            
+        elif ref_type == 'wallets':
+            # Ожидаемые колонки: Кошелек, Тип кошелька
+            if 'Кошелек' not in df.columns or 'Тип кошелька' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Кошелек", "Тип кошелька")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем словарь типов кошельков
+            cur.execute("SELECT id, name FROM wallet_types")
+            wallet_types = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Кошелек']
+                    wallet_type_name = row['Тип кошелька']
+                    
+                    if wallet_type_name not in wallet_types:
+                        errors.append(f"Строка {index + 2}: Тип кошелька '{wallet_type_name}' не найден")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO wallets (name, wallet_type_id) VALUES (%s, %s) ON CONFLICT (name, wallet_type_id) DO NOTHING",
+                        (name, wallet_types[wallet_type_name])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано кошельков: {successful}', 'success')
+        
+        else:
+            flash('Неизвестный тип справочника', 'danger')
+            return redirect(url_for('manage_references'))
+        
+        conn.commit()
+        
+        if errors:
+            for error in errors[:5]:
+                flash(error, 'warning')
+                print(error)
+        
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+        print(f"Import reference error: {e}")
+    
+    return redirect(request.referrer or url_for('manage_references'))
+
 @app.route('/download_template')
 @login_required
 def download_template():

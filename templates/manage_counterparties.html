@@ -13,21 +13,46 @@
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header bg-secondary text-white">
-        <h5 class="mb-0">Добавить нового контрагента</h5>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">Добавить нового контрагента</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_counterparty') }}" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="text" class="form-control" name="name" placeholder="Название контрагента" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="bi bi-plus-circle"></i> Добавить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="POST" action="{{ url_for('add_counterparty') }}" class="row g-3">
-            <div class="col-md-8">
-                <input type="text" class="form-control" name="name" placeholder="Название контрагента" required>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Импорт контрагентов из Excel</h5>
             </div>
-            <div class="col-md-4">
-                <button type="submit" class="btn btn-secondary">
-                    <i class="bi bi-plus-circle"></i> Добавить
-                </button>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('import_reference', ref_type='counterparties') }}" enctype="multipart/form-data" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls" required>
+                        <small class="text-muted">Формат файла: колонка "Контрагент"</small>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-info text-white">
+                            <i class="bi bi-upload"></i> Импорт
+                        </button>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 

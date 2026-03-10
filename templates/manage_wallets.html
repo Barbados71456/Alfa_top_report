@@ -13,29 +13,54 @@
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header" style="background-color: #6f42c1; color: white;">
-        <h5 class="mb-0">Добавить новый кошелек</h5>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background-color: #6f42c1; color: white;">
+                <h5 class="mb-0">Добавить новый кошелек</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_wallet') }}" class="row g-3">
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" name="name" placeholder="Название кошелька" required>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" name="wallet_type_id" required>
+                            <option value="">Выберите тип кошелька</option>
+                            {% for wt in wallet_types %}
+                            <option value="{{ wt.id }}">{{ wt.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn" style="background-color: #6f42c1; color: white;">
+                            <i class="bi bi-plus-circle"></i> Добавить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="POST" action="{{ url_for('add_wallet') }}" class="row g-3">
-            <div class="col-md-5">
-                <input type="text" class="form-control" name="name" placeholder="Название кошелька" required>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Импорт кошельков из Excel</h5>
             </div>
-            <div class="col-md-4">
-                <select class="form-select" name="wallet_type_id" required>
-                    <option value="">Выберите тип кошелька</option>
-                    {% for wt in wallet_types %}
-                    <option value="{{ wt.id }}">{{ wt.name }}</option>
-                    {% endfor %}
-                </select>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('import_reference', ref_type='wallets') }}" enctype="multipart/form-data" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls" required>
+                        <small class="text-muted">Формат файла: колонки "Кошелек", "Тип кошелька"</small>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-info text-white">
+                            <i class="bi bi-upload"></i> Импорт
+                        </button>
+                    </div>
+                </form>
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn" style="background-color: #6f42c1; color: white;">
-                    <i class="bi bi-plus-circle"></i> Добавить
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 

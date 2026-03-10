@@ -13,29 +13,54 @@
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header bg-success text-white">
-        <h5 class="mb-0">Добавить новую категорию</h5>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Добавить новую категорию</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_category') }}" class="row g-3">
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" name="name" placeholder="Название категории" required>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" name="sign_id" required>
+                            <option value="">Выберите признак</option>
+                            {% for sign in signs %}
+                            <option value="{{ sign.id }}">{{ sign.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-plus-circle"></i> Добавить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="POST" action="{{ url_for('add_category') }}" class="row g-3">
-            <div class="col-md-5">
-                <input type="text" class="form-control" name="name" placeholder="Название категории" required>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Импорт категорий из Excel</h5>
             </div>
-            <div class="col-md-4">
-                <select class="form-select" name="sign_id" required>
-                    <option value="">Выберите признак</option>
-                    {% for sign in signs %}
-                    <option value="{{ sign.id }}">{{ sign.name }}</option>
-                    {% endfor %}
-                </select>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('import_reference', ref_type='categories') }}" enctype="multipart/form-data" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls" required>
+                        <small class="text-muted">Формат файла: колонки "Категория", "Признак"</small>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-info text-white">
+                            <i class="bi bi-upload"></i> Импорт
+                        </button>
+                    </div>
+                </form>
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-success">
-                    <i class="bi bi-plus-circle"></i> Добавить
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 
