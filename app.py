@@ -43,12 +43,12 @@ def init_db():
         conn = get_db()
         cur = conn.cursor()
         
-        # Create users table
+        # Create users table with password_hash instead of password
         cur.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
-                password VARCHAR(200) NOT NULL,
+                password_hash VARCHAR(200) NOT NULL,
                 role VARCHAR(20) DEFAULT 'user',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -148,12 +148,14 @@ def init_db():
         
         # Insert default data if not exists
         cur.execute("SELECT COUNT(*) FROM users")
-        if cur.fetchone()['count'] == 0:
+        user_count = cur.fetchone()['count']
+        if user_count == 0:
             admin_password = hashlib.sha256(os.environ.get('ADMIN_PASSWORD', 'admin123').encode()).hexdigest()
             cur.execute(
-                "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
                 (os.environ.get('ADMIN_USERNAME', 'admin'), admin_password, 'admin')
             )
+            print("Создан пользователь admin")
         
         # Insert default reference data
         default_signs = ['IN', 'OUT']
@@ -285,7 +287,7 @@ def login():
             conn = get_db()
             cur = conn.cursor()
             cur.execute(
-                "SELECT * FROM users WHERE username = %s AND password = %s",
+                "SELECT * FROM users WHERE username = %s AND password_hash = %s",
                 (username, password)
             )
             user = cur.fetchone()
@@ -323,7 +325,7 @@ def register():
             cur = conn.cursor()
             try:
                 cur.execute(
-                    "INSERT INTO users (username, password, role) VALUES (%s, %s, 'user')",
+                    "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, 'user')",
                     (username, password)
                 )
                 conn.commit()
@@ -340,10 +342,6 @@ def register():
             print(f"Register error: {e}")
     
     return render_template('register.html')
-
-# Остальные маршруты остаются без изменений...
-# (add_expense, edit_expense, delete_expense, manage_periods, manage_users, edit_user,
-#  get_categories, get_articles, get_wallets - все как в предыдущей версии)
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
