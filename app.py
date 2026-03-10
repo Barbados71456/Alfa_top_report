@@ -5,173 +5,193 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from functools import wraps
 from datetime import datetime
 import hashlib
+from dotenv import load_dotenv
+
+# Загружаем переменные из .env файла
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
-# Database configuration
+# Database configuration - берем из переменных окружения
 DB_CONFIG = {
-    'host': os.environ.get('POSTGRES_HOST', 'dpg-d4im0jh5pdvs73834210-a.oregon-postgres.render.com'),
+    'host': os.environ.get('POSTGRES_HOST'),
     'port': os.environ.get('POSTGRES_PORT', '5432'),
-    'dbname': os.environ.get('POSTGRES_DB', 'alfa_collection'),
-    'user': os.environ.get('POSTGRES_USER', 'alfa_collection_user'),
-    'password': os.environ.get('POSTGRES_PASSWORD', '')
+    'dbname': os.environ.get('POSTGRES_DB'),
+    'user': os.environ.get('POSTGRES_USER'),
+    'password': os.environ.get('POSTGRES_PASSWORD')
 }
+
+# Проверяем, что все параметры БД заданы
+if not all([DB_CONFIG['host'], DB_CONFIG['dbname'], DB_CONFIG['user'], DB_CONFIG['password']]):
+    print("ОШИБКА: Не все параметры подключения к БД заданы в .env файле!")
+    print("Текущие параметры:", {k: v if k != 'password' else '***' for k, v in DB_CONFIG.items()})
 
 def get_db():
     """Get database connection"""
-    return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+        return conn
+    except psycopg2.OperationalError as e:
+        print(f"Ошибка подключения к БД: {e}")
+        print("Проверьте параметры подключения в .env файле")
+        raise
 
 def init_db():
     """Initialize database tables"""
-    conn = get_db()
-    cur = conn.cursor()
-    
-    # Create users table
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password VARCHAR(200) NOT NULL,
-            role VARCHAR(20) DEFAULT 'user',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Create periods table for editing control
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS periods (
-            id SERIAL PRIMARY KEY,
-            year INTEGER,
-            month INTEGER,
-            is_closed BOOLEAN DEFAULT FALSE,
-            closed_by_user_id INTEGER REFERENCES users(id),
-            closed_at TIMESTAMP,
-            UNIQUE(year, month)
-        )
-    ''')
-    
-    # Create reference tables
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS signs (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(50) UNIQUE NOT NULL
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS categories (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            sign_id INTEGER REFERENCES signs(id),
-            UNIQUE(name, sign_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS articles (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            category_id INTEGER REFERENCES categories(id),
-            UNIQUE(name, category_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS projects (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) UNIQUE NOT NULL
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS counterparties (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) UNIQUE NOT NULL
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS wallet_types (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(50) UNIQUE NOT NULL
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS wallets (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            wallet_type_id INTEGER REFERENCES wallet_types(id),
-            UNIQUE(name, wallet_type_id)
-        )
-    ''')
-    
-    # Create main expenses table
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS expenses (
-            id SERIAL PRIMARY KEY,
-            date DATE NOT NULL,
-            year INTEGER,
-            month INTEGER,
-            sign_id INTEGER REFERENCES signs(id),
-            category_id INTEGER REFERENCES categories(id),
-            article_id INTEGER REFERENCES articles(id),
-            project_id INTEGER REFERENCES projects(id),
-            counterparty_id INTEGER REFERENCES counterparties(id),
-            wallet_type_id INTEGER REFERENCES wallet_types(id),
-            wallet_id INTEGER REFERENCES wallets(id),
-            amount DECIMAL(10,2) NOT NULL,
-            comments TEXT,
-            pl VARCHAR(255),
-            user_id INTEGER REFERENCES users(id),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Insert default data if not exists
-    cur.execute("SELECT COUNT(*) FROM users")
-    if cur.fetchone()['count'] == 0:
-        admin_password = hashlib.sha256(os.environ.get('ADMIN_PASSWORD', 'admin123').encode()).hexdigest()
-        cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
-            (os.environ.get('ADMIN_USERNAME', 'admin'), admin_password, 'admin')
-        )
-    
-    # Insert default reference data
-    default_signs = ['IN', 'OUT']
-    for sign in default_signs:
-        cur.execute("INSERT INTO signs (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (sign,))
-    
-    default_categories = [
-        ('Доходы', 'IN'),
-        ('Расходы', 'OUT')
-    ]
-    for cat_name, sign_name in default_categories:
-        cur.execute("SELECT id FROM signs WHERE name = %s", (sign_name,))
-        sign_id = cur.fetchone()
-        if sign_id:
-            cur.execute(
-                "INSERT INTO categories (name, sign_id) VALUES (%s, %s) ON CONFLICT (name, sign_id) DO NOTHING",
-                (cat_name, sign_id['id'])
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Create users table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password VARCHAR(200) NOT NULL,
+                role VARCHAR(20) DEFAULT 'user',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-    
-    default_projects = ['Основной', 'Личный', 'Бизнес']
-    for project in default_projects:
-        cur.execute("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (project,))
-    
-    default_counterparties = ['Клиент 1', 'Поставщик 1', 'Сотрудник']
-    for counterparty in default_counterparties:
-        cur.execute("INSERT INTO counterparties (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (counterparty,))
-    
-    default_wallet_types = ['Наличные', 'Банковская карта', 'Электронный кошелек']
-    for wt in default_wallet_types:
-        cur.execute("INSERT INTO wallet_types (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (wt,))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
+        ''')
+        
+        # Create periods table for editing control
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS periods (
+                id SERIAL PRIMARY KEY,
+                year INTEGER,
+                month INTEGER,
+                is_closed BOOLEAN DEFAULT FALSE,
+                closed_by_user_id INTEGER REFERENCES users(id),
+                closed_at TIMESTAMP,
+                UNIQUE(year, month)
+            )
+        ''')
+        
+        # Create reference tables
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS signs (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                sign_id INTEGER REFERENCES signs(id),
+                UNIQUE(name, sign_id)
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS articles (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                category_id INTEGER REFERENCES categories(id),
+                UNIQUE(name, category_id)
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS counterparties (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS wallet_types (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS wallets (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                wallet_type_id INTEGER REFERENCES wallet_types(id),
+                UNIQUE(name, wallet_type_id)
+            )
+        ''')
+        
+        # Create main expenses table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                year INTEGER,
+                month INTEGER,
+                sign_id INTEGER REFERENCES signs(id),
+                category_id INTEGER REFERENCES categories(id),
+                article_id INTEGER REFERENCES articles(id),
+                project_id INTEGER REFERENCES projects(id),
+                counterparty_id INTEGER REFERENCES counterparties(id),
+                wallet_type_id INTEGER REFERENCES wallet_types(id),
+                wallet_id INTEGER REFERENCES wallets(id),
+                amount DECIMAL(10,2) NOT NULL,
+                comments TEXT,
+                pl VARCHAR(255),
+                user_id INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Insert default data if not exists
+        cur.execute("SELECT COUNT(*) FROM users")
+        if cur.fetchone()['count'] == 0:
+            admin_password = hashlib.sha256(os.environ.get('ADMIN_PASSWORD', 'admin123').encode()).hexdigest()
+            cur.execute(
+                "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                (os.environ.get('ADMIN_USERNAME', 'admin'), admin_password, 'admin')
+            )
+        
+        # Insert default reference data
+        default_signs = ['IN', 'OUT']
+        for sign in default_signs:
+            cur.execute("INSERT INTO signs (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (sign,))
+        
+        default_categories = [
+            ('Доходы', 'IN'),
+            ('Расходы', 'OUT')
+        ]
+        for cat_name, sign_name in default_categories:
+            cur.execute("SELECT id FROM signs WHERE name = %s", (sign_name,))
+            sign_row = cur.fetchone()
+            if sign_row:
+                cur.execute(
+                    "INSERT INTO categories (name, sign_id) VALUES (%s, %s) ON CONFLICT (name, sign_id) DO NOTHING",
+                    (cat_name, sign_row['id'])
+                )
+        
+        default_projects = ['Основной', 'Личный', 'Бизнес']
+        for project in default_projects:
+            cur.execute("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (project,))
+        
+        default_counterparties = ['Клиент 1', 'Поставщик 1', 'Сотрудник']
+        for counterparty in default_counterparties:
+            cur.execute("INSERT INTO counterparties (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (counterparty,))
+        
+        default_wallet_types = ['Наличные', 'Банковская карта', 'Электронный кошелек']
+        for wt in default_wallet_types:
+            cur.execute("INSERT INTO wallet_types (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (wt,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("База данных успешно инициализирована")
+    except Exception as e:
+        print(f"Ошибка при инициализации БД: {e}")
+        raise
 
 # Login required decorator
 def login_required(f):
@@ -261,24 +281,28 @@ def login():
         username = request.form['username']
         password = hashlib.sha256(request.form['password'].encode()).hexdigest()
         
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM users WHERE username = %s AND password = %s",
-            (username, password)
-        )
-        user = cur.fetchone()
-        cur.close()
-        conn.close()
-        
-        if user:
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
-            flash('Успешный вход в систему', 'success')
-            return redirect(url_for('index'))
-        else:
-            flash('Неверное имя пользователя или пароль', 'danger')
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM users WHERE username = %s AND password = %s",
+                (username, password)
+            )
+            user = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if user:
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                session['role'] = user['role']
+                flash('Успешный вход в систему', 'success')
+                return redirect(url_for('index'))
+            else:
+                flash('Неверное имя пользователя или пароль', 'danger')
+        except Exception as e:
+            flash(f'Ошибка подключения к базе данных: {str(e)}', 'danger')
+            print(f"Login error: {e}")
     
     return render_template('login.html')
 
@@ -294,24 +318,32 @@ def register():
         username = request.form['username']
         password = hashlib.sha256(request.form['password'].encode()).hexdigest()
         
-        conn = get_db()
-        cur = conn.cursor()
         try:
-            cur.execute(
-                "INSERT INTO users (username, password, role) VALUES (%s, %s, 'user')",
-                (username, password)
-            )
-            conn.commit()
-            flash('Регистрация успешна. Войдите в систему.', 'success')
-            return redirect(url_for('login'))
-        except psycopg2.IntegrityError:
-            conn.rollback()
-            flash('Пользователь с таким именем уже существует', 'danger')
-        finally:
-            cur.close()
-            conn.close()
+            conn = get_db()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    "INSERT INTO users (username, password, role) VALUES (%s, %s, 'user')",
+                    (username, password)
+                )
+                conn.commit()
+                flash('Регистрация успешна. Войдите в систему.', 'success')
+                return redirect(url_for('login'))
+            except psycopg2.IntegrityError:
+                conn.rollback()
+                flash('Пользователь с таким именем уже существует', 'danger')
+            finally:
+                cur.close()
+                conn.close()
+        except Exception as e:
+            flash(f'Ошибка подключения к базе данных: {str(e)}', 'danger')
+            print(f"Register error: {e}")
     
     return render_template('register.html')
+
+# Остальные маршруты остаются без изменений...
+# (add_expense, edit_expense, delete_expense, manage_periods, manage_users, edit_user,
+#  get_categories, get_articles, get_wallets - все как в предыдущей версии)
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -675,6 +707,34 @@ def get_wallets(wallet_type_id):
     conn.close()
     return {'wallets': wallets}
 
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": str(e)}, 500
+
 if __name__ == '__main__':
-    init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("Запуск приложения...")
+    print("Параметры подключения к БД:")
+    print(f"Host: {DB_CONFIG['host']}")
+    print(f"Database: {DB_CONFIG['dbname']}")
+    print(f"User: {DB_CONFIG['user']}")
+    print(f"Password: {'***' if DB_CONFIG['password'] else 'НЕ ЗАДАН!'}")
+    
+    try:
+        init_db()
+        debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
+        app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    except Exception as e:
+        print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        print("Проверьте:")
+        print("1. Наличие файла .env в корневой директории")
+        print("2. Правильность пароля в .env файле")
+        print("3. Доступность хоста PostgreSQL")
