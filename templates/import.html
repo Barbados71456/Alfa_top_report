@@ -17,6 +17,13 @@
                         <li>Обязательные колонки: <code>date</code> (дата в формате YYYY-MM-DD) и <code>amount</code> (сумма)</li>
                         <li>Названия в справочниках должны точно соответствовать существующим в системе</li>
                     </ol>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <strong><i class="bi bi-exclamation-triangle"></i> Важно!</strong>
+                        <p class="mb-0">Если в файле отсутствует колонка <code>sign</code> (признак), система автоматически определит его по сумме:
+                        <br><span class="badge bg-success">IN</span> для положительных сумм (> 0)
+                        <br><span class="badge bg-danger">OUT</span> для отрицательных сумм (< 0)</p>
+                    </div>
                 </div>
 
                 <div class="text-center mb-4">
@@ -64,13 +71,13 @@
                             <td><code>amount</code></td>
                             <td>Сумма</td>
                             <td><span class="badge bg-danger">Да</span></td>
-                            <td>1000.50</td>
+                            <td>1000.50 или -500.25</td>
                         </tr>
                         <tr>
                             <td><code>sign</code></td>
-                            <td>Признак (IN/OUT)</td>
-                            <td><span class="badge bg-secondary">Нет</span></td>
-                            <td>IN</td>
+                            <td>Признак (IN/OUT) - если не указан, определяется по сумме</td>
+                            <td><span class="badge bg-warning">Опционально</span></td>
+                            <td>IN или OUT</td>
                         </tr>
                         <tr>
                             <td><code>category</code></td>

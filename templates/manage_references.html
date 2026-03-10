@@ -11,8 +11,11 @@
 <div class="row">
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-sign-turn-right"></i> Признаки</h5>
+                <a href="{{ url_for('export_reference', ref_type='signs') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление признаками (IN/OUT)</p>
@@ -25,8 +28,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-success text-white">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Категории</h5>
+                <a href="{{ url_for('export_reference', ref_type='categories') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление категориями</p>
@@ -39,8 +45,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-info text-white">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-file-text"></i> Статьи</h5>
+                <a href="{{ url_for('export_reference', ref_type='articles') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление статьями</p>
@@ -53,8 +62,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-warning">
+            <div class="card-header bg-warning d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-briefcase"></i> Проекты</h5>
+                <a href="{{ url_for('export_reference', ref_type='projects') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление проектами</p>
@@ -67,8 +79,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-secondary text-white">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-people"></i> Контрагенты</h5>
+                <a href="{{ url_for('export_reference', ref_type='counterparties') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление контрагентами</p>
@@ -81,8 +96,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header bg-dark text-white">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-wallet2"></i> Типы кошельков</h5>
+                <a href="{{ url_for('export_reference', ref_type='wallet_types') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление типами кошельков</p>
@@ -95,8 +113,11 @@
 
     <div class="col-md-4 mb-4">
         <div class="card h-100">
-            <div class="card-header" style="background-color: #6f42c1; color: white;">
+            <div class="card-header" style="background-color: #6f42c1; color: white; d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-wallet"></i> Кошельки</h5>
+                <a href="{{ url_for('export_reference', ref_type='wallets') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                    <i class="bi bi-download"></i>
+                </a>
             </div>
             <div class="card-body">
                 <p>Управление кошельками</p>

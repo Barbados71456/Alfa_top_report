@@ -1,7 +1,7 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from functools import wraps
 from datetime import datetime
 import hashlib
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import io
 import csv
+import tempfile
 
 # Загружаем переменные из .env файла
 load_dotenv()
@@ -235,6 +236,15 @@ def is_period_editable(date):
         return False
     return True
 
+def get_month_name(month_num):
+    """Возвращает название месяца на русском"""
+    months = {
+        1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель',
+        5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
+        9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
+    }
+    return months.get(month_num, '')
+
 @app.route('/')
 @login_required
 def index():
@@ -276,6 +286,11 @@ def index():
         ''', (session['user_id'],))
     
     expenses = cur.fetchall()
+    
+    # Добавляем название месяца к каждой записи
+    for expense in expenses:
+        expense['month_name'] = get_month_name(expense['month'])
+    
     cur.close()
     conn.close()
     
@@ -1050,6 +1065,11 @@ def import_expenses():
             else:
                 df = pd.read_excel(file)
             
+            # Проверяем наличие колонки sign, если нет - определяем по сумме
+            if 'sign' not in df.columns:
+                df['sign'] = df['amount'].apply(lambda x: 'IN' if float(x) >= 0 else 'OUT')
+                flash('Колонка "sign" не найдена. Признак определен автоматически по сумме (IN для положительных, OUT для отрицательных)', 'info')
+            
             # Ожидаемые колонки
             expected_columns = ['date', 'amount', 'sign', 'category', 'article', 
                                'project', 'counterparty', 'wallet_type', 'wallet', 
@@ -1187,6 +1207,135 @@ def import_expenses():
         return redirect(url_for('index'))
     
     return render_template('import.html')
+
+# ==================== ЭКСПОРТ СПРАВОЧНИКОВ ====================
+
+@app.route('/admin/references/export/<string:ref_type>')
+@admin_required
+def export_reference(ref_type):
+    """Экспорт справочника в Excel"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Определяем данные для экспорта в зависимости от типа справочника
+    if ref_type == 'signs':
+        cur.execute('''
+            SELECT s.id, s.name as "Признак",
+                   COUNT(c.id) as "Количество категорий"
+            FROM signs s
+            LEFT JOIN categories c ON s.id = c.sign_id
+            GROUP BY s.id
+            ORDER BY s.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"priznaki_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'categories':
+        cur.execute('''
+            SELECT c.id, c.name as "Категория",
+                   s.name as "Признак",
+                   COUNT(a.id) as "Количество статей"
+            FROM categories c
+            JOIN signs s ON c.sign_id = s.id
+            LEFT JOIN articles a ON c.id = a.category_id
+            GROUP BY c.id, s.name
+            ORDER BY s.name, c.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"kategorii_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'articles':
+        cur.execute('''
+            SELECT a.id, a.name as "Статья",
+                   c.name as "Категория",
+                   s.name as "Признак",
+                   COUNT(e.id) as "Использований"
+            FROM articles a
+            JOIN categories c ON a.category_id = c.id
+            JOIN signs s ON c.sign_id = s.id
+            LEFT JOIN expenses e ON a.id = e.article_id
+            GROUP BY a.id, c.name, s.name
+            ORDER BY s.name, c.name, a.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"stati_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'projects':
+        cur.execute('''
+            SELECT p.id, p.name as "Проект",
+                   COUNT(e.id) as "Использований"
+            FROM projects p
+            LEFT JOIN expenses e ON p.id = e.project_id
+            GROUP BY p.id
+            ORDER BY p.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"proekty_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'counterparties':
+        cur.execute('''
+            SELECT c.id, c.name as "Контрагент",
+                   COUNT(e.id) as "Использований"
+            FROM counterparties c
+            LEFT JOIN expenses e ON c.id = e.counterparty_id
+            GROUP BY c.id
+            ORDER BY c.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"kontragenty_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'wallet_types':
+        cur.execute('''
+            SELECT wt.id, wt.name as "Тип кошелька",
+                   COUNT(w.id) as "Количество кошельков"
+            FROM wallet_types wt
+            LEFT JOIN wallets w ON wt.id = w.wallet_type_id
+            GROUP BY wt.id
+            ORDER BY wt.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"tipy_koshelkov_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'wallets':
+        cur.execute('''
+            SELECT w.id, w.name as "Кошелек",
+                   wt.name as "Тип кошелька",
+                   COUNT(e.id) as "Использований"
+            FROM wallets w
+            JOIN wallet_types wt ON w.wallet_type_id = wt.id
+            LEFT JOIN expenses e ON w.id = e.wallet_id
+            GROUP BY w.id, wt.name
+            ORDER BY wt.name, w.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"koshelki_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    else:
+        flash('Неизвестный тип справочника', 'danger')
+        return redirect(url_for('manage_references'))
+    
+    cur.close()
+    conn.close()
+    
+    # Создаем временный файл
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        df.to_excel(tmp.name, index=False)
+        tmp_path = tmp.name
+    
+    # Отправляем файл
+    return send_file(
+        tmp_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 @app.route('/download_template')
 @login_required

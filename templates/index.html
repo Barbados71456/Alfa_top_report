@@ -34,15 +34,21 @@
             <tr>
                 <td>{{ expense.date.strftime('%d.%m.%Y') }}</td>
                 <td>{{ expense.year }}</td>
-                <td>{{ expense.month }}</td>
-                <td>{{ expense.sign_name or '-' }}</td>
+                <td>{{ expense.month_name }}</td>
+                <td>
+                    {% if expense.sign_name == 'IN' %}
+                    <span class="badge bg-success">IN</span>
+                    {% else %}
+                    <span class="badge bg-danger">OUT</span>
+                    {% endif %}
+                </td>
                 <td>{{ expense.category_name or '-' }}</td>
                 <td>{{ expense.article_name or '-' }}</td>
                 <td>{{ expense.project_name or '-' }}</td>
                 <td>{{ expense.counterparty_name or '-' }}</td>
                 <td>{{ expense.wallet_type_name or '-' }}</td>
                 <td>{{ expense.wallet_name or '-' }}</td>
-                <td class="{% if expense.amount > 0 %}text-success{% else %}text-danger{% endif %}">
+                <td class="{% if expense.amount > 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
                     {{ "%.2f"|format(expense.amount) }} ₽
                 </td>
                 <td>{{ expense.comments or '-' }}</td>
