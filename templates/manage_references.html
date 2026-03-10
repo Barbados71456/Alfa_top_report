@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-book"></i> Управление справочниками</h2>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Назад
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-sign-turn-right"></i> Признаки</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление признаками (IN/OUT)</p>
+                <a href="{{ url_for('manage_signs') }}" class="btn btn-primary">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Категории</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление категориями</p>
+                <a href="{{ url_for('manage_categories') }}" class="btn btn-success">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-file-text"></i> Статьи</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление статьями</p>
+                <a href="{{ url_for('manage_articles') }}" class="btn btn-info text-white">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-briefcase"></i> Проекты</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление проектами</p>
+                <a href="{{ url_for('manage_projects') }}" class="btn btn-warning">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Контрагенты</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление контрагентами</p>
+                <a href="{{ url_for('manage_counterparties') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-wallet2"></i> Типы кошельков</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление типами кошельков</p>
+                <a href="{{ url_for('manage_wallet_types') }}" class="btn btn-dark text-white">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header" style="background-color: #6f42c1; color: white;">
+                <h5 class="mb-0"><i class="bi bi-wallet"></i> Кошельки</h5>
+            </div>
+            <div class="card-body">
+                <p>Управление кошельками</p>
+                <a href="{{ url_for('manage_wallets') }}" class="btn" style="background-color: #6f42c1; color: white;">
+                    <i class="bi bi-arrow-right"></i> Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

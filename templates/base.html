@@ -22,6 +22,10 @@
             padding: 0.25rem 0.5rem;
             font-size: 0.875rem;
         }
+        .dropdown-menu {
+            max-height: 400px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -45,17 +49,50 @@
                             <i class="bi bi-plus-circle"></i> Добавить запись
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('import_expenses') }}">
+                            <i class="bi bi-file-earmark-excel"></i> Импорт из Excel
+                        </a>
+                    </li>
                     {% if session.role == 'admin' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-gear"></i> Администрирование
                         </a>
                         <ul class="dropdown-menu">
+                            <li><h6 class="dropdown-header">Управление справочниками</h6></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_references') }}">
+                                <i class="bi bi-book"></i> Все справочники
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_signs') }}">
+                                <i class="bi bi-sign-turn-right"></i> Признаки
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_categories') }}">
+                                <i class="bi bi-diagram-3"></i> Категории
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_articles') }}">
+                                <i class="bi bi-file-text"></i> Статьи
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_projects') }}">
+                                <i class="bi bi-briefcase"></i> Проекты
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_counterparties') }}">
+                                <i class="bi bi-people"></i> Контрагенты
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_wallet_types') }}">
+                                <i class="bi bi-wallet2"></i> Типы кошельков
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_wallets') }}">
+                                <i class="bi bi-wallet"></i> Кошельки
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Управление системой</h6></li>
                             <li><a class="dropdown-item" href="{{ url_for('manage_periods') }}">
-                                <i class="bi bi-calendar-range"></i> Управление периодами
+                                <i class="bi bi-calendar-range"></i> Периоды
                             </a></li>
                             <li><a class="dropdown-item" href="{{ url_for('manage_users') }}">
-                                <i class="bi bi-people"></i> Управление пользователями
+                                <i class="bi bi-people"></i> Пользователи
                             </a></li>
                         </ul>
                     </li>
@@ -64,7 +101,12 @@
                 <ul class="navbar-nav">
                     <li class="nav-item">
                         <span class="nav-link text-light">
-                            <i class="bi bi-person-circle"></i> {{ session.username }} ({{ session.role }})
+                            <i class="bi bi-person-circle"></i> {{ session.username }} 
+                            {% if session.role == 'admin' %}
+                            <span class="badge bg-danger">Админ</span>
+                            {% else %}
+                            <span class="badge bg-primary">Пользователь</span>
+                            {% endif %}
                         </span>
                     </li>
                     <li class="nav-item">

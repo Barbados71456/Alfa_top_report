@@ -1,17 +1,21 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from functools import wraps
 from datetime import datetime
 import hashlib
 from dotenv import load_dotenv
+import pandas as pd
+import io
+import csv
 
 # Загружаем переменные из .env файла
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Database configuration - берем из переменных окружения
 DB_CONFIG = {
@@ -79,7 +83,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS categories (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
-                sign_id INTEGER REFERENCES signs(id),
+                sign_id INTEGER REFERENCES signs(id) ON DELETE CASCADE,
                 UNIQUE(name, sign_id)
             )
         ''')
@@ -88,7 +92,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS articles (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
-                category_id INTEGER REFERENCES categories(id),
+                category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
                 UNIQUE(name, category_id)
             )
         ''')
@@ -118,7 +122,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS wallets (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
-                wallet_type_id INTEGER REFERENCES wallet_types(id),
+                wallet_type_id INTEGER REFERENCES wallet_types(id) ON DELETE CASCADE,
                 UNIQUE(name, wallet_type_id)
             )
         ''')
@@ -564,6 +568,669 @@ def delete_expense(expense_id):
         conn.close()
     
     return redirect(url_for('index'))
+
+# ==================== УПРАВЛЕНИЕ СПРАВОЧНИКАМИ ====================
+
+@app.route('/admin/references')
+@admin_required
+def manage_references():
+    """Главная страница управления справочниками"""
+    return render_template('manage_references.html')
+
+# ---- Управление признаками (signs) ----
+@app.route('/admin/references/signs')
+@admin_required
+def manage_signs():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT s.*, COUNT(c.id) as categories_count 
+        FROM signs s 
+        LEFT JOIN categories c ON s.id = c.sign_id 
+        GROUP BY s.id 
+        ORDER BY s.name
+    ''')
+    signs = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_signs.html', signs=signs)
+
+@app.route('/admin/references/signs/add', methods=['POST'])
+@admin_required
+def add_sign():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO signs (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Признак успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Признак с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_signs'))
+
+@app.route('/admin/references/signs/delete/<int:sign_id>')
+@admin_required
+def delete_sign(sign_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли признак
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE sign_id = %s", (sign_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить признак, который используется в записях', 'danger')
+            return redirect(url_for('manage_signs'))
+        
+        cur.execute("DELETE FROM signs WHERE id = %s", (sign_id,))
+        conn.commit()
+        flash('Признак успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_signs'))
+
+# ---- Управление категориями ----
+@app.route('/admin/references/categories')
+@admin_required
+def manage_categories():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT c.*, s.name as sign_name, COUNT(a.id) as articles_count 
+        FROM categories c 
+        JOIN signs s ON c.sign_id = s.id 
+        LEFT JOIN articles a ON c.id = a.category_id 
+        GROUP BY c.id, s.name 
+        ORDER BY s.name, c.name
+    ''')
+    categories = cur.fetchall()
+    
+    cur.execute("SELECT * FROM signs ORDER BY name")
+    signs = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_categories.html', categories=categories, signs=signs)
+
+@app.route('/admin/references/categories/add', methods=['POST'])
+@admin_required
+def add_category():
+    name = request.form['name']
+    sign_id = request.form['sign_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO categories (name, sign_id) VALUES (%s, %s)",
+            (name, sign_id)
+        )
+        conn.commit()
+        flash('Категория успешно добавлена', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Категория с таким именем уже существует для данного признака', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_categories'))
+
+@app.route('/admin/references/categories/delete/<int:category_id>')
+@admin_required
+def delete_category(category_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли категория
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE category_id = %s", (category_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить категорию, которая используется в записях', 'danger')
+            return redirect(url_for('manage_categories'))
+        
+        cur.execute("DELETE FROM categories WHERE id = %s", (category_id,))
+        conn.commit()
+        flash('Категория успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_categories'))
+
+# ---- Управление статьями ----
+@app.route('/admin/references/articles')
+@admin_required
+def manage_articles():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT a.*, c.name as category_name, s.name as sign_name,
+               COUNT(e.id) as expenses_count 
+        FROM articles a 
+        JOIN categories c ON a.category_id = c.id 
+        JOIN signs s ON c.sign_id = s.id 
+        LEFT JOIN expenses e ON a.id = e.article_id 
+        GROUP BY a.id, c.name, s.name 
+        ORDER BY s.name, c.name, a.name
+    ''')
+    articles = cur.fetchall()
+    
+    cur.execute('''
+        SELECT c.*, s.name as sign_name 
+        FROM categories c 
+        JOIN signs s ON c.sign_id = s.id 
+        ORDER BY s.name, c.name
+    ''')
+    categories = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_articles.html', articles=articles, categories=categories)
+
+@app.route('/admin/references/articles/add', methods=['POST'])
+@admin_required
+def add_article():
+    name = request.form['name']
+    category_id = request.form['category_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO articles (name, category_id) VALUES (%s, %s)",
+            (name, category_id)
+        )
+        conn.commit()
+        flash('Статья успешно добавлена', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Статья с таким именем уже существует для данной категории', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_articles'))
+
+@app.route('/admin/references/articles/delete/<int:article_id>')
+@admin_required
+def delete_article(article_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли статья
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE article_id = %s", (article_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить статью, которая используется в записях', 'danger')
+            return redirect(url_for('manage_articles'))
+        
+        cur.execute("DELETE FROM articles WHERE id = %s", (article_id,))
+        conn.commit()
+        flash('Статья успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_articles'))
+
+# ---- Управление проектами ----
+@app.route('/admin/references/projects')
+@admin_required
+def manage_projects():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT p.*, COUNT(e.id) as expenses_count 
+        FROM projects p 
+        LEFT JOIN expenses e ON p.id = e.project_id 
+        GROUP BY p.id 
+        ORDER BY p.name
+    ''')
+    projects = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_projects.html', projects=projects)
+
+@app.route('/admin/references/projects/add', methods=['POST'])
+@admin_required
+def add_project():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO projects (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Проект успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Проект с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
+
+@app.route('/admin/references/projects/delete/<int:project_id>')
+@admin_required
+def delete_project(project_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли проект
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE project_id = %s", (project_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить проект, который используется в записях', 'danger')
+            return redirect(url_for('manage_projects'))
+        
+        cur.execute("DELETE FROM projects WHERE id = %s", (project_id,))
+        conn.commit()
+        flash('Проект успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
+
+# ---- Управление контрагентами ----
+@app.route('/admin/references/counterparties')
+@admin_required
+def manage_counterparties():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT c.*, COUNT(e.id) as expenses_count 
+        FROM counterparties c 
+        LEFT JOIN expenses e ON c.id = e.counterparty_id 
+        GROUP BY c.id 
+        ORDER BY c.name
+    ''')
+    counterparties = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_counterparties.html', counterparties=counterparties)
+
+@app.route('/admin/references/counterparties/add', methods=['POST'])
+@admin_required
+def add_counterparty():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO counterparties (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Контрагент успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Контрагент с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_counterparties'))
+
+@app.route('/admin/references/counterparties/delete/<int:counterparty_id>')
+@admin_required
+def delete_counterparty(counterparty_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли контрагент
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE counterparty_id = %s", (counterparty_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить контрагента, который используется в записях', 'danger')
+            return redirect(url_for('manage_counterparties'))
+        
+        cur.execute("DELETE FROM counterparties WHERE id = %s", (counterparty_id,))
+        conn.commit()
+        flash('Контрагент успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_counterparties'))
+
+# ---- Управление типами кошельков ----
+@app.route('/admin/references/wallet_types')
+@admin_required
+def manage_wallet_types():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT wt.*, COUNT(w.id) as wallets_count 
+        FROM wallet_types wt 
+        LEFT JOIN wallets w ON wt.id = w.wallet_type_id 
+        GROUP BY wt.id 
+        ORDER BY wt.name
+    ''')
+    wallet_types = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_wallet_types.html', wallet_types=wallet_types)
+
+@app.route('/admin/references/wallet_types/add', methods=['POST'])
+@admin_required
+def add_wallet_type():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO wallet_types (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Тип кошелька успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Тип кошелька с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallet_types'))
+
+@app.route('/admin/references/wallet_types/delete/<int:wallet_type_id>')
+@admin_required
+def delete_wallet_type(wallet_type_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли тип кошелька
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE wallet_type_id = %s", (wallet_type_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить тип кошелька, который используется в записях', 'danger')
+            return redirect(url_for('manage_wallet_types'))
+        
+        cur.execute("DELETE FROM wallet_types WHERE id = %s", (wallet_type_id,))
+        conn.commit()
+        flash('Тип кошелька успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallet_types'))
+
+# ---- Управление кошельками ----
+@app.route('/admin/references/wallets')
+@admin_required
+def manage_wallets():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT w.*, wt.name as wallet_type_name, COUNT(e.id) as expenses_count 
+        FROM wallets w 
+        JOIN wallet_types wt ON w.wallet_type_id = wt.id 
+        LEFT JOIN expenses e ON w.id = e.wallet_id 
+        GROUP BY w.id, wt.name 
+        ORDER BY wt.name, w.name
+    ''')
+    wallets = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallet_types ORDER BY name")
+    wallet_types = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_wallets.html', wallets=wallets, wallet_types=wallet_types)
+
+@app.route('/admin/references/wallets/add', methods=['POST'])
+@admin_required
+def add_wallet():
+    name = request.form['name']
+    wallet_type_id = request.form['wallet_type_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO wallets (name, wallet_type_id) VALUES (%s, %s)",
+            (name, wallet_type_id)
+        )
+        conn.commit()
+        flash('Кошелек успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Кошелек с таким именем уже существует для данного типа', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallets'))
+
+@app.route('/admin/references/wallets/delete/<int:wallet_id>')
+@admin_required
+def delete_wallet(wallet_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли кошелек
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE wallet_id = %s", (wallet_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить кошелек, который используется в записях', 'danger')
+            return redirect(url_for('manage_wallets'))
+        
+        cur.execute("DELETE FROM wallets WHERE id = %s", (wallet_id,))
+        conn.commit()
+        flash('Кошелек успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallets'))
+
+# ==================== ИМПОРТ ИЗ EXCEL ====================
+
+@app.route('/import', methods=['GET', 'POST'])
+@login_required
+def import_expenses():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('Файл не выбран', 'danger')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        if file.filename == '':
+            flash('Файл не выбран', 'danger')
+            return redirect(request.url)
+        
+        if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls') or file.filename.endswith('.csv')):
+            flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls) или CSV', 'danger')
+            return redirect(request.url)
+        
+        try:
+            # Читаем файл
+            if file.filename.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+            
+            # Ожидаемые колонки
+            expected_columns = ['date', 'amount', 'sign', 'category', 'article', 
+                               'project', 'counterparty', 'wallet_type', 'wallet', 
+                               'comments', 'pl']
+            
+            # Проверяем наличие необходимых колонок
+            required_columns = ['date', 'amount']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                flash(f'В файле отсутствуют обязательные колонки: {", ".join(missing_columns)}', 'danger')
+                return redirect(request.url)
+            
+            conn = get_db()
+            cur = conn.cursor()
+            
+            # Получаем все справочники для маппинга
+            cur.execute("SELECT id, name FROM signs")
+            signs = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT c.id, c.name, s.name as sign_name FROM categories c JOIN signs s ON c.sign_id = s.id")
+            categories = {(row['name'], row['sign_name']): row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT a.id, a.name, c.name as category_name FROM articles a JOIN categories c ON a.category_id = c.id")
+            articles = {(row['name'], row['category_name']): row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM projects")
+            projects = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM counterparties")
+            counterparties = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM wallet_types")
+            wallet_types = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT w.id, w.name, wt.name as wallet_type_name FROM wallets w JOIN wallet_types wt ON w.wallet_type_id = wt.id")
+            wallets = {(row['name'], row['wallet_type_name']): row['id'] for row in cur.fetchall()}
+            
+            successful = 0
+            failed = 0
+            errors = []
+            
+            for index, row in df.iterrows():
+                try:
+                    # Парсим дату
+                    if isinstance(row['date'], str):
+                        date = datetime.strptime(row['date'], '%Y-%m-%d')
+                    else:
+                        date = pd.to_datetime(row['date']).to_pydatetime()
+                    
+                    # Проверяем, открыт ли период
+                    if not is_period_editable(date) and session['role'] != 'admin':
+                        failed += 1
+                        errors.append(f"Строка {index + 2}: Период {date.year}-{date.month:02d} закрыт")
+                        continue
+                    
+                    # Получаем ID справочников
+                    sign_id = None
+                    if 'sign' in row and pd.notna(row['sign']):
+                        sign_id = signs.get(row['sign'])
+                    
+                    category_id = None
+                    if 'category' in row and pd.notna(row['category']) and sign_id:
+                        sign_name = next((s for s, id in signs.items() if id == sign_id), None)
+                        if sign_name:
+                            category_id = categories.get((row['category'], sign_name))
+                    
+                    article_id = None
+                    if 'article' in row and pd.notna(row['article']) and category_id:
+                        category_name = next((c for (c, s), id in categories.items() if id == category_id), None)
+                        if category_name:
+                            article_id = articles.get((row['article'], category_name))
+                    
+                    project_id = None
+                    if 'project' in row and pd.notna(row['project']):
+                        project_id = projects.get(row['project'])
+                    
+                    counterparty_id = None
+                    if 'counterparty' in row and pd.notna(row['counterparty']):
+                        counterparty_id = counterparties.get(row['counterparty'])
+                    
+                    wallet_type_id = None
+                    if 'wallet_type' in row and pd.notna(row['wallet_type']):
+                        wallet_type_id = wallet_types.get(row['wallet_type'])
+                    
+                    wallet_id = None
+                    if 'wallet' in row and pd.notna(row['wallet']) and wallet_type_id:
+                        wallet_type_name = next((wt for wt, id in wallet_types.items() if id == wallet_type_id), None)
+                        if wallet_type_name:
+                            wallet_id = wallets.get((row['wallet'], wallet_type_name))
+                    
+                    # Вставляем запись
+                    cur.execute('''
+                        INSERT INTO expenses (
+                            date, year, month, sign_id, category_id, article_id,
+                            project_id, counterparty_id, wallet_type_id, wallet_id,
+                            amount, comments, pl, user_id
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        date, date.year, date.month,
+                        sign_id,
+                        category_id,
+                        article_id,
+                        project_id,
+                        counterparty_id,
+                        wallet_type_id,
+                        wallet_id,
+                        row['amount'],
+                        row.get('comments', '') if pd.notna(row.get('comments', '')) else '',
+                        row.get('pl', '') if pd.notna(row.get('pl', '')) else '',
+                        session['user_id']
+                    ))
+                    
+                    successful += 1
+                    
+                except Exception as e:
+                    failed += 1
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            conn.commit()
+            
+            if successful > 0:
+                flash(f'Успешно импортировано: {successful} записей', 'success')
+            if failed > 0:
+                flash(f'Ошибок при импорте: {failed}. Подробности в консоли', 'warning')
+                for error in errors[:5]:  # Показываем первые 5 ошибок
+                    print(error)
+            
+            cur.close()
+            conn.close()
+            
+        except Exception as e:
+            flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+            print(f"Import error: {e}")
+        
+        return redirect(url_for('index'))
+    
+    return render_template('import.html')
+
+@app.route('/download_template')
+@login_required
+def download_template():
+    """Скачать шаблон Excel для импорта"""
+    import tempfile
+    import os
+    
+    # Создаем DataFrame с примером данных
+    data = {
+        'date': ['2024-01-15', '2024-01-16'],
+        'amount': [1000.50, -500.25],
+        'sign': ['IN', 'OUT'],
+        'category': ['Доходы', 'Расходы'],
+        'article': ['Зарплата', 'Продукты'],
+        'project': ['Основной', 'Личный'],
+        'counterparty': ['Клиент 1', 'Магазин'],
+        'wallet_type': ['Банковская карта', 'Наличные'],
+        'wallet': ['Основная карта', 'Кошелек'],
+        'comments': ['Зарплата за январь', 'Покупка продуктов'],
+        'pl': ['PL1', 'PL2']
+    }
+    
+    df = pd.DataFrame(data)
+    
+    # Создаем временный файл
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        df.to_excel(tmp.name, index=False)
+        tmp_path = tmp.name
+    
+    # Читаем файл для отправки
+    with open(tmp_path, 'rb') as f:
+        content = f.read()
+    
+    # Удаляем временный файл
+    os.unlink(tmp_path)
+    
+    # Отправляем файл
+    response = app.response_class(
+        content,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment;filename=import_template.xlsx'}
+    )
+    return response
 
 @app.route('/admin/periods')
 @admin_required
