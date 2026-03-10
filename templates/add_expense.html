@@ -120,6 +120,17 @@
 {% block scripts %}
 <script>
 $(document).ready(function() {
+    // Инициализируем Select2 для всех select
+    $('#sign_id, #project_id, #counterparty_id, #wallet_type_id').select2({
+        theme: 'bootstrap-5',
+        language: 'ru',
+        width: '100%',
+        placeholder: function() {
+            return $(this).find('option:first').text();
+        },
+        allowClear: true
+    });
+    
     // Load categories when sign changes
     $('#sign_id').change(function() {
         var signId = $(this).val();
@@ -132,10 +143,23 @@ $(document).ready(function() {
                     categorySelect.append('<option value="' + category.id + '">' + category.name + '</option>');
                 });
                 categorySelect.prop('disabled', false);
+                categorySelect.select2({
+                    theme: 'bootstrap-5',
+                    language: 'ru',
+                    width: '100%',
+                    placeholder: 'Выберите категорию',
+                    allowClear: true
+                });
             });
         } else {
             $('#category_id').empty().append('<option value="">Сначала выберите признак</option>').prop('disabled', true);
             $('#article_id').empty().append('<option value="">Сначала выберите категорию</option>').prop('disabled', true);
+            if ($('#category_id').data('select2')) {
+                $('#category_id').select2('destroy');
+            }
+            if ($('#article_id').data('select2')) {
+                $('#article_id').select2('destroy');
+            }
         }
     });
     
@@ -151,9 +175,19 @@ $(document).ready(function() {
                     articleSelect.append('<option value="' + article.id + '">' + article.name + '</option>');
                 });
                 articleSelect.prop('disabled', false);
+                articleSelect.select2({
+                    theme: 'bootstrap-5',
+                    language: 'ru',
+                    width: '100%',
+                    placeholder: 'Выберите статью',
+                    allowClear: true
+                });
             });
         } else {
             $('#article_id').empty().append('<option value="">Сначала выберите категорию</option>').prop('disabled', true);
+            if ($('#article_id').data('select2')) {
+                $('#article_id').select2('destroy');
+            }
         }
     });
     
@@ -169,9 +203,19 @@ $(document).ready(function() {
                     walletSelect.append('<option value="' + wallet.id + '">' + wallet.name + '</option>');
                 });
                 walletSelect.prop('disabled', false);
+                walletSelect.select2({
+                    theme: 'bootstrap-5',
+                    language: 'ru',
+                    width: '100%',
+                    placeholder: 'Выберите кошелек',
+                    allowClear: true
+                });
             });
         } else {
             $('#wallet_id').empty().append('<option value="">Сначала выберите тип кошелька</option>').prop('disabled', true);
+            if ($('#wallet_id').data('select2')) {
+                $('#wallet_id').select2('destroy');
+            }
         }
     });
 });

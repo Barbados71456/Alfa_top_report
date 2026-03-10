@@ -129,17 +129,31 @@
 {% block scripts %}
 <script>
 $(document).ready(function() {
+    // Инициализируем Select2 для всех select
+    $('#sign_id, #category_id, #article_id, #project_id, #counterparty_id, #wallet_type_id, #wallet_id').select2({
+        theme: 'bootstrap-5',
+        language: 'ru',
+        width: '100%',
+        placeholder: function() {
+            return $(this).find('option:first').text();
+        },
+        allowClear: true
+    });
+    
     // Load categories when sign changes
     $('#sign_id').change(function() {
         var signId = $(this).val();
         if (signId) {
             $.get('/get_categories/' + signId, function(data) {
                 var categorySelect = $('#category_id');
+                var currentValue = categorySelect.val();
                 categorySelect.empty();
                 categorySelect.append('<option value="">Выберите категорию</option>');
                 $.each(data.categories, function(index, category) {
                     categorySelect.append('<option value="' + category.id + '">' + category.name + '</option>');
                 });
+                categorySelect.val(currentValue);
+                categorySelect.trigger('change');
             });
         }
     });
@@ -150,12 +164,17 @@ $(document).ready(function() {
         if (categoryId) {
             $.get('/get_articles/' + categoryId, function(data) {
                 var articleSelect = $('#article_id');
+                var currentValue = articleSelect.val();
                 articleSelect.empty();
                 articleSelect.append('<option value="">Выберите статью</option>');
                 $.each(data.articles, function(index, article) {
                     articleSelect.append('<option value="' + article.id + '">' + article.name + '</option>');
                 });
+                articleSelect.val(currentValue);
+                articleSelect.trigger('change');
             });
+        } else {
+            $('#article_id').empty().append('<option value="">Выберите статью</option>').trigger('change');
         }
     });
     
@@ -165,12 +184,17 @@ $(document).ready(function() {
         if (walletTypeId) {
             $.get('/get_wallets/' + walletTypeId, function(data) {
                 var walletSelect = $('#wallet_id');
+                var currentValue = walletSelect.val();
                 walletSelect.empty();
                 walletSelect.append('<option value="">Выберите кошелек</option>');
                 $.each(data.wallets, function(index, wallet) {
                     walletSelect.append('<option value="' + wallet.id + '">' + wallet.name + '</option>');
                 });
+                walletSelect.val(currentValue);
+                walletSelect.trigger('change');
             });
+        } else {
+            $('#wallet_id').empty().append('<option value="">Выберите кошелек</option>').trigger('change');
         }
     });
 });
