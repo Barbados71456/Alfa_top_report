@@ -128,6 +128,20 @@ def init_db():
             )
         ''')
         
+        # Create dim_shr table for staffing table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS "dim_ШР" (
+                id SERIAL PRIMARY KEY,
+                "Контрагент" VARCHAR(255) NOT NULL,
+                "Драйвер" VARCHAR(255),
+                "Должность" VARCHAR(255),
+                "Отдел" VARCHAR(255),
+                "Статус" VARCHAR(50) DEFAULT 'Активен',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Create main expenses table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS expenses (
@@ -1065,6 +1079,306 @@ def delete_wallet(wallet_id):
         conn.close()
     return redirect(url_for('manage_wallets'))
 
+# ==================== УПРАВЛЕНИЕ ШТАТНЫМ РАСПИСАНИЕМ ====================
+
+@app.route('/admin/references/shr')
+@admin_required
+def manage_shr():
+    """Управление штатным расписанием"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Проверяем, существует ли таблица public."dim_ШР"
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'dim_ШР'
+        );
+    """)
+    table_exists = cur.fetchone()['exists']
+    
+    if not table_exists:
+        # Если таблицы нет, создаем новую с правильными именами колонок
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS "dim_ШР" (
+                id SERIAL PRIMARY KEY,
+                "Контрагент" VARCHAR(255) NOT NULL,
+                "Драйвер" VARCHAR(255),
+                "Должность" VARCHAR(255),
+                "Отдел" VARCHAR(255),
+                "Статус" VARCHAR(50) DEFAULT 'Активен',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        flash('Создана новая таблица "dim_ШР"', 'info')
+    
+    # Получаем все записи из таблицы public."dim_ШР"
+    try:
+        cur.execute('''
+            SELECT id, "Контрагент", "Драйвер", "Должность", "Отдел", "Статус"
+            FROM public."dim_ШР"
+            ORDER BY "Контрагент", "Драйвер", "Должность"
+        ''')
+        shr_list = cur.fetchall()
+        
+        # Преобразуем имена колонок для шаблона
+        for item in shr_list:
+            # Переименовываем ключи для совместимости с шаблоном
+            item['counterparty'] = item['Контрагент']
+            item['driver'] = item['Драйвер']
+            item['position'] = item['Должность']
+            item['department'] = item['Отдел']
+            item['status'] = item['Статус']
+            
+    except Exception as e:
+        print(f"Ошибка при получении данных: {e}")
+        shr_list = []
+        flash(f'Ошибка при загрузке данных: {str(e)}', 'danger')
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('manage_shr.html', shr_list=shr_list)
+
+@app.route('/admin/references/shr/add', methods=['POST'])
+@admin_required
+def add_shr():
+    """Добавление записи в штатное расписание"""
+    counterparty = request.form['counterparty']
+    driver = request.form.get('driver', '')
+    position = request.form.get('position', '')
+    department = request.form.get('department', '')
+    status = request.form.get('status', 'Активен')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            INSERT INTO public."dim_ШР" ("Контрагент", "Драйвер", "Должность", "Отдел", "Статус")
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (counterparty, driver, position, department, status))
+        conn.commit()
+        flash('Запись успешно добавлена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при добавлении: {str(e)}', 'danger')
+        print(f"Error adding record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/edit/<int:shr_id>', methods=['POST'])
+@admin_required
+def edit_shr(shr_id):
+    """Редактирование записи в штатном расписании"""
+    counterparty = request.form['counterparty']
+    driver = request.form.get('driver', '')
+    position = request.form.get('position', '')
+    department = request.form.get('department', '')
+    status = request.form.get('status', 'Активен')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            UPDATE public."dim_ШР" 
+            SET "Контрагент" = %s, "Драйвер" = %s, "Должность" = %s, 
+                "Отдел" = %s, "Статус" = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        ''', (counterparty, driver, position, department, status, shr_id))
+        conn.commit()
+        flash('Запись успешно обновлена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при обновлении: {str(e)}', 'danger')
+        print(f"Error updating record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/delete/<int:shr_id>')
+@admin_required
+def delete_shr(shr_id):
+    """Удаление записи из штатного расписания"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('DELETE FROM public."dim_ШР" WHERE id = %s', (shr_id,))
+        conn.commit()
+        flash('Запись успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+        print(f"Error deleting record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/export')
+@admin_required
+def export_shr():
+    """Экспорт штатного расписания в Excel"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            SELECT id, "Контрагент", "Драйвер", "Должность", "Отдел", "Статус"
+            FROM public."dim_ШР"
+            ORDER BY "Контрагент", "Драйвер", "Должность"
+        ''')
+        data = cur.fetchall()
+        
+        # Преобразуем для DataFrame
+        df_data = []
+        for row in data:
+            df_data.append({
+                'ID': row['id'],
+                'Контрагент': row['Контрагент'],
+                'Драйвер': row['Драйвер'] or '',
+                'Должность': row['Должность'] or '',
+                'Отдел': row['Отдел'] or '',
+                'Статус': row['Статус']
+            })
+        
+        df = pd.DataFrame(df_data)
+        filename = f"shr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # Создаем временный файл
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            df.to_excel(tmp.name, index=False)
+            tmp_path = tmp.name
+        
+        cur.close()
+        conn.close()
+        
+        # Отправляем файл
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        flash(f'Ошибка при экспорте: {str(e)}', 'danger')
+        print(f"Export error: {e}")
+        cur.close()
+        conn.close()
+        return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/import', methods=['POST'])
+@admin_required
+def import_shr():
+    """Импорт штатного расписания из Excel"""
+    if 'file' not in request.files:
+        flash('Файл не выбран', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('Файл не выбран', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls)', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    try:
+        # Читаем файл
+        df = pd.read_excel(file)
+        
+        # Проверяем наличие необходимых колонок
+        required_columns = ['Контрагент']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            flash(f'В файле отсутствуют обязательные колонки: {", ".join(missing_columns)}', 'danger')
+            return redirect(url_for('manage_shr'))
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        successful = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                counterparty = row['Контрагент']
+                driver = row.get('Драйвер', '') if pd.notna(row.get('Драйвер', '')) else ''
+                position = row.get('Должность', '') if pd.notna(row.get('Должность', '')) else ''
+                department = row.get('Отдел', '') if pd.notna(row.get('Отдел', '')) else ''
+                status = row.get('Статус', 'Активен') if pd.notna(row.get('Статус', '')) else 'Активен'
+                
+                cur.execute('''
+                    INSERT INTO public."dim_ШР" ("Контрагент", "Драйвер", "Должность", "Отдел", "Статус")
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (counterparty, driver, position, department, status))
+                
+                successful += 1
+                
+            except Exception as e:
+                errors.append(f"Строка {index + 2}: {str(e)}")
+                print(f"Import error at row {index + 2}: {e}")
+        
+        conn.commit()
+        
+        flash(f'Успешно импортировано записей: {successful}', 'success')
+        if errors:
+            for error in errors[:5]:
+                flash(error, 'warning')
+                print(error)
+        
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+        print(f"Import SHR error: {e}")
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/debug')
+@admin_required
+def debug_shr():
+    """Отладка - показать структуру таблицы и данные"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Получаем информацию о таблице
+    cur.execute("""
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'dim_ШР'
+        ORDER BY ordinal_position
+    """)
+    columns = cur.fetchall()
+    
+    # Получаем данные
+    cur.execute('SELECT * FROM public."dim_ШР" LIMIT 5')
+    sample_data = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return jsonify({
+        'columns': columns,
+        'sample_data': sample_data,
+        'count': len(sample_data)
+    })
+
 # ==================== ИМПОРТ ИЗ EXCEL ====================
 
 @app.route('/import', methods=['GET', 'POST'])
@@ -1854,226 +2168,6 @@ def reset_password():
     
     flash('Пароль пользователя успешно сброшен', 'success')
     return redirect(url_for('manage_users'))
-
-# ==================== УПРАВЛЕНИЕ ШТАТНЫМ РАСПИСАНИЕМ ====================
-
-@app.route('/admin/references/shr')
-@admin_required
-def manage_shr():
-    """Управление штатным расписанием"""
-    conn = get_db()
-    cur = conn.cursor()
-    
-    # Проверяем, существует ли таблица, если нет - создаем
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS dim_shr (
-            id SERIAL PRIMARY KEY,
-            counterparty VARCHAR(255) NOT NULL,
-            driver VARCHAR(255),
-            position VARCHAR(255),
-            department VARCHAR(255),
-            status VARCHAR(50) DEFAULT 'Активен',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    
-    # Получаем все записи
-    cur.execute("""
-        SELECT id, counterparty, driver, position, department, status 
-        FROM dim_shr 
-        ORDER BY counterparty, driver, position
-    """)
-    shr_list = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    return render_template('manage_shr.html', shr_list=shr_list)
-
-@app.route('/admin/references/shr/add', methods=['POST'])
-@admin_required
-def add_shr():
-    """Добавление записи в штатное расписание"""
-    counterparty = request.form['counterparty']
-    driver = request.form.get('driver', '')
-    position = request.form.get('position', '')
-    department = request.form.get('department', '')
-    status = request.form.get('status', 'Активен')
-    
-    conn = get_db()
-    cur = conn.cursor()
-    
-    try:
-        cur.execute("""
-            INSERT INTO dim_shr (counterparty, driver, position, department, status)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (counterparty, driver, position, department, status))
-        conn.commit()
-        flash('Запись успешно добавлена', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Ошибка при добавлении: {str(e)}', 'danger')
-    finally:
-        cur.close()
-        conn.close()
-    
-    return redirect(url_for('manage_shr'))
-
-@app.route('/admin/references/shr/edit/<int:shr_id>', methods=['POST'])
-@admin_required
-def edit_shr(shr_id):
-    """Редактирование записи в штатном расписании"""
-    counterparty = request.form['counterparty']
-    driver = request.form.get('driver', '')
-    position = request.form.get('position', '')
-    department = request.form.get('department', '')
-    status = request.form.get('status', 'Активен')
-    
-    conn = get_db()
-    cur = conn.cursor()
-    
-    try:
-        cur.execute("""
-            UPDATE dim_shr 
-            SET counterparty = %s, driver = %s, position = %s, 
-                department = %s, status = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """, (counterparty, driver, position, department, status, shr_id))
-        conn.commit()
-        flash('Запись успешно обновлена', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Ошибка при обновлении: {str(e)}', 'danger')
-    finally:
-        cur.close()
-        conn.close()
-    
-    return redirect(url_for('manage_shr'))
-
-@app.route('/admin/references/shr/delete/<int:shr_id>')
-@admin_required
-def delete_shr(shr_id):
-    """Удаление записи из штатного расписания"""
-    conn = get_db()
-    cur = conn.cursor()
-    
-    try:
-        cur.execute("DELETE FROM dim_shr WHERE id = %s", (shr_id,))
-        conn.commit()
-        flash('Запись успешно удалена', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Ошибка при удалении: {str(e)}', 'danger')
-    finally:
-        cur.close()
-        conn.close()
-    
-    return redirect(url_for('manage_shr'))
-
-@app.route('/admin/references/shr/export')
-@admin_required
-def export_shr():
-    """Экспорт штатного расписания в Excel"""
-    conn = get_db()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        SELECT id, counterparty as "Контрагент", driver as "Драйвер", 
-               position as "Должность", department as "Отдел", status as "Статус"
-        FROM dim_shr 
-        ORDER BY counterparty, driver, position
-    """)
-    data = cur.fetchall()
-    
-    cur.close()
-    conn.close()
-    
-    df = pd.DataFrame(data)
-    filename = f"shr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    
-    # Создаем временный файл
-    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
-        df.to_excel(tmp.name, index=False)
-        tmp_path = tmp.name
-    
-    # Отправляем файл
-    return send_file(
-        tmp_path,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-
-@app.route('/admin/references/shr/import', methods=['POST'])
-@admin_required
-def import_shr():
-    """Импорт штатного расписания из Excel"""
-    if 'file' not in request.files:
-        flash('Файл не выбран', 'danger')
-        return redirect(url_for('manage_shr'))
-    
-    file = request.files['file']
-    if file.filename == '':
-        flash('Файл не выбран', 'danger')
-        return redirect(url_for('manage_shr'))
-    
-    if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
-        flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls)', 'danger')
-        return redirect(url_for('manage_shr'))
-    
-    try:
-        # Читаем файл
-        df = pd.read_excel(file)
-        
-        # Проверяем наличие необходимых колонок
-        required_columns = ['Контрагент']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            flash(f'В файле отсутствуют обязательные колонки: {", ".join(missing_columns)}', 'danger')
-            return redirect(url_for('manage_shr'))
-        
-        conn = get_db()
-        cur = conn.cursor()
-        
-        successful = 0
-        errors = []
-        
-        for index, row in df.iterrows():
-            try:
-                counterparty = row['Контрагент']
-                driver = row.get('Драйвер', '') if pd.notna(row.get('Драйвер', '')) else ''
-                position = row.get('Должность', '') if pd.notna(row.get('Должность', '')) else ''
-                department = row.get('Отдел', '') if pd.notna(row.get('Отдел', '')) else ''
-                status = row.get('Статус', 'Активен') if pd.notna(row.get('Статус', '')) else 'Активен'
-                
-                cur.execute("""
-                    INSERT INTO dim_shr (counterparty, driver, position, department, status)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (counterparty, driver, position, department, status))
-                
-                successful += 1
-                
-            except Exception as e:
-                errors.append(f"Строка {index + 2}: {str(e)}")
-        
-        conn.commit()
-        
-        flash(f'Успешно импортировано записей: {successful}', 'success')
-        if errors:
-            for error in errors[:5]:
-                flash(error, 'warning')
-                print(error)
-        
-        cur.close()
-        conn.close()
-        
-    except Exception as e:
-        flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
-        print(f"Import SHR error: {e}")
-    
-    return redirect(url_for('manage_shr'))
 
 @app.route('/health')
 def health():

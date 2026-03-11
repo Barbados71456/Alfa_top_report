@@ -117,23 +117,24 @@
                                 {% for item in shr_list %}
                                 <tr>
                                     <td>{{ item.id }}</td>
-                                    <td>{{ item.counterparty }}</td>
-                                    <td>{{ item.driver or '-' }}</td>
-                                    <td>{{ item.position or '-' }}</td>
-                                    <td>{{ item.department or '-' }}</td>
+                                    <td>{{ item.counterparty or item['Контрагент'] }}</td>
+                                    <td>{{ item.driver or item['Драйвер'] or '-' }}</td>
+                                    <td>{{ item.position or item['Должность'] or '-' }}</td>
+                                    <td>{{ item.department or item['Отдел'] or '-' }}</td>
                                     <td>
-                                        {% if item.status == 'Активен' %}
-                                        <span class="badge bg-success">{{ item.status }}</span>
-                                        {% elif item.status == 'Неактивен' %}
-                                        <span class="badge bg-danger">{{ item.status }}</span>
+                                        {% set status = item.status or item['Статус'] %}
+                                        {% if status == 'Активен' %}
+                                        <span class="badge bg-success">{{ status }}</span>
+                                        {% elif status == 'Неактивен' %}
+                                        <span class="badge bg-danger">{{ status }}</span>
                                         {% else %}
-                                        <span class="badge bg-warning">{{ item.status }}</span>
+                                        <span class="badge bg-warning">{{ status }}</span>
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <a href="#" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal{{ item.id }}">
+                                        <button class="btn btn-sm btn-primary" onclick="editRecord({{ item.id }})">
                                             <i class="bi bi-pencil"></i>
-                                        </a>
+                                        </button>
                                         <a href="{{ url_for('delete_shr', shr_id=item.id) }}" 
                                            class="btn btn-sm btn-danger"
                                            onclick="return confirm('Вы уверены, что хотите удалить эту запись?')">
@@ -141,50 +142,6 @@
                                         </a>
                                     </td>
                                 </tr>
-
-                                <!-- Модальное окно для редактирования -->
-                                <div class="modal fade" id="editModal{{ item.id }}" tabindex="-1">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
-                                            <div class="modal-header bg-info text-white">
-                                                <h5 class="modal-title">Редактирование записи</h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <form method="POST" action="{{ url_for('edit_shr', shr_id=item.id) }}">
-                                                <div class="modal-body">
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Контрагент</label>
-                                                        <input type="text" class="form-control" name="counterparty" value="{{ item.counterparty }}" required>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Драйвер</label>
-                                                        <input type="text" class="form-control" name="driver" value="{{ item.driver or '' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Должность</label>
-                                                        <input type="text" class="form-control" name="position" value="{{ item.position or '' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Отдел</label>
-                                                        <input type="text" class="form-control" name="department" value="{{ item.department or '' }}">
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Статус</label>
-                                                        <select class="form-control" name="status">
-                                                            <option value="Активен" {% if item.status == 'Активен' %}selected{% endif %}>Активен</option>
-                                                            <option value="Неактивен" {% if item.status == 'Неактивен' %}selected{% endif %}>Неактивен</option>
-                                                            <option value="В архиве" {% if item.status == 'В архиве' %}selected{% endif %}>В архиве</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                                                    <button type="submit" class="btn btn-info text-white">Сохранить</button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
                                 {% else %}
                                 <tr>
                                     <td colspan="7" class="text-center py-4" style="color: #86868b;">
@@ -198,6 +155,50 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для редактирования -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Редактирование записи</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="" id="editForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Контрагент</label>
+                        <input type="text" class="form-control" name="counterparty" id="edit_counterparty" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Драйвер</label>
+                        <input type="text" class="form-control" name="driver" id="edit_driver">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Должность</label>
+                        <input type="text" class="form-control" name="position" id="edit_position">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Отдел</label>
+                        <input type="text" class="form-control" name="department" id="edit_department">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус</label>
+                        <select class="form-control" name="status" id="edit_status">
+                            <option value="Активен">Активен</option>
+                            <option value="Неактивен">Неактивен</option>
+                            <option value="В архиве">В архиве</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-info text-white">Сохранить</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -249,5 +250,29 @@ $(document).ready(function() {
         });
     });
 });
+
+// Функция для редактирования записи
+function editRecord(id) {
+    // Получаем данные строки
+    var row = $(event.target).closest('tr');
+    var counterparty = row.find('td:eq(1)').text();
+    var driver = row.find('td:eq(2)').text() == '-' ? '' : row.find('td:eq(2)').text();
+    var position = row.find('td:eq(3)').text() == '-' ? '' : row.find('td:eq(3)').text();
+    var department = row.find('td:eq(4)').text() == '-' ? '' : row.find('td:eq(4)').text();
+    var status = row.find('td:eq(5)').text().trim();
+    
+    // Заполняем форму
+    $('#edit_counterparty').val(counterparty);
+    $('#edit_driver').val(driver);
+    $('#edit_position').val(position);
+    $('#edit_department').val(department);
+    $('#edit_status').val(status);
+    
+    // Устанавливаем action формы
+    $('#editForm').attr('action', '/admin/references/shr/edit/' + id);
+    
+    // Показываем модальное окно
+    $('#editModal').modal('show');
+}
 </script>
 {% endblock %}
