@@ -98,10 +98,14 @@ def init_db():
             )
         ''')
         
+        # Обновленная таблица projects с новыми полями
         cur.execute('''
             CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
-                name VARCHAR(100) UNIQUE NOT NULL
+                name VARCHAR(100) UNIQUE NOT NULL,
+                tip_project_1 VARCHAR(100),
+                tip_project_2 VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -194,9 +198,16 @@ def init_db():
                     (cat_name, sign_row['id'])
                 )
         
-        default_projects = ['Основной', 'Личный', 'Бизнес']
-        for project in default_projects:
-            cur.execute("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (project,))
+        default_projects = [
+            ('Основной', 'Внутренний', 'Стандартный'),
+            ('Личный', 'Внутренний', 'Малый'),
+            ('Бизнес', 'Внешний', 'Крупный')
+        ]
+        for project, tip1, tip2 in default_projects:
+            cur.execute(
+                "INSERT INTO projects (name, tip_project_1, tip_project_2) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+                (project, tip1, tip2)
+            )
         
         default_counterparties = ['Клиент 1', 'Поставщик 1', 'Сотрудник']
         for counterparty in default_counterparties:
@@ -834,14 +845,29 @@ def delete_article(article_id):
         conn.close()
     return redirect(url_for('manage_articles'))
 
-# ---- Управление проектами ----
+# ---- Управление проектами (ОБНОВЛЕННАЯ ВЕРСИЯ) ----
 @app.route('/admin/references/projects')
 @admin_required
 def manage_projects():
     conn = get_db()
     cur = conn.cursor()
+    
+    # Проверяем, существуют ли новые колонки, если нет - добавляем
+    cur.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='projects' AND column_name='tip_project_1'
+    """)
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE projects ADD COLUMN tip_project_1 VARCHAR(100)")
+        cur.execute("ALTER TABLE projects ADD COLUMN tip_project_2 VARCHAR(100)")
+        cur.execute("ALTER TABLE projects ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        conn.commit()
+        print("Добавлены новые колонки в таблицу projects")
+    
     cur.execute('''
-        SELECT p.*, COUNT(e.id) as expenses_count 
+        SELECT p.id, p.name, p.tip_project_1, p.tip_project_2, p.created_at,
+               COUNT(e.id) as expenses_count 
         FROM projects p 
         LEFT JOIN expenses e ON p.id = e.project_id 
         GROUP BY p.id 
@@ -856,15 +882,49 @@ def manage_projects():
 @admin_required
 def add_project():
     name = request.form['name']
+    tip_project_1 = request.form.get('tip_project_1', '')
+    tip_project_2 = request.form.get('tip_project_2', '')
+    
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute("INSERT INTO projects (name) VALUES (%s)", (name,))
+        cur.execute(
+            "INSERT INTO projects (name, tip_project_1, tip_project_2) VALUES (%s, %s, %s)",
+            (name, tip_project_1 if tip_project_1 else None, tip_project_2 if tip_project_2 else None)
+        )
         conn.commit()
         flash('Проект успешно добавлен', 'success')
     except psycopg2.IntegrityError:
         conn.rollback()
         flash('Проект с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
+
+@app.route('/admin/references/projects/edit/<int:project_id>', methods=['POST'])
+@admin_required
+def edit_project(project_id):
+    name = request.form['name']
+    tip_project_1 = request.form.get('tip_project_1', '')
+    tip_project_2 = request.form.get('tip_project_2', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE projects 
+            SET name = %s, tip_project_1 = %s, tip_project_2 = %s
+            WHERE id = %s
+        """, (name, tip_project_1 if tip_project_1 else None, tip_project_2 if tip_project_2 else None, project_id))
+        conn.commit()
+        flash('Проект успешно обновлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Проект с таким именем уже существует', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при обновлении: {str(e)}', 'danger')
     finally:
         cur.close()
         conn.close()
@@ -1605,7 +1665,10 @@ def export_reference(ref_type):
         
     elif ref_type == 'projects':
         cur.execute('''
-            SELECT p.id, p.name as "Проект",
+            SELECT p.id, p.name as "Проект", 
+                   p.tip_project_1 as "Тип проекта 1",
+                   p.tip_project_2 as "Тип проекта 2",
+                   p.created_at as "Дата создания",
                    COUNT(e.id) as "Использований"
             FROM projects p
             LEFT JOIN expenses e ON p.id = e.project_id
@@ -1793,7 +1856,7 @@ def import_reference(ref_type):
             flash(f'Успешно импортировано статей: {successful}', 'success')
             
         elif ref_type == 'projects':
-            # Ожидаемые колонки: Проект
+            # Ожидаемые колонки: Проект, Тип проекта 1, Тип проекта 2
             if 'Проект' not in df.columns:
                 flash('В файле отсутствует колонка "Проект"', 'danger')
                 return redirect(request.referrer)
@@ -1801,10 +1864,17 @@ def import_reference(ref_type):
             for index, row in df.iterrows():
                 try:
                     name = row['Проект']
-                    cur.execute(
-                        "INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
-                        (name,)
-                    )
+                    tip_project_1 = row.get('Тип проекта 1', '') if pd.notna(row.get('Тип проекта 1', '')) else None
+                    tip_project_2 = row.get('Тип проекта 2', '') if pd.notna(row.get('Тип проекта 2', '')) else None
+                    
+                    cur.execute("""
+                        INSERT INTO projects (name, tip_project_1, tip_project_2) 
+                        VALUES (%s, %s, %s) 
+                        ON CONFLICT (name) DO UPDATE SET 
+                            tip_project_1 = EXCLUDED.tip_project_1,
+                            tip_project_2 = EXCLUDED.tip_project_2
+                    """, (name, tip_project_1, tip_project_2))
+                    
                     if cur.rowcount > 0:
                         successful += 1
                 except Exception as e:
