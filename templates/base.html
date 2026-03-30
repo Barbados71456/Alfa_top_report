@@ -328,7 +328,7 @@
             color: #ff3b30 !important;
         }
 
-        /* Dropdown menu - ИСПРАВЛЕНО */
+        /* Dropdown menu */
         .dropdown-menu {
             border: none;
             border-radius: 16px;
@@ -790,6 +790,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('import_expenses') }}">
                             <i class="bi bi-file-earmark-excel"></i> Импорт из Excel
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('financial.dashboard') }}">
+                            <i class="bi bi-calculator-fill"></i> Финансы
                         </a>
                     </li>
                     {% if session.role == 'admin' %}

@@ -169,6 +169,17 @@ def init_db():
             )
         ''')
         
+        # Создаем финансовые таблицы
+        try:
+            with open('migrations/create_financial_tables.sql', 'r', encoding='utf-8') as f:
+                sql_script = f.read()
+                cur.execute(sql_script)
+                print("Финансовые таблицы созданы/обновлены")
+        except FileNotFoundError:
+            print("Файл migrations/create_financial_tables.sql не найден, пропускаем создание финансовых таблиц")
+        except Exception as e:
+            print(f"Ошибка при создании финансовых таблиц: {e}")
+        
         # Insert default data if not exists
         cur.execute("SELECT COUNT(*) FROM users")
         user_count = cur.fetchone()['count']
@@ -269,6 +280,15 @@ def get_month_name(month_num):
         9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
     }
     return months.get(month_num, '')
+
+# Регистрируем финансовый blueprint
+try:
+    from financial_routes import financial_bp
+    app.register_blueprint(financial_bp)
+    print("Финансовый модуль зарегистрирован")
+except ImportError as e:
+    print(f"Ошибка импорта финансового модуля: {e}")
+    print("Финансовый модуль не будет доступен")
 
 @app.route('/')
 @login_required
@@ -384,7 +404,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
-@admin_required  # Добавляем требование прав администратора
+@admin_required
 def register():
     if request.method == 'POST':
         username = request.form['username']
@@ -845,7 +865,7 @@ def delete_article(article_id):
         conn.close()
     return redirect(url_for('manage_articles'))
 
-# ---- Управление проектами (ОБНОВЛЕННАЯ ВЕРСИЯ) ----
+# ---- Управление проектами ----
 @app.route('/admin/references/projects')
 @admin_required
 def manage_projects():

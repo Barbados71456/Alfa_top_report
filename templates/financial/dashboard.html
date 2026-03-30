@@ -1,0 +1,963 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-calculator-fill"></i> 
+                        Финансовый учет (Excel-подобный интерфейс)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Сводная информация -->
+                    <div class="row mb-4" id="summaryCards">
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Общий баланс</h6>
+                                    <h3 id="totalBalance">0 ₽</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Обязательства</h6>
+                                    <h3 id="totalLiabilities">0 ₽</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Дефицит/Профицит</h6>
+                                    <h3 id="deficit">0 ₽</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Чужие деньги</h6>
+                                    <h3 id="totalThirdParty">0 ₽</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Вкладки -->
+                    <ul class="nav nav-tabs" id="financialTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#balances">
+                                <i class="bi bi-bank"></i> Остатки
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#liabilities">
+                                <i class="bi bi-receipt"></i> Обязательства
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#credits">
+                                <i class="bi bi-credit-card"></i> Кредиты/Займы
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#rent_inf">
+                                <i class="bi bi-building"></i> Аренда/Инфо
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#evacuations">
+                                <i class="bi bi-truck"></i> Эвакуация
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#parkings">
+                                <i class="bi bi-p-square"></i> Стоянки
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#third_party">
+                                <i class="bi bi-people"></i> Чужие деньги
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#taxes">
+                                <i class="bi bi-calculator"></i> Налоги
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#salaries">
+                                <i class="bi bi-cash-stack"></i> Зарплата
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#state_duties">
+                                <i class="bi bi-gavel"></i> Госпошлины
+                            </a>
+                        </li>
+                    </ul>
+                    
+                    <!-- Контент вкладок - включаем отдельные шаблоны -->
+                    <div class="tab-content mt-3">
+                        <div class="tab-pane fade show active" id="balances">
+                            {% include "financial/balances.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="liabilities">
+                            {% include "financial/liabilities.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="credits">
+                            {% include "financial/credits.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="rent_inf">
+                            {% include "financial/rent_inf.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="evacuations">
+                            {% include "financial/evacuations.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="parkings">
+                            {% include "financial/parkings.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="third_party">
+                            {% include "financial/third_party.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="taxes">
+                            {% include "financial/taxes.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="salaries">
+                            {% include "financial/salaries.html" %}
+                        </div>
+                        <div class="tab-pane fade" id="state_duties">
+                            {% include "financial/state_duties.html" %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления/редактирования -->
+<div class="modal fade" id="dataModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="modalTitle">
+                    <i class="bi bi-plus-circle"></i> Добавить запись
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dataForm">
+                    <div id="formFields"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveRecord()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+let currentSection = '';
+let currentRecordId = null;
+
+// Загрузка данных для текущего раздела
+function loadData(section) {
+    $.ajax({
+        url: `/financial/${section}`,
+        method: 'GET',
+        success: function(data) {
+            renderTable(section, data);
+        },
+        error: function(xhr) {
+            console.error('Ошибка загрузки:', xhr.responseText);
+            showAlert('Ошибка загрузки данных', 'danger');
+        }
+    });
+}
+
+// Рендеринг таблицы
+function renderTable(section, data) {
+    const tableBody = $(`#${section}Table tbody`);
+    tableBody.empty();
+    
+    if (!data || data.length === 0) {
+        tableBody.html('<tr><td colspan="10" class="text-center">Нет данных</td></tr>');
+        return;
+    }
+    
+    data.forEach(row => {
+        let html = '<tr>';
+        
+        if (section === 'balances') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.bank_name}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="${row.amount >= 0 ? 'text-success' : 'text-danger'}">${formatNumber(row.amount)}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'liabilities') {
+            const statusClass = row.status === 'paid' ? 'success' : (row.status === 'overdue' ? 'danger' : 'warning');
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.due_date}</td>
+                <td>${row.description}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td><span class="badge bg-${statusClass}">${getStatusText(row.status)}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'credits') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.counterparty}</td>
+                <td>${row.purpose || '-'}</td>
+                <td>${row.service_type || '-'}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.responsible || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'rent_inf') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.counterparty}</td>
+                <td>${row.purpose || '-'}</td>
+                <td>${row.service_type || '-'}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.responsible || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'evacuations') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.counterparty || '-'}</td>
+                <td>${row.purpose || '-'}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'parkings') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.counterparty}</td>
+                <td>${row.period || '-'}</td>
+                <td>${row.purpose || '-'}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'third_party') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.counterparty}</td>
+                <td>${row.purpose || '-'}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.due_date || '-'}</td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'taxes') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.tax_type}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.quarter || '-'}</td>
+                <td class="text-danger">${formatNumber(row.penalty)}</td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'salaries') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td class="text-danger">${formatNumber(row.tax_amount)}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        } else if (section === 'state_duties') {
+            html += `
+                <td>${row.id}</td>
+                <td>${row.date}</td>
+                <td>${row.portfolio || '-'}</td>
+                <td>${row.case_name || '-'}</td>
+                <td class="text-danger">${formatNumber(row.amount)}</td>
+                <td>${row.responsible || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+        }
+        
+        html += '</tr>';
+        tableBody.append(html);
+    });
+}
+
+// Показать модальное окно для добавления
+function showAddModal(section) {
+    currentSection = section;
+    currentRecordId = null;
+    $('#modalTitle').html(`<i class="bi bi-plus-circle"></i> Добавить запись - ${getSectionName(section)}`);
+    
+    // Загружаем форму для раздела
+    loadForm(section);
+    $('#dataModal').modal('show');
+}
+
+// Редактирование записи
+function editRecord(section, id) {
+    currentSection = section;
+    currentRecordId = id;
+    $('#modalTitle').html(`<i class="bi bi-pencil"></i> Редактировать запись - ${getSectionName(section)}`);
+    
+    // Загружаем данные записи
+    $.ajax({
+        url: `/financial/${section}`,
+        method: 'GET',
+        success: function(data) {
+            const record = data.find(r => r.id === id);
+            if (record) {
+                loadForm(section, record);
+                $('#dataModal').modal('show');
+            }
+        }
+    });
+}
+
+// Загрузка формы для раздела
+function loadForm(section, data = null) {
+    const formFields = $('#formFields');
+    let html = '';
+    
+    if (section === 'balances') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Банк *</label>
+                <select name="bank_name" class="form-select" required>
+                    <option value="Свой банк Альфа" ${data && data.bank_name === 'Свой банк Альфа' ? 'selected' : ''}>Свой банк Альфа</option>
+                    <option value="Альфабанк Альфа" ${data && data.bank_name === 'Альфабанк Альфа' ? 'selected' : ''}>Альфабанк Альфа</option>
+                    <option value="Тинькофф Альфа" ${data && data.bank_name === 'Тинькофф Альфа' ? 'selected' : ''}>Тинькофф Альфа</option>
+                    <option value="Сбер Альфа" ${data && data.bank_name === 'Сбер Альфа' ? 'selected' : ''}>Сбер Альфа</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+        `;
+    } else if (section === 'liabilities') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата создания *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Срок оплаты *</label>
+                <input type="date" name="due_date" class="form-control" required value="${data ? data.due_date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Описание *</label>
+                <input type="text" name="description" class="form-control" required value="${data ? data.description : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Комментарий</label>
+                <textarea name="comments" class="form-control" rows="3">${data ? data.comments || '' : ''}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
+                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                    <option value="overdue" ${data && data.status === 'overdue' ? 'selected' : ''}>Просрочено</option>
+                </select>
+            </div>
+        `;
+    } else if (section === 'credits') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Контрагент *</label>
+                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Назначение</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Тип услуги</label>
+                <input type="text" name="service_type" class="form-control" value="${data ? data.service_type || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Ответственный</label>
+                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+            </div>
+        `;
+    } else if (section === 'rent_inf') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Контрагент *</label>
+                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Назначение</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Тип услуги</label>
+                <input type="text" name="service_type" class="form-control" value="${data ? data.service_type || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Ответственный</label>
+                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+            </div>
+        `;
+    } else if (section === 'evacuations') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Контрагент</label>
+                <input type="text" name="counterparty" class="form-control" value="${data ? data.counterparty || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Назначение</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                </select>
+            </div>
+        `;
+    } else if (section === 'parkings') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Контрагент *</label>
+                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Период</label>
+                <input type="text" name="period" class="form-control" placeholder="например: февраль 2026" value="${data ? data.period || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Назначение</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                </select>
+            </div>
+        `;
+    } else if (section === 'third_party') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Контрагент *</label>
+                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Назначение</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Срок возврата</label>
+                <input type="date" name="due_date" class="form-control" value="${data ? data.due_date || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Возвращено</option>
+                </select>
+            </div>
+        `;
+    } else if (section === 'taxes') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Тип налога *</label>
+                <select name="tax_type" class="form-select" required>
+                    <option value="НДФЛ" ${data && data.tax_type === 'НДФЛ' ? 'selected' : ''}>НДФЛ</option>
+                    <option value="УСН" ${data && data.tax_type === 'УСН' ? 'selected' : ''}>УСН</option>
+                    <option value="НДС" ${data && data.tax_type === 'НДС' ? 'selected' : ''}>НДС</option>
+                    <option value="Транспортный" ${data && data.tax_type === 'Транспортный' ? 'selected' : ''}>Транспортный</option>
+                    <option value="Налог на прибыль" ${data && data.tax_type === 'Налог на прибыль' ? 'selected' : ''}>Налог на прибыль</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Квартал</label>
+                <select name="quarter" class="form-select">
+                    <option value="">Выберите квартал</option>
+                    <option value="1 квартал" ${data && data.quarter === '1 квартал' ? 'selected' : ''}>1 квартал</option>
+                    <option value="2 квартал" ${data && data.quarter === '2 квартал' ? 'selected' : ''}>2 квартал</option>
+                    <option value="3 квартал" ${data && data.quarter === '3 квартал' ? 'selected' : ''}>3 квартал</option>
+                    <option value="4 квартал" ${data && data.quarter === '4 квартал' ? 'selected' : ''}>4 квартал</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Пени</label>
+                <input type="number" name="penalty" class="form-control" step="0.01" value="${data ? data.penalty || 0 : 0}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
+                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                </select>
+            </div>
+        `;
+    } else if (section === 'salaries') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма налога (руб.)</label>
+                <input type="number" name="tax_amount" class="form-control" step="0.01" value="${data ? data.tax_amount || 0 : 0}">
+            </div>
+        `;
+    } else if (section === 'state_duties') {
+        html = `
+            <div class="mb-3">
+                <label class="form-label">Дата *</label>
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Портфель</label>
+                <select name="portfolio" class="form-select">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Название дела</label>
+                <input type="text" name="case_name" class="form-control" value="${data ? data.case_name || '' : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Сумма (руб.) *</label>
+                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Ответственный</label>
+                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+            </div>
+        `;
+    }
+    
+    formFields.html(html);
+}
+
+// Сохранение записи
+function saveRecord() {
+    const formData = {};
+    $('#dataForm').serializeArray().forEach(field => {
+        formData[field.name] = field.value;
+    });
+    
+    const url = currentRecordId 
+        ? `/financial/${currentSection}/update/${currentRecordId}`
+        : `/financial/${currentSection}/add`;
+    
+    const method = currentRecordId ? 'PUT' : 'POST';
+    
+    $.ajax({
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        success: function(response) {
+            $('#dataModal').modal('hide');
+            loadData(currentSection);
+            loadSummary();
+            showAlert('Запись успешно сохранена', 'success');
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.error || 'Ошибка сохранения';
+            showAlert(error, 'danger');
+        }
+    });
+}
+
+// Удаление записи
+function deleteRecord(section, id) {
+    if (confirm('Вы уверены, что хотите удалить эту запись?')) {
+        $.ajax({
+            url: `/financial/${section}/delete/${id}`,
+            method: 'DELETE',
+            success: function() {
+                loadData(section);
+                loadSummary();
+                showAlert('Запись удалена', 'success');
+            },
+            error: function(xhr) {
+                showAlert('Ошибка удаления', 'danger');
+            }
+        });
+    }
+}
+
+// Экспорт раздела
+function exportSection(section) {
+    window.location.href = `/financial/export/${section}`;
+}
+
+// Импорт раздела
+function importSection(section, file) {
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    $.ajax({
+        url: `/financial/import/${section}`,
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            if (response.success) {
+                showAlert(`Импортировано записей: ${response.imported}`, 'success');
+                if (response.errors && response.errors.length > 0) {
+                    console.log('Ошибки импорта:', response.errors);
+                }
+                loadData(section);
+                loadSummary();
+            } else {
+                showAlert(response.error || 'Ошибка импорта', 'danger');
+            }
+        },
+        error: function(xhr) {
+            showAlert('Ошибка импорта', 'danger');
+        }
+    });
+}
+
+// Загрузка сводных данных
+function loadSummary() {
+    $.ajax({
+        url: '/financial/summary',
+        method: 'GET',
+        success: function(data) {
+            $('#totalBalance').text(formatNumber(data.total_balance) + ' ₽');
+            $('#totalLiabilities').text(formatNumber(data.total_liabilities) + ' ₽');
+            $('#deficit').text(formatNumber(data.deficit) + ' ₽');
+            $('#totalThirdParty').text(formatNumber(data.total_third_party) + ' ₽');
+            
+            // Меняем цвет дефицита
+            const deficitElement = $('#deficit');
+            if (data.deficit >= 0) {
+                deficitElement.css('color', '#34c759');
+            } else {
+                deficitElement.css('color', '#ff3b30');
+            }
+        }
+    });
+}
+
+// Вспомогательные функции
+function formatNumber(num) {
+    return new Intl.NumberFormat('ru-RU', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
+}
+
+function getToday() {
+    return new Date().toISOString().split('T')[0];
+}
+
+function getSectionName(section) {
+    const names = {
+        'balances': 'Остатки на счетах',
+        'liabilities': 'Обязательства',
+        'credits': 'Кредиты и займы',
+        'rent_inf': 'Аренда и инфоуслуги',
+        'evacuations': 'Эвакуация',
+        'parkings': 'Стоянки',
+        'third_party': 'Чужие деньги',
+        'taxes': 'Налоги',
+        'salaries': 'Зарплата',
+        'state_duties': 'Госпошлины'
+    };
+    return names[section] || section;
+}
+
+function getStatusText(status) {
+    const statuses = {
+        'pending': 'Ожидает',
+        'paid': 'Оплачено',
+        'overdue': 'Просрочено'
+    };
+    return statuses[status] || status;
+}
+
+function showAlert(message, type) {
+    const alert = $(`
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `);
+    $('.container-fluid').prepend(alert);
+    setTimeout(() => alert.fadeOut(), 5000);
+}
+
+// Инициализация при загрузке страницы
+$(document).ready(function() {
+    loadSummary();
+    loadData('balances');
+    
+    // Обработка смены вкладок
+    $('#financialTabs a').on('shown.bs.tab', function(e) {
+        const section = $(e.target).attr('href').replace('#', '');
+        loadData(section);
+    });
+});
+</script>
+{% endblock %}
