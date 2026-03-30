@@ -596,9 +596,6 @@ let currentDate = new Date().toISOString().split('T')[0];
 $(document).ready(function() {
     $('#globalDate').val(currentDate);
     loadSummary();
-    loadData('balances');
-    
-    // Загружаем данные для текущей даты
     loadDataForDate(currentDate);
     
     $('#financialTabs a').on('shown.bs.tab', function(e) {
@@ -607,6 +604,9 @@ $(document).ready(function() {
         if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
             if (confirm('Есть несохраненные изменения в текущей вкладке. Сохранить перед переключением?')) {
                 saveAllChanges().then(() => {
+                    currentSection = section;
+                    loadDataForDate(currentDate);
+                }).catch(() => {
                     currentSection = section;
                     loadDataForDate(currentDate);
                 });
@@ -841,7 +841,7 @@ function renderEditableTable(section, data) {
             `;
         }
         
-        html += '</tr>';
+        html += ' </div>';
         tableBody.append(html);
     });
     
@@ -876,41 +876,201 @@ function addNewRow(section) {
     
     const tableBody = $(`#${section}Table tbody`);
     let html = '<tr data-id="' + newId + '" class="table-warning">';
-    html += '<td><input type="checkbox" class="row-checkbox" data-id="' + newId + '"></td>';
-    html += '<td><span class="badge bg-info">Новая</span></td>';
+    html += '<td><input type="checkbox" class="row-checkbox" data-id="' + newId + '">\\n</div>';
+    html += '<td><span class="badge bg-info">Новая</span>\\n</div>';
     
     if (section === 'balances') {
         html += `
-            <td><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" placeholder="Банк/Наличные"></td>
-            <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></td>
-            <td>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" placeholder="Банк/Наличные"></div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div>
                 <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
                     <i class="bi bi-trash"></i>
                 </button>
-             </td>
+             </div>
         `;
     } else if (section === 'liabilities') {
         html += `
-            <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></td>
-            <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></td>
-            <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></td>
-            <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></td>
-            <td>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>
+             <div>
                 <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
                     <i class="bi bi-trash"></i>
                 </button>
-             </td>
+             </div>
         `;
-    } else {
-        // Для остальных разделов - добавляем заглушку
-        const colCount = $(`#${section}Table thead th`).length - 2;
-        for (let i = 0; i < colCount; i++) {
-            html += '<td><input type="text" class="form-control form-control-sm edit-field" placeholder="..."></td>';
-        }
-        html += '<td><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></td>';
+    } else if (section === 'receivables') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'rent_inf') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'evacuations') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'parkings') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'third_party') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'taxes') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="0" placeholder="НДФЛ"></div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="0" placeholder="ЕСТ"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'salaries') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
+    } else if (section === 'state_duties') {
+        html += `
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
+             <div>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                    <option value="">Выберите портфель</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
+                </select>
+             </div>
+             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
+             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
+             <div>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </div>
+        `;
     }
     
-    html += '</tr>';
+    html += ' </div>';
     tableBody.append(html);
     
     // Добавляем обработчики для новой строки
@@ -1017,7 +1177,7 @@ function saveAllChanges() {
         })
         .catch(error => {
             console.error('Error saving:', error);
-            showAlert('Ошибка при сохранении: ' + error, 'danger');
+            showAlert('Ошибка при сохранении: ' + (error.responseJSON?.error || error.statusText || 'Неизвестная ошибка'), 'danger');
         })
         .finally(() => {
             $('#loadingOverlay').hide();
@@ -1039,7 +1199,9 @@ function saveSectionChanges(section) {
             toDelete.push(id);
         } else if (data._isNew) {
             const { _isNew, ...createData } = data;
-            createData.date = currentDate;
+            if (!createData.date) {
+                createData.date = currentDate;
+            }
             toCreate.push(createData);
         } else {
             const { _deleted, ...updateData } = data;
@@ -1050,29 +1212,44 @@ function saveSectionChanges(section) {
     const promises = [];
     
     toCreate.forEach(newData => {
-        promises.push($.ajax({
-            url: `/financial/${section}/add`,
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(newData)
-        }));
+        promises.push(
+            $.ajax({
+                url: `/financial/${section}/add`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(newData)
+            }).catch(err => {
+                console.error(`Error creating in ${section}:`, err);
+                throw err;
+            })
+        );
     });
     
     toUpdate.forEach(updateData => {
         const { id, ...fields } = updateData;
-        promises.push($.ajax({
-            url: `/financial/${section}/update/${id}`,
-            method: 'PUT',
-            contentType: 'application/json',
-            data: JSON.stringify(fields)
-        }));
+        promises.push(
+            $.ajax({
+                url: `/financial/${section}/update/${id}`,
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify(fields)
+            }).catch(err => {
+                console.error(`Error updating in ${section}:`, err);
+                throw err;
+            })
+        );
     });
     
     toDelete.forEach(id => {
-        promises.push($.ajax({
-            url: `/financial/${section}/delete/${id}`,
-            method: 'DELETE'
-        }));
+        promises.push(
+            $.ajax({
+                url: `/financial/${section}/delete/${id}`,
+                method: 'DELETE'
+            }).catch(err => {
+                console.error(`Error deleting in ${section}:`, err);
+                throw err;
+            })
+        );
     });
     
     return Promise.all(promises);
@@ -1121,9 +1298,9 @@ function loadSummary() {
             
             const deficitElement = $('#deficit');
             if (data.deficit >= 0) {
-                deficitElement.css('color', '#34c759');
+                deficitElement.css('color', '#28a745');
             } else {
-                deficitElement.css('color', '#ff3b30');
+                deficitElement.css('color', '#dc3545');
             }
         },
         error: function(xhr) {
@@ -1170,7 +1347,8 @@ function importSection(section, file) {
                 showAlert(response.error || 'Ошибка импорта', 'danger');
             }
             const inputId = `importFile${section.charAt(0).toUpperCase() + section.slice(1)}`;
-            document.getElementById(inputId).value = '';
+            const inputElem = document.getElementById(inputId);
+            if (inputElem) inputElem.value = '';
         },
         error: function(xhr) {
             showAlert('Ошибка импорта', 'danger');
@@ -1211,6 +1389,12 @@ function showAlert(message, type) {
 }
 .table-warning {
     background-color: #fff3cd !important;
+}
+.table-responsive {
+    overflow-x: auto;
+}
+.edit-field {
+    min-width: 100px;
 }
 </style>
 {% endblock %}
