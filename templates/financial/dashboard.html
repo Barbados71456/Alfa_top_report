@@ -6,10 +6,20 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="bi bi-calculator-fill"></i> 
-                        Финансовый учет (Excel-подобный интерфейс)
-                    </h5>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-calculator-fill"></i> 
+                            Финансовый учет (Excel-подобный интерфейс)
+                        </h5>
+                        <div>
+                            <button class="btn btn-success" onclick="saveAllChanges()" id="saveAllBtn">
+                                <i class="bi bi-save-all"></i> Сохранить все изменения (Ctrl+S)
+                            </button>
+                            <button class="btn btn-warning" onclick="refreshCurrentTab()">
+                                <i class="bi bi-arrow-repeat"></i> Обновить
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <!-- Сводная информация -->
@@ -108,8 +118,11 @@
                         <div class="tab-pane fade show active" id="balances">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('balances')">
-                                        <i class="bi bi-plus-circle"></i> Добавить остаток
+                                    <button class="btn btn-primary" onclick="addNewRow('balances')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('balances')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('balances')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -123,15 +136,16 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="balancesTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="balancesTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Банк</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма (руб.)</th>
-                                            <th>Действия</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма (руб.)</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -143,8 +157,11 @@
                         <div class="tab-pane fade" id="liabilities">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('liabilities')">
-                                        <i class="bi bi-plus-circle"></i> Добавить обязательство
+                                    <button class="btn btn-primary" onclick="addNewRow('liabilities')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('liabilities')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('liabilities')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -158,17 +175,18 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="liabilitiesTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="liabilitiesTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
-                                            <th>Срок оплаты</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
+                                            <th width="120">Срок оплаты</th>
                                             <th>Описание</th>
-                                            <th>Сумма</th>
-                                            <th>Портфель</th>
-                                            <th>Статус</th>
-                                            <th>Действия</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="120">Статус</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -180,8 +198,11 @@
                         <div class="tab-pane fade" id="credits">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('credits')">
-                                        <i class="bi bi-plus-circle"></i> Добавить кредит/займ
+                                    <button class="btn btn-primary" onclick="addNewRow('credits')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('credits')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('credits')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -195,18 +216,19 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="creditsTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="creditsTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Назначение</th>
                                             <th>Тип услуги</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
                                             <th>Ответственный</th>
-                                            <th>Действия</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -218,8 +240,11 @@
                         <div class="tab-pane fade" id="rent_inf">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('rent_inf')">
-                                        <i class="bi bi-plus-circle"></i> Добавить услугу
+                                    <button class="btn btn-primary" onclick="addNewRow('rent_inf')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('rent_inf')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('rent_inf')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -233,18 +258,19 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="rent_infTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="rent_infTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Назначение</th>
                                             <th>Тип услуги</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
                                             <th>Ответственный</th>
-                                            <th>Действия</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -256,8 +282,11 @@
                         <div class="tab-pane fade" id="evacuations">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('evacuations')">
-                                        <i class="bi bi-plus-circle"></i> Добавить эвакуацию
+                                    <button class="btn btn-primary" onclick="addNewRow('evacuations')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('evacuations')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('evacuations')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -271,17 +300,18 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="evacuationsTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="evacuationsTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Назначение</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
-                                            <th>Статус</th>
-                                            <th>Действия</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="120">Статус</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -293,8 +323,11 @@
                         <div class="tab-pane fade" id="parkings">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('parkings')">
-                                        <i class="bi bi-plus-circle"></i> Добавить стоянку
+                                    <button class="btn btn-primary" onclick="addNewRow('parkings')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('parkings')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('parkings')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -308,18 +341,19 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="parkingsTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="parkingsTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Период</th>
                                             <th>Назначение</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
-                                            <th>Статус</th>
-                                            <th>Действия</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="120">Статус</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -331,8 +365,11 @@
                         <div class="tab-pane fade" id="third_party">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('third_party')">
-                                        <i class="bi bi-plus-circle"></i> Добавить чужие деньги
+                                    <button class="btn btn-primary" onclick="addNewRow('third_party')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('third_party')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('third_party')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -346,18 +383,19 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="third_partyTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="third_partyTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Назначение</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
-                                            <th>Срок возврата</th>
-                                            <th>Статус</th>
-                                            <th>Действия</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="120">Срок возврата</th>
+                                            <th width="120">Статус</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -369,8 +407,11 @@
                         <div class="tab-pane fade" id="taxes">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('taxes')">
-                                        <i class="bi bi-plus-circle"></i> Добавить налог
+                                    <button class="btn btn-primary" onclick="addNewRow('taxes')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('taxes')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('taxes')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -384,18 +425,19 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="taxesTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="taxesTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
                                             <th>Тип налога</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
-                                            <th>Квартал</th>
-                                            <th>Пени</th>
-                                            <th>Статус</th>
-                                            <th>Действия</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="120">Квартал</th>
+                                            <th width="150">Пени</th>
+                                            <th width="120">Статус</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -407,8 +449,11 @@
                         <div class="tab-pane fade" id="salaries">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('salaries')">
-                                        <i class="bi bi-plus-circle"></i> Добавить зарплату
+                                    <button class="btn btn-primary" onclick="addNewRow('salaries')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('salaries')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('salaries')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -422,15 +467,16 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="salariesTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="salariesTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
-                                            <th>Портфель</th>
-                                            <th>Сумма</th>
-                                            <th>Сумма налога</th>
-                                            <th>Действия</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
+                                            <th width="120">Портфель</th>
+                                            <th width="150">Сумма</th>
+                                            <th width="150">Сумма налога</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -442,8 +488,11 @@
                         <div class="tab-pane fade" id="state_duties">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="showAddModal('state_duties')">
-                                        <i class="bi bi-plus-circle"></i> Добавить госпошлину
+                                    <button class="btn btn-primary" onclick="addNewRow('state_duties')">
+                                        <i class="bi bi-plus-circle"></i> Добавить строку
+                                    </button>
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('state_duties')">
+                                        <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
                                     <button class="btn btn-success" onclick="exportSection('state_duties')">
                                         <i class="bi bi-download"></i> Экспорт
@@ -457,16 +506,17 @@
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-hover" id="state_dutiesTable">
-                                    <thead>
+                                <table class="table table-bordered table-hover editable-table" id="state_dutiesTable">
+                                    <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Дата</th>
-                                            <th>Портфель</th>
+                                            <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
+                                            <th width="60">ID</th>
+                                            <th width="120">Дата</th>
+                                            <th width="120">Портфель</th>
                                             <th>Название дела</th>
-                                            <th>Сумма</th>
+                                            <th width="150">Сумма</th>
                                             <th>Ответственный</th>
-                                            <th>Действия</th>
+                                            <th width="60">Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -480,43 +530,32 @@
     </div>
 </div>
 
-<!-- Модальное окно для добавления/редактирования -->
-<div class="modal fade" id="dataModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title" id="modalTitle">
-                    <i class="bi bi-plus-circle"></i> Добавить запись
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="dataForm">
-                    <div id="formFields"></div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                <button type="button" class="btn btn-primary" onclick="saveRecord()">Сохранить</button>
-            </div>
-        </div>
+<!-- Индикатор загрузки -->
+<div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999;">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:10px;">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2">Сохранение...</p>
     </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-let currentSection = '';
-let currentRecordId = null;
+let currentSection = 'balances';
+let pendingChanges = {};
+let isSaving = false;
 
 // Загрузка данных для текущего раздела
 function loadData(section) {
     console.log('Loading data for section:', section);
+    currentSection = section;
+    
     $.ajax({
         url: `/financial/${section}`,
         method: 'GET',
         success: function(data) {
             console.log('Data loaded:', data);
-            renderTable(section, data);
+            renderEditableTable(section, data);
+            pendingChanges[section] = {};
         },
         error: function(xhr) {
             console.error('Ошибка загрузки:', xhr.responseText);
@@ -525,712 +564,595 @@ function loadData(section) {
     });
 }
 
-// Рендеринг таблицы
-function renderTable(section, data) {
+// Рендеринг редактируемой таблицы
+function renderEditableTable(section, data) {
     const tableBody = $(`#${section}Table tbody`);
     tableBody.empty();
     
     if (!data || data.length === 0) {
-        tableBody.html('<tr><td colspan="10" class="text-center">Нет данных</td></tr>');
+        tableBody.html('<tr><td colspan="20" class="text-center">Нет данных. Нажмите "Добавить строку"</td></tr>');
         return;
     }
     
     data.forEach(row => {
-        let html = '<tr>';
+        let html = '<tr data-id="' + row.id + '">';
+        html += '<td><input type="checkbox" class="row-checkbox" data-id="' + row.id + '"></td>';
         
         if (section === 'balances') {
             html += `
                 <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.bank_name}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="${parseFloat(row.amount) >= 0 ? 'text-success' : 'text-danger'}">${formatNumber(row.amount)}</td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
                 <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                    <select class="form-select form-select-sm edit-field" data-field="bank_name">
+                        <option value="">Выберите банк</option>
+                        <option value="Свой банк Альфа" ${row.bank_name === 'Свой банк Альфа' ? 'selected' : ''}>Свой банк Альфа</option>
+                        <option value="Альфабанк Альфа" ${row.bank_name === 'Альфабанк Альфа' ? 'selected' : ''}>Альфабанк Альфа</option>
+                        <option value="Тинькофф Альфа" ${row.bank_name === 'Тинькофф Альфа' ? 'selected' : ''}>Тинькофф Альфа</option>
+                        <option value="Сбер Альфа" ${row.bank_name === 'Сбер Альфа' ? 'selected' : ''}>Сбер Альфа</option>
+                        <option value="Альфабанк АБР" ${row.bank_name === 'Альфабанк АБР' ? 'selected' : ''}>Альфабанк АБР</option>
+                        <option value="Альфабанк КАСМ" ${row.bank_name === 'Альфабанк КАСМ' ? 'selected' : ''}>Альфабанк КАСМ</option>
+                        <option value="Альфабанк Аврора" ${row.bank_name === 'Альфабанк Аврора' ? 'selected' : ''}>Альфабанк Аврора</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                </td>
+                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
             `;
         } else if (section === 'liabilities') {
-            const statusClass = row.status === 'paid' ? 'success' : (row.status === 'overdue' ? 'danger' : 'warning');
-            const statusText = row.status === 'paid' ? 'Оплачено' : (row.status === 'overdue' ? 'Просрочено' : 'Ожидает');
             html += `
                 <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.due_date}</td>
-                <td>${row.description}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td><span class="badge bg-${statusClass}">${statusText}</span></td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="description" value="${escapeHtml(row.description || '')}"></td>
+                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
                 <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm edit-field" data-field="status">
+                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
+                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                        <option value="overdue" ${row.status === 'overdue' ? 'selected' : ''}>Просрочено</option>
+                    </select>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
             `;
-        } else if (section === 'credits') {
+        } else if (section === 'credits' || section === 'rent_inf') {
             html += `
                 <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.counterparty}</td>
-                <td>${row.purpose || '-'}</td>
-                <td>${row.service_type || '-'}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.responsible || '-'}</td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="service_type" value="${escapeHtml(row.service_type || '')}"></td>
                 <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
                 </td>
-            `;
-        } else if (section === 'rent_inf') {
-            html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.counterparty}</td>
-                <td>${row.purpose || '-'}</td>
-                <td>${row.service_type || '-'}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.responsible || '-'}</td>
+                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}"></td>
                 <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
             `;
         } else if (section === 'evacuations') {
-            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
                 <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.counterparty || '-'}</td>
-                <td>${row.purpose || '-'}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
                 <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="status">
+                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                    </select>
+                 </td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         } else if (section === 'parkings') {
-            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.counterparty}</td>
-                <td>${row.period || '-'}</td>
-                <td>${row.purpose || '-'}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                 <td>${row.id}</td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="period" value="${escapeHtml(row.period || '')}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="status">
+                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                    </select>
+                 </td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         } else if (section === 'third_party') {
-            const statusText = row.status === 'paid' ? 'Возвращено' : 'Ожидает';
             html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.counterparty}</td>
-                <td>${row.purpose || '-'}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.due_date || '-'}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                 <td>${row.id}</td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="status">
+                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
+                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Возвращено</option>
+                    </select>
+                 </td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         } else if (section === 'taxes') {
-            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.tax_type}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.quarter || '-'}</td>
-                <td class="text-danger">${formatNumber(row.penalty)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                 <td>${row.id}</td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="tax_type">
+                        <option value="">Выберите тип налога</option>
+                        <option value="НДФЛ" ${row.tax_type === 'НДФЛ' ? 'selected' : ''}>НДФЛ</option>
+                        <option value="УСН" ${row.tax_type === 'УСН' ? 'selected' : ''}>УСН</option>
+                        <option value="НДС" ${row.tax_type === 'НДС' ? 'selected' : ''}>НДС</option>
+                        <option value="Транспортный" ${row.tax_type === 'Транспортный' ? 'selected' : ''}>Транспортный</option>
+                        <option value="Налог на прибыль" ${row.tax_type === 'Налог на прибыль' ? 'selected' : ''}>Налог на прибыль</option>
+                    </select>
+                 </td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="quarter">
+                        <option value="">Выберите квартал</option>
+                        <option value="1 квартал" ${row.quarter === '1 квартал' ? 'selected' : ''}>1 квартал</option>
+                        <option value="2 квартал" ${row.quarter === '2 квартал' ? 'selected' : ''}>2 квартал</option>
+                        <option value="3 квартал" ${row.quarter === '3 квартал' ? 'selected' : ''}>3 квартал</option>
+                        <option value="4 квартал" ${row.quarter === '4 квартал' ? 'selected' : ''}>4 квартал</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="penalty" value="${row.penalty || 0}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="status">
+                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
+                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
+                    </select>
+                 </td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         } else if (section === 'salaries') {
             html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td class="text-danger">${formatNumber(row.tax_amount)}</td>
-                <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                 <td>${row.id}</td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="tax_amount" value="${row.tax_amount || 0}"></td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         } else if (section === 'state_duties') {
             html += `
-                <td>${row.id}</td>
-                <td>${row.date}</td>
-                <td>${row.portfolio || '-'}</td>
-                <td>${row.case_name || '-'}</td>
-                <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td>${row.responsible || '-'}</td>
-                <td>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
+                 <td>${row.id}</td>
+                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
+                 <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="case_name" value="${escapeHtml(row.case_name || '')}"></td>
+                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
+                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}"></td>
+                 <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
-                </td>
+                 </td>
             `;
         }
         
         html += '</tr>';
         tableBody.append(html);
     });
-}
-
-// Показать модальное окно для добавления
-function showAddModal(section) {
-    console.log('Showing add modal for section:', section);
-    currentSection = section;
-    currentRecordId = null;
-    document.getElementById('modalTitle').innerHTML = `<i class="bi bi-plus-circle"></i> Добавить запись - ${getSectionName(section)}`;
     
-    // Загружаем пустую форму
-    loadForm(section, null);
+    // Добавляем обработчики изменений
+    $(`#${section}Table .edit-field`).off('change').on('change', function() {
+        const row = $(this).closest('tr');
+        const id = row.data('id');
+        const field = $(this).data('field');
+        const value = $(this).val();
+        
+        if (!pendingChanges[section]) pendingChanges[section] = {};
+        if (!pendingChanges[section][id]) pendingChanges[section][id] = {};
+        pendingChanges[section][id][field] = value;
+        
+        row.addClass('table-warning');
+        showUnsavedIndicator();
+    });
     
-    // Показываем модальное окно
-    const modal = new bootstrap.Modal(document.getElementById('dataModal'));
-    modal.show();
-}
-
-// Редактирование записи
-function editRecord(section, id) {
-    console.log('Editing record:', section, id);
-    currentSection = section;
-    currentRecordId = id;
-    document.getElementById('modalTitle').innerHTML = `<i class="bi bi-pencil"></i> Редактировать запись - ${getSectionName(section)}`;
-    
-    // Загружаем данные записи
-    $.ajax({
-        url: `/financial/${section}`,
-        method: 'GET',
-        success: function(data) {
-            const record = data.find(r => r.id === id);
-            if (record) {
-                loadForm(section, record);
-                const modal = new bootstrap.Modal(document.getElementById('dataModal'));
-                modal.show();
-            } else {
-                showAlert('Запись не найдена', 'danger');
-            }
-        },
-        error: function(xhr) {
-            showAlert('Ошибка загрузки записи', 'danger');
-        }
+    // Обработка чекбоксов
+    $(`#${section}Table .select-all-checkbox`).off('change').on('change', function() {
+        const isChecked = $(this).prop('checked');
+        $(`#${section}Table .row-checkbox`).prop('checked', isChecked);
     });
 }
 
-// Загрузка формы для раздела
-function loadForm(section, data = null) {
-    const formFields = document.getElementById('formFields');
-    let html = '';
-    const today = new Date().toISOString().split('T')[0];
+// Добавление новой строки
+function addNewRow(section) {
+    const newId = -Date.now();
+    
+    if (!pendingChanges[section]) pendingChanges[section] = {};
+    pendingChanges[section][newId] = { _isNew: true };
+    
+    const emptyRow = {
+        id: newId,
+        date: new Date().toISOString().split('T')[0],
+        amount: 0
+    };
+    
+    const tableBody = $(`#${section}Table tbody`);
+    let html = '<tr data-id="' + newId + '" class="table-warning">';
+    html += '<td><input type="checkbox" class="row-checkbox" data-id="' + newId + '"></td>';
+    html += '<td><span class="badge bg-info">Новая</span></td>';
     
     if (section === 'balances') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Банк *</label>
-                <select name="bank_name" class="form-select" required>
+        html += `
+            <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${emptyRow.date}"></td>
+            <td>
+                <select class="form-select form-select-sm edit-field" data-field="bank_name">
                     <option value="">Выберите банк</option>
-                    <option value="Свой банк Альфа" ${data && data.bank_name === 'Свой банк Альфа' ? 'selected' : ''}>Свой банк Альфа</option>
-                    <option value="Альфабанк Альфа" ${data && data.bank_name === 'Альфабанк Альфа' ? 'selected' : ''}>Альфабанк Альфа</option>
-                    <option value="Тинькофф Альфа" ${data && data.bank_name === 'Тинькофф Альфа' ? 'selected' : ''}>Тинькофф Альфа</option>
-                    <option value="Сбер Альфа" ${data && data.bank_name === 'Сбер Альфа' ? 'selected' : ''}>Сбер Альфа</option>
-                    <option value="Альфабанк АБР" ${data && data.bank_name === 'Альфабанк АБР' ? 'selected' : ''}>Альфабанк АБР</option>
-                    <option value="Альфабанк КАСМ" ${data && data.bank_name === 'Альфабанк КАСМ' ? 'selected' : ''}>Альфабанк КАСМ</option>
-                    <option value="Альфабанк Аврора" ${data && data.bank_name === 'Альфабанк Аврора' ? 'selected' : ''}>Альфабанк Аврора</option>
+                    <option value="Свой банк Альфа">Свой банк Альфа</option>
+                    <option value="Альфабанк Альфа">Альфабанк Альфа</option>
+                    <option value="Тинькофф Альфа">Тинькофф Альфа</option>
+                    <option value="Сбер Альфа">Сбер Альфа</option>
+                    <option value="Альфабанк АБР">Альфабанк АБР</option>
+                    <option value="Альфабанк КАСМ">Альфабанк КАСМ</option>
+                    <option value="Альфабанк Аврора">Альфабанк Аврора</option>
                 </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
+            </td>
+            <td>
+                <select class="form-select form-select-sm edit-field" data-field="portfolio">
                     <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    <option value="Альфа">Альфа</option>
+                    <option value="АБР">АБР</option>
+                    <option value="КАСМ">КАСМ</option>
+                    <option value="Аврора">Аврора</option>
                 </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
+            </td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
         `;
-    } else if (section === 'liabilities') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата создания *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Срок оплаты *</label>
-                <input type="date" name="due_date" class="form-control" required value="${data ? data.due_date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Описание *</label>
-                <input type="text" name="description" class="form-control" required value="${data ? data.description : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Комментарий</label>
-                <textarea name="comments" class="form-control" rows="3">${data ? (data.comments || '') : ''}</textarea>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Статус</label>
-                <select name="status" class="form-select">
-                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
-                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                    <option value="overdue" ${data && data.status === 'overdue' ? 'selected' : ''}>Просрочено</option>
-                </select>
-            </div>
-        `;
-    } else if (section === 'credits') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Контрагент *</label>
-                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Назначение платежа</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Вид услуги</label>
-                <input type="text" name="service_type" class="form-control" value="${data ? (data.service_type || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
-            </div>
-        `;
-    } else if (section === 'rent_inf') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Контрагент *</label>
-                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Назначение платежа</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Вид услуги</label>
-                <input type="text" name="service_type" class="form-control" value="${data ? (data.service_type || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
-            </div>
-        `;
-    } else if (section === 'evacuations') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Контрагент</label>
-                <input type="text" name="counterparty" class="form-control" value="${data ? (data.counterparty || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Назначение платежа</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Статус</label>
-                <select name="status" class="form-select">
-                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                </select>
-            </div>
-        `;
-    } else if (section === 'parkings') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Контрагент *</label>
-                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Период</label>
-                <input type="text" name="period" class="form-control" placeholder="например: февраль 2026" value="${data ? (data.period || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Назначение платежа</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Статус</label>
-                <select name="status" class="form-select">
-                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                </select>
-            </div>
-        `;
-    } else if (section === 'third_party') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Контрагент *</label>
-                <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Назначение платежа</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Срок возврата</label>
-                <input type="date" name="due_date" class="form-control" value="${data ? (data.due_date || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Статус</label>
-                <select name="status" class="form-select">
-                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Возвращено</option>
-                </select>
-            </div>
-        `;
-    } else if (section === 'taxes') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Тип налога *</label>
-                <select name="tax_type" class="form-select" required>
-                    <option value="">Выберите тип налога</option>
-                    <option value="НДФЛ" ${data && data.tax_type === 'НДФЛ' ? 'selected' : ''}>НДФЛ</option>
-                    <option value="УСН" ${data && data.tax_type === 'УСН' ? 'selected' : ''}>УСН</option>
-                    <option value="НДС" ${data && data.tax_type === 'НДС' ? 'selected' : ''}>НДС</option>
-                    <option value="Транспортный" ${data && data.tax_type === 'Транспортный' ? 'selected' : ''}>Транспортный</option>
-                    <option value="Налог на прибыль" ${data && data.tax_type === 'Налог на прибыль' ? 'selected' : ''}>Налог на прибыль</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Квартал</label>
-                <select name="quarter" class="form-select">
-                    <option value="">Выберите квартал</option>
-                    <option value="1 квартал" ${data && data.quarter === '1 квартал' ? 'selected' : ''}>1 квартал</option>
-                    <option value="2 квартал" ${data && data.quarter === '2 квартал' ? 'selected' : ''}>2 квартал</option>
-                    <option value="3 квартал" ${data && data.quarter === '3 квартал' ? 'selected' : ''}>3 квартал</option>
-                    <option value="4 квартал" ${data && data.quarter === '4 квартал' ? 'selected' : ''}>4 квартал</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Пени (руб.)</label>
-                <input type="number" name="penalty" class="form-control" step="0.01" value="${data ? (data.penalty || 0) : 0}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Статус</label>
-                <select name="status" class="form-select">
-                    <option value="pending" ${data && data.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
-                    <option value="paid" ${data && data.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                </select>
-            </div>
-        `;
-    } else if (section === 'salaries') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма налога (руб.)</label>
-                <input type="number" name="tax_amount" class="form-control" step="0.01" value="${data ? (data.tax_amount || 0) : 0}">
-            </div>
-        `;
-    } else if (section === 'state_duties') {
-        html = `
-            <div class="mb-3">
-                <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Портфель</label>
-                <select name="portfolio" class="form-select">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа" ${data && data.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                    <option value="АБР" ${data && data.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                    <option value="КАСМ" ${data && data.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                    <option value="Аврора" ${data && data.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Название дела</label>
-                <input type="text" name="case_name" class="form-control" value="${data ? (data.case_name || '') : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Сумма (руб.) *</label>
-                <input type="number" name="amount" class="form-control" step="0.01" required value="${data ? data.amount : ''}">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
-            </div>
-        `;
+    } else {
+        // Для других разделов - упрощенная версия, можно расширить по необходимости
+        const colCount = $(`#${section}Table thead th`).length - 2;
+        for (let i = 0; i < colCount - 1; i++) {
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="field_' + i + '" value=""></td>';
+        }
+        html += '<td><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></td>';
     }
     
-    formFields.innerHTML = html;
+    html += '</tr>';
+    tableBody.append(html);
+    
+    // Добавляем обработчики для новой строки
+    $(`#${section}Table tr[data-id="${newId}"] .edit-field`).on('change', function() {
+        const field = $(this).data('field');
+        const value = $(this).val();
+        if (!pendingChanges[section][newId]) pendingChanges[section][newId] = { _isNew: true };
+        pendingChanges[section][newId][field] = value;
+        showUnsavedIndicator();
+    });
+    
+    showUnsavedIndicator();
 }
 
-// Сохранение записи
-function saveRecord() {
-    const formData = {};
-    const form = document.getElementById('dataForm');
-    const inputs = form.querySelectorAll('input, select, textarea');
+// Вспомогательные функции
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+function deletePendingRow(section, id) {
+    if (confirm('Удалить эту строку?')) {
+        delete pendingChanges[section][id];
+        $(`#${section}Table tr[data-id="${id}"]`).remove();
+        showUnsavedIndicator();
+    }
+}
+
+function deleteSingleRow(section, id) {
+    if (confirm('Удалить эту запись?')) {
+        if (!pendingChanges[section]) pendingChanges[section] = {};
+        if (!pendingChanges[section][id]) pendingChanges[section][id] = {};
+        pendingChanges[section][id]._deleted = true;
+        $(`#${section}Table tr[data-id="${id}"]`).hide();
+        showUnsavedIndicator();
+    }
+}
+
+function deleteSelectedRows(section) {
+    const selectedIds = [];
+    $(`#${section}Table .row-checkbox:checked`).each(function() {
+        const id = $(this).data('id');
+        if (id) selectedIds.push(id);
+    });
     
-    inputs.forEach(input => {
-        if (input.name) {
-            formData[input.name] = input.value;
+    if (selectedIds.length === 0) {
+        showAlert('Выберите строки для удаления', 'warning');
+        return;
+    }
+    
+    if (confirm(`Удалить ${selectedIds.length} записей?`)) {
+        selectedIds.forEach(id => {
+            if (id.toString().startsWith('-')) {
+                delete pendingChanges[section][id];
+                $(`#${section}Table tr[data-id="${id}"]`).remove();
+            } else {
+                if (!pendingChanges[section]) pendingChanges[section] = {};
+                if (!pendingChanges[section][id]) pendingChanges[section][id] = {};
+                pendingChanges[section][id]._deleted = true;
+                $(`#${section}Table tr[data-id="${id}"]`).hide();
+            }
+        });
+        showUnsavedIndicator();
+        showAlert('Выбранные записи будут удалены после сохранения', 'info');
+    }
+}
+
+function saveAllChanges() {
+    if (isSaving) return;
+    isSaving = true;
+    
+    $('#loadingOverlay').show();
+    $('#saveAllBtn').prop('disabled', true);
+    
+    const sections = ['balances', 'liabilities', 'credits', 'rent_inf', 'evacuations', 'parkings', 'third_party', 'taxes', 'salaries', 'state_duties'];
+    const promises = [];
+    
+    sections.forEach(section => {
+        if (pendingChanges[section] && Object.keys(pendingChanges[section]).length > 0) {
+            promises.push(saveSectionChanges(section));
         }
     });
     
-    const url = currentRecordId 
-        ? `/financial/${currentSection}/update/${currentRecordId}`
-        : `/financial/${currentSection}/add`;
+    if (promises.length === 0) {
+        showAlert('Нет изменений для сохранения', 'info');
+        $('#loadingOverlay').hide();
+        $('#saveAllBtn').prop('disabled', false);
+        isSaving = false;
+        return;
+    }
     
-    const method = currentRecordId ? 'PUT' : 'POST';
+    Promise.all(promises)
+        .then(() => {
+            showAlert('Все изменения успешно сохранены!', 'success');
+            loadSummary();
+            loadData(currentSection);
+            pendingChanges = {};
+            $('.table-warning').removeClass('table-warning');
+        })
+        .catch(error => {
+            console.error('Error saving:', error);
+            showAlert('Ошибка при сохранении: ' + error, 'danger');
+        })
+        .finally(() => {
+            $('#loadingOverlay').hide();
+            $('#saveAllBtn').prop('disabled', false);
+            isSaving = false;
+        });
+}
+
+function saveSectionChanges(section) {
+    const changes = pendingChanges[section];
+    if (!changes || Object.keys(changes).length === 0) return Promise.resolve();
     
-    console.log('Saving record:', url, method, formData);
+    const toCreate = [];
+    const toUpdate = [];
+    const toDelete = [];
     
+    for (const [id, data] of Object.entries(changes)) {
+        if (data._deleted) {
+            toDelete.push(id);
+        } else if (data._isNew) {
+            const { _isNew, ...createData } = data;
+            toCreate.push(createData);
+        } else {
+            const { _deleted, ...updateData } = data;
+            toUpdate.push({ id: parseInt(id), ...updateData });
+        }
+    }
+    
+    const promises = [];
+    
+    toCreate.forEach(newData => {
+        promises.push($.ajax({
+            url: `/financial/${section}/add`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(newData)
+        }));
+    });
+    
+    toUpdate.forEach(updateData => {
+        const { id, ...fields } = updateData;
+        promises.push($.ajax({
+            url: `/financial/${section}/update/${id}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(fields)
+        }));
+    });
+    
+    toDelete.forEach(id => {
+        promises.push($.ajax({
+            url: `/financial/${section}/delete/${id}`,
+            method: 'DELETE'
+        }));
+    });
+    
+    return Promise.all(promises);
+}
+
+function showUnsavedIndicator() {
+    const hasChanges = Object.keys(pendingChanges).some(section => 
+        Object.keys(pendingChanges[section] || {}).length > 0
+    );
+    
+    if (hasChanges) {
+        $('#saveAllBtn').removeClass('btn-success').addClass('btn-warning');
+        if (!$('#unsavedBadge').length) {
+            $('#saveAllBtn').append(' <span id="unsavedBadge" class="badge bg-danger">!</span>');
+        }
+    } else {
+        $('#saveAllBtn').removeClass('btn-warning').addClass('btn-success');
+        $('#unsavedBadge').remove();
+    }
+}
+
+function refreshCurrentTab() {
+    if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
+        if (confirm('Есть несохраненные изменения. Обновить без сохранения?')) {
+            pendingChanges[currentSection] = {};
+            loadData(currentSection);
+        }
+    } else {
+        loadData(currentSection);
+    }
+}
+
+function loadSummary() {
     $.ajax({
-        url: url,
-        method: method,
-        contentType: 'application/json',
-        data: JSON.stringify(formData),
-        success: function(response) {
-            if (response.success) {
-                // Закрываем модальное окно
-                const modal = bootstrap.Modal.getInstance(document.getElementById('dataModal'));
-                modal.hide();
-                
-                // Перезагружаем данные
-                loadData(currentSection);
-                loadSummary();
-                showAlert('Запись успешно сохранена', 'success');
+        url: '/financial/summary',
+        method: 'GET',
+        success: function(data) {
+            $('#totalBalance').html(formatNumber(data.total_balance) + ' ₽');
+            $('#totalLiabilities').html(formatNumber(data.total_liabilities) + ' ₽');
+            $('#deficit').html(formatNumber(data.deficit) + ' ₽');
+            $('#totalThirdParty').html(formatNumber(data.total_third_party) + ' ₽');
+            
+            const deficitElement = $('#deficit');
+            if (data.deficit >= 0) {
+                deficitElement.css('color', '#34c759');
             } else {
-                showAlert(response.error || 'Ошибка сохранения', 'danger');
+                deficitElement.css('color', '#ff3b30');
             }
         },
         error: function(xhr) {
-            const error = xhr.responseJSON?.error || 'Ошибка сохранения';
-            showAlert(error, 'danger');
-            console.error('Save error:', xhr.responseText);
+            console.error('Error loading summary:', xhr);
         }
     });
 }
 
-// Удаление записи
-function deleteRecord(section, id) {
-    if (confirm('Вы уверены, что хотите удалить эту запись?')) {
-        $.ajax({
-            url: `/financial/${section}/delete/${id}`,
-            method: 'DELETE',
-            success: function(response) {
-                if (response.success) {
-                    loadData(section);
-                    loadSummary();
-                    showAlert('Запись удалена', 'success');
-                } else {
-                    showAlert(response.error || 'Ошибка удаления', 'danger');
-                }
-            },
-            error: function(xhr) {
-                showAlert('Ошибка удаления', 'danger');
-            }
-        });
-    }
+function formatNumber(num) {
+    if (num === null || num === undefined) return '0.00';
+    return new Intl.NumberFormat('ru-RU', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
 }
 
-// Экспорт раздела
 function exportSection(section) {
     window.location.href = `/financial/export/${section}`;
 }
 
-// Импорт раздела
 function importSection(section, file) {
     if (!file) return;
     
@@ -1249,68 +1171,19 @@ function importSection(section, file) {
                 if (response.errors && response.errors.length > 0) {
                     console.log('Ошибки импорта:', response.errors);
                 }
+                pendingChanges[section] = {};
                 loadData(section);
                 loadSummary();
             } else {
                 showAlert(response.error || 'Ошибка импорта', 'danger');
             }
-            // Очищаем input file
-            document.getElementById(`importFile${section.charAt(0).toUpperCase() + section.slice(1)}`).value = '';
+            const inputId = `importFile${section.charAt(0).toUpperCase() + section.slice(1)}`;
+            document.getElementById(inputId).value = '';
         },
         error: function(xhr) {
             showAlert('Ошибка импорта', 'danger');
         }
     });
-}
-
-// Загрузка сводных данных
-function loadSummary() {
-    $.ajax({
-        url: '/financial/summary',
-        method: 'GET',
-        success: function(data) {
-            document.getElementById('totalBalance').innerHTML = formatNumber(data.total_balance) + ' ₽';
-            document.getElementById('totalLiabilities').innerHTML = formatNumber(data.total_liabilities) + ' ₽';
-            document.getElementById('deficit').innerHTML = formatNumber(data.deficit) + ' ₽';
-            document.getElementById('totalThirdParty').innerHTML = formatNumber(data.total_third_party) + ' ₽';
-            
-            // Меняем цвет дефицита
-            const deficitElement = document.getElementById('deficit');
-            if (data.deficit >= 0) {
-                deficitElement.style.color = '#34c759';
-            } else {
-                deficitElement.style.color = '#ff3b30';
-            }
-        },
-        error: function(xhr) {
-            console.error('Error loading summary:', xhr);
-        }
-    });
-}
-
-// Вспомогательные функции
-function formatNumber(num) {
-    if (num === null || num === undefined) return '0.00';
-    return new Intl.NumberFormat('ru-RU', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(num);
-}
-
-function getSectionName(section) {
-    const names = {
-        'balances': 'Остатки на счетах',
-        'liabilities': 'Обязательства',
-        'credits': 'Кредиты и займы',
-        'rent_inf': 'Аренда и инфоуслуги',
-        'evacuations': 'Эвакуация',
-        'parkings': 'Стоянки',
-        'third_party': 'Чужие деньги',
-        'taxes': 'Налоги',
-        'salaries': 'Зарплата',
-        'state_duties': 'Госпошлины'
-    };
-    return names[section] || section;
 }
 
 function showAlert(message, type) {
@@ -1330,17 +1203,34 @@ function showAlert(message, type) {
     }, 5000);
 }
 
-// Инициализация при загрузке страницы
 $(document).ready(function() {
-    console.log('Financial module initialized');
+    console.log('Financial module initialized with editable tables');
     loadSummary();
     loadData('balances');
     
-    // Обработка смены вкладок
     $('#financialTabs a').on('shown.bs.tab', function(e) {
         const section = $(e.target).attr('href').replace('#', '');
-        console.log('Tab changed to:', section);
+        
+        if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
+            if (confirm('Есть несохраненные изменения в текущей вкладке. Сохранить перед переключением?')) {
+                saveAllChanges().then(() => {
+                    loadData(section);
+                });
+                return;
+            } else {
+                pendingChanges[currentSection] = {};
+            }
+        }
+        
+        currentSection = section;
         loadData(section);
+    });
+    
+    $(document).on('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            saveAllChanges();
+        }
     });
 });
 </script>
