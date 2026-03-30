@@ -643,7 +643,7 @@ function loadDataForDate(date) {
     console.log('Loading data for section:', currentSection, 'date:', date);
     
     $.ajax({
-        url: `/financial/${currentSection}?date=${date}`,
+        url: '/financial/' + currentSection + '?date=' + date,
         method: 'GET',
         success: function(data) {
             console.log('Data loaded:', data);
@@ -663,7 +663,7 @@ function loadData(section) {
 
 // Рендеринг редактируемой таблицы
 function renderEditableTable(section, data) {
-    const tableBody = $(`#${section}Table tbody`);
+    const tableBody = $('#' + section + 'Table tbody');
     tableBody.empty();
     
     if (!data || data.length === 0) {
@@ -677,168 +677,118 @@ function renderEditableTable(section, data) {
         html += '<td>' + row.id + '</td>';
         
         if (section === 'balances') {
-            html += `
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" value="${escapeHtml(row.bank_name || '')}"></td>
-                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </td>
-            `;
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" value="' + escapeHtml(row.bank_name || '') + '"></td>';
+            html += '<td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '"></td>';
+            html += '<td><button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button></td>';
         } else if (section === 'liabilities') {
-            html += `
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </td>
-            `;
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '"></td>';
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '"></td>';
+            html += '<td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '"></td>';
+            html += '<td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="' + (row.due_date || '') + '"></td>';
+            html += '<td><button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button></td>';
         } else if (section === 'receivables') {
-            html += `
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                </td>
-                <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </td>
-            `;
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '"></td>';
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '"></td>';
+            html += '<td><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select></td>';
+            html += '<td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '"></td>';
+            html += '<td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="' + (row.due_date || '') + '"></td>';
+            html += '<td><button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button></td>';
         } else if (section === 'rent_inf') {
-            html += `
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </div>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '"></td>';
+            html += '<td><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select> </div>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'evacuations') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'parkings') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'third_party') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'taxes') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="${row.ndfl || 0}">
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="${row.est || 0}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="' + (row.ndfl || 0) + '">';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="' + (row.est || 0) + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'salaries') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         } else if (section === 'state_duties') {
-            html += `
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
-                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                     <option value="">Выберите портфель</option>
-                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                 </select>
-                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
-                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
-                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                     <i class="bi bi-trash"></i>
-                 </button>
-            `;
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="' + escapeHtml(row.counterparty || '') + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="' + escapeHtml(row.purpose || '') + '">';
+            html += '<select class="form-select form-select-sm edit-field" data-field="portfolio">';
+            html += '<option value="">Выберите портфель</option>';
+            html += '<option value="Альфа"' + (row.portfolio === 'Альфа' ? ' selected' : '') + '>Альфа</option>';
+            html += '<option value="АБР"' + (row.portfolio === 'АБР' ? ' selected' : '') + '>АБР</option>';
+            html += '<option value="КАСМ"' + (row.portfolio === 'КАСМ' ? ' selected' : '') + '>КАСМ</option>';
+            html += '<option value="Аврора"' + (row.portfolio === 'Аврора' ? ' selected' : '') + '>Аврора</option>';
+            html += '</select>';
+            html += '<input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="' + (row.amount || 0) + '">';
+            html += '<input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="' + escapeHtml(row.responsible || '') + '">';
+            html += '<button class="btn btn-sm btn-danger" onclick="deleteSingleRow(\'' + section + '\', ' + row.id + ')"><i class="bi bi-trash"></i></button>';
         }
         
         html += ' </div>';
@@ -846,7 +796,7 @@ function renderEditableTable(section, data) {
     });
     
     // Добавляем обработчики изменений
-    $(`#${section}Table .edit-field`).off('change').on('change', function() {
+    $('#' + section + 'Table .edit-field').off('change').on('change', function() {
         const row = $(this).closest('tr');
         const id = row.data('id');
         const field = $(this).data('field');
@@ -861,9 +811,9 @@ function renderEditableTable(section, data) {
     });
     
     // Обработка чекбоксов
-    $(`#${section}Table .select-all-checkbox`).off('change').on('change', function() {
+    $('#' + section + 'Table .select-all-checkbox').off('change').on('change', function() {
         const isChecked = $(this).prop('checked');
-        $(`#${section}Table .row-checkbox`).prop('checked', isChecked);
+        $('#' + section + 'Table .row-checkbox').prop('checked', isChecked);
     });
 }
 
@@ -874,164 +824,131 @@ function addNewRow(section) {
     if (!pendingChanges[section]) pendingChanges[section] = {};
     pendingChanges[section][newId] = { _isNew: true, date: currentDate };
     
-    const tableBody = $(`#${section}Table tbody`);
+    const tableBody = $('#' + section + 'Table tbody');
     let html = '<tr data-id="' + newId + '" class="table-warning">';
-    html += '\\
-        <input type="checkbox" class="row-checkbox" data-id="' + newId + '">
-    </div>';
-    html += '\\
-        <span class="badge bg-info">Новая</span>
-    </div>';
+    html += '<td><input type="checkbox" class="row-checkbox" data-id="' + newId + '">\\n</div>';
+    html += '<td><span class="badge bg-info">Новая</span>\\n</div>';
     
     if (section === 'balances') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" placeholder="Банк/Наличные"></div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" placeholder="Банк/Наличные"></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'liabilities') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'receivables') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'rent_inf') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'evacuations') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'parkings') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'third_party') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'taxes') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="0" placeholder="НДФЛ"></div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="0" placeholder="ЕСТ"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="0" placeholder="НДФЛ"></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="0" placeholder="ЕСТ"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'salaries') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     } else if (section === 'state_duties') {
-        html += `
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>
-             <div>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-             </div>
-             <div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>
-             <div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>
-        `;
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение платежа"></div>';
+        html += '<div><select class="form-select form-select-sm edit-field" data-field="portfolio">';
+        html += '<option value="">Выберите портфель</option>';
+        html += '<option value="Альфа">Альфа</option>';
+        html += '<option value="АБР">АБР</option>';
+        html += '<option value="КАСМ">КАСМ</option>';
+        html += '<option value="Аврора">Аврора</option>';
+        html += '</select></div>';
+        html += '<div><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></div>';
+        html += '<div><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" placeholder="Ответственный"></div>';
+        html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     }
-    
-    // Добавляем кнопку удаления в конце
-    html += '<div><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></div>';
     
     html += ' </div>';
     tableBody.append(html);
     
     // Добавляем обработчики для новой строки
-    $(`#${section}Table tr[data-id="${newId}"] .edit-field`).on('change', function() {
+    $('#' + section + 'Table tr[data-id="' + newId + '"] .edit-field').on('change', function() {
         const field = $(this).data('field');
         const value = $(this).val();
         if (!pendingChanges[section][newId]) pendingChanges[section][newId] = { _isNew: true, date: currentDate };
@@ -1056,7 +973,7 @@ function escapeHtml(str) {
 function deletePendingRow(section, id) {
     if (confirm('Удалить эту строку?')) {
         delete pendingChanges[section][id];
-        $(`#${section}Table tr[data-id="${id}"]`).remove();
+        $('#' + section + 'Table tr[data-id="' + id + '"]').remove();
         showUnsavedIndicator();
     }
 }
@@ -1066,14 +983,14 @@ function deleteSingleRow(section, id) {
         if (!pendingChanges[section]) pendingChanges[section] = {};
         if (!pendingChanges[section][id]) pendingChanges[section][id] = {};
         pendingChanges[section][id]._deleted = true;
-        $(`#${section}Table tr[data-id="${id}"]`).hide();
+        $('#' + section + 'Table tr[data-id="' + id + '"]').hide();
         showUnsavedIndicator();
     }
 }
 
 function deleteSelectedRows(section) {
     const selectedIds = [];
-    $(`#${section}Table .row-checkbox:checked`).each(function() {
+    $('#' + section + 'Table .row-checkbox:checked').each(function() {
         const id = $(this).data('id');
         if (id) selectedIds.push(id);
     });
@@ -1083,16 +1000,16 @@ function deleteSelectedRows(section) {
         return;
     }
     
-    if (confirm(`Удалить ${selectedIds.length} записей?`)) {
+    if (confirm('Удалить ' + selectedIds.length + ' записей?')) {
         selectedIds.forEach(id => {
             if (id.toString().startsWith('-')) {
                 delete pendingChanges[section][id];
-                $(`#${section}Table tr[data-id="${id}"]`).remove();
+                $('#' + section + 'Table tr[data-id="' + id + '"]').remove();
             } else {
                 if (!pendingChanges[section]) pendingChanges[section] = {};
                 if (!pendingChanges[section][id]) pendingChanges[section][id] = {};
                 pendingChanges[section][id]._deleted = true;
-                $(`#${section}Table tr[data-id="${id}"]`).hide();
+                $('#' + section + 'Table tr[data-id="' + id + '"]').hide();
             }
         });
         showUnsavedIndicator();
@@ -1171,12 +1088,12 @@ function saveSectionChanges(section) {
     toCreate.forEach(newData => {
         promises.push(
             $.ajax({
-                url: `/financial/${section}/add`,
+                url: '/financial/' + section + '/add',
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(newData)
             }).catch(err => {
-                console.error(`Error creating in ${section}:`, err);
+                console.error('Error creating in ' + section + ':', err);
                 throw err;
             })
         );
@@ -1186,12 +1103,12 @@ function saveSectionChanges(section) {
         const { id, ...fields } = updateData;
         promises.push(
             $.ajax({
-                url: `/financial/${section}/update/${id}`,
+                url: '/financial/' + section + '/update/' + id,
                 method: 'PUT',
                 contentType: 'application/json',
                 data: JSON.stringify(fields)
             }).catch(err => {
-                console.error(`Error updating in ${section}:`, err);
+                console.error('Error updating in ' + section + ':', err);
                 throw err;
             })
         );
@@ -1200,10 +1117,10 @@ function saveSectionChanges(section) {
     toDelete.forEach(id => {
         promises.push(
             $.ajax({
-                url: `/financial/${section}/delete/${id}`,
+                url: '/financial/' + section + '/delete/' + id,
                 method: 'DELETE'
             }).catch(err => {
-                console.error(`Error deleting in ${section}:`, err);
+                console.error('Error deleting in ' + section + ':', err);
                 throw err;
             })
         );
@@ -1275,7 +1192,7 @@ function formatNumber(num) {
 }
 
 function exportSection(section) {
-    window.location.href = `/financial/export/${section}?date=${currentDate}`;
+    window.location.href = '/financial/export/' + section + '?date=' + currentDate;
 }
 
 function importSection(section, file) {
@@ -1286,14 +1203,14 @@ function importSection(section, file) {
     formData.append('date', currentDate);
     
     $.ajax({
-        url: `/financial/import/${section}`,
+        url: '/financial/import/' + section,
         method: 'POST',
         data: formData,
         processData: false,
         contentType: false,
         success: function(response) {
             if (response.success) {
-                showAlert(`Импортировано записей: ${response.imported}`, 'success');
+                showAlert('Импортировано записей: ' + response.imported, 'success');
                 if (response.errors && response.errors.length > 0) {
                     console.log('Ошибки импорта:', response.errors);
                 }
@@ -1303,7 +1220,7 @@ function importSection(section, file) {
             } else {
                 showAlert(response.error || 'Ошибка импорта', 'danger');
             }
-            const inputId = `importFile${section.charAt(0).toUpperCase() + section.slice(1)}`;
+            const inputId = 'importFile' + section.charAt(0).toUpperCase() + section.slice(1);
             const inputElem = document.getElementById(inputId);
             if (inputElem) inputElem.value = '';
         },
@@ -1315,12 +1232,9 @@ function importSection(section, file) {
 
 function showAlert(message, type) {
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.className = 'alert alert-' + type + ' alert-dismissible fade show';
     alertDiv.role = 'alert';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
+    alertDiv.innerHTML = message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
     
     const container = document.querySelector('.container-fluid');
     container.insertBefore(alertDiv, container.firstChild);
