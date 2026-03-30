@@ -9,11 +9,17 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="bi bi-calculator-fill"></i> 
-                            Финансовый учет (Excel-подобный интерфейс)
+                            Финансовый учет
                         </h5>
                         <div>
+                            <div class="btn-group me-2">
+                                <button class="btn btn-outline-secondary" onclick="selectDateToday()">
+                                    <i class="bi bi-calendar-day"></i> Сегодня
+                                </button>
+                                <input type="date" id="globalDate" class="form-control" style="width: 150px;" onchange="changeGlobalDate()">
+                            </div>
                             <button class="btn btn-success" onclick="saveAllChanges()" id="saveAllBtn">
-                                <i class="bi bi-save-all"></i> Сохранить все изменения (Ctrl+S)
+                                <i class="bi bi-save-all"></i> Сохранить (Ctrl+S)
                             </button>
                             <button class="btn btn-warning" onclick="refreshCurrentTab()">
                                 <i class="bi bi-arrow-repeat"></i> Обновить
@@ -22,37 +28,93 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <!-- Сводная информация -->
+                    <!-- Сводная информация - ДАШБОРД -->
                     <div class="row mb-4" id="summaryCards">
-                        <div class="col-md-3 mb-3">
-                            <div class="card bg-info text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-gradient-primary text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                 <div class="card-body">
-                                    <h6 class="card-title">Общий баланс</h6>
-                                    <h3 id="totalBalance">0 ₽</h3>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="card-title mb-0">Общий баланс</h6>
+                                            <h3 class="mt-2 mb-0" id="totalBalance">0 ₽</h3>
+                                        </div>
+                                        <i class="bi bi-bank2 fs-1 opacity-50"></i>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="card bg-warning text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-gradient-warning text-white" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
                                 <div class="card-body">
-                                    <h6 class="card-title">Обязательства</h6>
-                                    <h3 id="totalLiabilities">0 ₽</h3>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="card-title mb-0">Обязательства</h6>
+                                            <h3 class="mt-2 mb-0" id="totalLiabilities">0 ₽</h3>
+                                        </div>
+                                        <i class="bi bi-receipt fs-1 opacity-50"></i>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="card bg-danger text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-gradient-danger text-white" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
                                 <div class="card-body">
-                                    <h6 class="card-title">Дефицит/Профицит</h6>
-                                    <h3 id="deficit">0 ₽</h3>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="card-title mb-0">Дефицит/Профицит</h6>
+                                            <h3 class="mt-2 mb-0" id="deficit">0 ₽</h3>
+                                        </div>
+                                        <i class="bi bi-graph-up fs-1 opacity-50"></i>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="card bg-success text-white">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-gradient-info text-white" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
                                 <div class="card-body">
-                                    <h6 class="card-title">Чужие деньги</h6>
-                                    <h3 id="totalThirdParty">0 ₽</h3>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="card-title mb-0">Чужие деньги</h6>
+                                            <h3 class="mt-2 mb-0" id="totalThirdParty">0 ₽</h3>
+                                        </div>
+                                        <i class="bi bi-people fs-1 opacity-50"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Дополнительные карточки дашборда -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Дебиторская задолженность</h6>
+                                    <h4 class="mb-0" id="totalReceivables">0 ₽</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Налоги к уплате</h6>
+                                    <h4 class="mb-0" id="totalTaxes">0 ₽</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Зарплата (текущий месяц)</h6>
+                                    <h4 class="mb-0" id="totalSalaries">0 ₽</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Госпошлины</h6>
+                                    <h4 class="mb-0" id="totalDuties">0 ₽</h4>
                                 </div>
                             </div>
                         </div>
@@ -71,8 +133,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" data-bs-toggle="tab" href="#credits">
-                                <i class="bi bi-credit-card"></i> Кредиты/Займы
+                            <a class="nav-link" data-bs-toggle="tab" href="#receivables">
+                                <i class="bi bi-arrow-left-right"></i> Дебиторская задолженность
                             </a>
                         </li>
                         <li class="nav-item">
@@ -141,9 +203,7 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
-                                            <th>Банк</th>
-                                            <th width="120">Портфель</th>
+                                            <th>Банк/Наличные</th>
                                             <th width="150">Сумма (руб.)</th>
                                             <th width="60">Действия</th>
                                         </tr>
@@ -180,12 +240,10 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
-                                            <th width="120">Срок оплаты</th>
-                                            <th>Описание</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение</th>
                                             <th width="150">Сумма</th>
-                                            <th width="120">Портфель</th>
-                                            <th width="120">Статус</th>
+                                            <th width="120">Срок оплаты</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -194,40 +252,38 @@
                             </div>
                         </div>
                         
-                        <!-- Кредиты/Займы -->
-                        <div class="tab-pane fade" id="credits">
+                        <!-- Дебиторская задолженность -->
+                        <div class="tab-pane fade" id="receivables">
                             <div class="d-flex justify-content-between mb-3">
                                 <div>
-                                    <button class="btn btn-primary" onclick="addNewRow('credits')">
+                                    <button class="btn btn-primary" onclick="addNewRow('receivables')">
                                         <i class="bi bi-plus-circle"></i> Добавить строку
                                     </button>
-                                    <button class="btn btn-danger" onclick="deleteSelectedRows('credits')">
+                                    <button class="btn btn-danger" onclick="deleteSelectedRows('receivables')">
                                         <i class="bi bi-trash"></i> Удалить выбранные
                                     </button>
-                                    <button class="btn btn-success" onclick="exportSection('credits')">
+                                    <button class="btn btn-success" onclick="exportSection('receivables')">
                                         <i class="bi bi-download"></i> Экспорт
                                     </button>
                                 </div>
                                 <div>
-                                    <input type="file" id="importFileCredits" accept=".xlsx,.xls" style="display:none" onchange="importSection('credits', this.files[0])">
-                                    <button class="btn btn-info" onclick="document.getElementById('importFileCredits').click()">
+                                    <input type="file" id="importFileReceivables" accept=".xlsx,.xls" style="display:none" onchange="importSection('receivables', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileReceivables').click()">
                                         <i class="bi bi-upload"></i> Импорт
                                     </button>
                                 </div>
                             </div>
                             <div class="table-responsive">
-                                <table class="table table-bordered table-hover editable-table" id="creditsTable">
+                                <table class="table table-bordered table-hover editable-table" id="receivablesTable">
                                     <thead class="table-light">
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
                                             <th>Назначение</th>
-                                            <th>Тип услуги</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th>Ответственный</th>
+                                            <th width="120">Срок оплаты</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -263,10 +319,7 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
-                                            <th>Назначение</th>
-                                            <th>Тип услуги</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
                                             <th>Ответственный</th>
@@ -305,12 +358,10 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
-                                            <th>Контрагент</th>
-                                            <th>Назначение</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th width="120">Статус</th>
+                                            <th>Ответственный</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -346,13 +397,11 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
-                                            <th>Период</th>
-                                            <th>Назначение</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th width="120">Статус</th>
+                                            <th>Ответственный</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -388,13 +437,10 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
                                             <th>Контрагент</th>
-                                            <th>Назначение</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th width="120">Срок возврата</th>
-                                            <th width="120">Статус</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -430,13 +476,13 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
-                                            <th>Тип налога</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th width="120">Квартал</th>
-                                            <th width="150">Пени</th>
-                                            <th width="120">Статус</th>
+                                            <th>Ответственный</th>
+                                            <th width="100">НДФЛ</th>
+                                            <th width="100">ЕСТ</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -472,10 +518,11 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
                                             <th width="150">Сумма</th>
-                                            <th width="150">Сумма налога</th>
+                                            <th>Ответственный</th>
                                             <th width="60">Действия</th>
                                         </tr>
                                     </thead>
@@ -511,9 +558,9 @@
                                         <tr>
                                             <th width="40"><input type="checkbox" class="select-all-checkbox"></th>
                                             <th width="60">ID</th>
-                                            <th width="120">Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение платежа</th>
                                             <th width="120">Портфель</th>
-                                            <th>Название дела</th>
                                             <th width="150">Сумма</th>
                                             <th>Ответственный</th>
                                             <th width="60">Действия</th>
@@ -543,25 +590,75 @@
 let currentSection = 'balances';
 let pendingChanges = {};
 let isSaving = false;
+let currentDate = new Date().toISOString().split('T')[0];
 
-// Загрузка данных для текущего раздела
-function loadData(section) {
-    console.log('Loading data for section:', section);
-    currentSection = section;
+// Инициализация глобальной даты
+$(document).ready(function() {
+    $('#globalDate').val(currentDate);
+    loadSummary();
+    loadData('balances');
+    
+    // Загружаем данные для текущей даты
+    loadDataForDate(currentDate);
+    
+    $('#financialTabs a').on('shown.bs.tab', function(e) {
+        const section = $(e.target).attr('href').replace('#', '');
+        
+        if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
+            if (confirm('Есть несохраненные изменения в текущей вкладке. Сохранить перед переключением?')) {
+                saveAllChanges().then(() => {
+                    currentSection = section;
+                    loadDataForDate(currentDate);
+                });
+                return;
+            } else {
+                pendingChanges[currentSection] = {};
+            }
+        }
+        
+        currentSection = section;
+        loadDataForDate(currentDate);
+    });
+    
+    $(document).on('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            saveAllChanges();
+        }
+    });
+});
+
+function selectDateToday() {
+    currentDate = new Date().toISOString().split('T')[0];
+    $('#globalDate').val(currentDate);
+    loadDataForDate(currentDate);
+}
+
+function changeGlobalDate() {
+    currentDate = $('#globalDate').val();
+    loadDataForDate(currentDate);
+}
+
+function loadDataForDate(date) {
+    console.log('Loading data for section:', currentSection, 'date:', date);
     
     $.ajax({
-        url: `/financial/${section}`,
+        url: `/financial/${currentSection}?date=${date}`,
         method: 'GET',
         success: function(data) {
             console.log('Data loaded:', data);
-            renderEditableTable(section, data);
-            pendingChanges[section] = {};
+            renderEditableTable(currentSection, data);
+            pendingChanges[currentSection] = {};
         },
         error: function(xhr) {
             console.error('Ошибка загрузки:', xhr.responseText);
             showAlert('Ошибка загрузки данных: ' + (xhr.responseJSON?.error || xhr.statusText), 'danger');
         }
     });
+}
+
+function loadData(section) {
+    loadDataForDate(currentDate);
 }
 
 // Рендеринг редактируемой таблицы
@@ -577,32 +674,11 @@ function renderEditableTable(section, data) {
     data.forEach(row => {
         let html = '<tr data-id="' + row.id + '">';
         html += '<td><input type="checkbox" class="row-checkbox" data-id="' + row.id + '"></td>';
+        html += '<td>' + row.id + '</td>';
         
         if (section === 'balances') {
             html += `
-                <td>${row.id}</td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="bank_name">
-                        <option value="">Выберите банк</option>
-                        <option value="Свой банк Альфа" ${row.bank_name === 'Свой банк Альфа' ? 'selected' : ''}>Свой банк Альфа</option>
-                        <option value="Альфабанк Альфа" ${row.bank_name === 'Альфабанк Альфа' ? 'selected' : ''}>Альфабанк Альфа</option>
-                        <option value="Тинькофф Альфа" ${row.bank_name === 'Тинькофф Альфа' ? 'selected' : ''}>Тинькофф Альфа</option>
-                        <option value="Сбер Альфа" ${row.bank_name === 'Сбер Альфа' ? 'selected' : ''}>Сбер Альфа</option>
-                        <option value="Альфабанк АБР" ${row.bank_name === 'Альфабанк АБР' ? 'selected' : ''}>Альфабанк АБР</option>
-                        <option value="Альфабанк КАСМ" ${row.bank_name === 'Альфабанк КАСМ' ? 'selected' : ''}>Альфабанк КАСМ</option>
-                        <option value="Альфабанк Аврора" ${row.bank_name === 'Альфабанк Аврора' ? 'selected' : ''}>Альфабанк Аврора</option>
-                    </select>
-                </td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                </td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" value="${escapeHtml(row.bank_name || '')}"></td>
                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
                 <td>
                     <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
@@ -612,40 +688,20 @@ function renderEditableTable(section, data) {
             `;
         } else if (section === 'liabilities') {
             html += `
-                <td>${row.id}</td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="description" value="${escapeHtml(row.description || '')}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                </td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="status">
-                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
-                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                        <option value="overdue" ${row.status === 'overdue' ? 'selected' : ''}>Просрочено</option>
-                    </select>
-                </td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
                 <td>
                     <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
             `;
-        } else if (section === 'credits' || section === 'rent_inf') {
+        } else if (section === 'receivables') {
             html += `
-                <td>${row.id}</td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="service_type" value="${escapeHtml(row.service_type || '')}"></td>
                 <td>
                     <select class="form-select form-select-sm edit-field" data-field="portfolio">
                         <option value="">Выберите портфель</option>
@@ -656,187 +712,132 @@ function renderEditableTable(section, data) {
                     </select>
                 </td>
                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}"></td>
+                <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
                 <td>
                     <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
+            `;
+        } else if (section === 'rent_inf') {
+            html += `
+                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
+                <td>
+                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                        <option value="">Выберите портфель</option>
+                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                    </select>
+                 </div>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'evacuations') {
             html += `
-                <td>${row.id}</td>
-                <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="status">
-                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                    </select>
-                 </td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'parkings') {
             html += `
-                 <td>${row.id}</td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="period" value="${escapeHtml(row.period || '')}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="status">
-                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                    </select>
-                 </td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'third_party') {
             html += `
-                 <td>${row.id}</td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date" value="${row.due_date || ''}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="status">
-                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает</option>
-                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Возвращено</option>
-                    </select>
-                 </td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'taxes') {
             html += `
-                 <td>${row.id}</td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="tax_type">
-                        <option value="">Выберите тип налога</option>
-                        <option value="НДФЛ" ${row.tax_type === 'НДФЛ' ? 'selected' : ''}>НДФЛ</option>
-                        <option value="УСН" ${row.tax_type === 'УСН' ? 'selected' : ''}>УСН</option>
-                        <option value="НДС" ${row.tax_type === 'НДС' ? 'selected' : ''}>НДС</option>
-                        <option value="Транспортный" ${row.tax_type === 'Транспортный' ? 'selected' : ''}>Транспортный</option>
-                        <option value="Налог на прибыль" ${row.tax_type === 'Налог на прибыль' ? 'selected' : ''}>Налог на прибыль</option>
-                    </select>
-                 </td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="quarter">
-                        <option value="">Выберите квартал</option>
-                        <option value="1 квартал" ${row.quarter === '1 квартал' ? 'selected' : ''}>1 квартал</option>
-                        <option value="2 квартал" ${row.quarter === '2 квартал' ? 'selected' : ''}>2 квартал</option>
-                        <option value="3 квартал" ${row.quarter === '3 квартал' ? 'selected' : ''}>3 квартал</option>
-                        <option value="4 квартал" ${row.quarter === '4 квартал' ? 'selected' : ''}>4 квартал</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="penalty" value="${row.penalty || 0}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="status">
-                        <option value="pending" ${row.status === 'pending' ? 'selected' : ''}>Ожидает оплаты</option>
-                        <option value="paid" ${row.status === 'paid' ? 'selected' : ''}>Оплачено</option>
-                    </select>
-                 </td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="ndfl" value="${row.ndfl || 0}">
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="est" value="${row.est || 0}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'salaries') {
             html += `
-                 <td>${row.id}</td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="tax_amount" value="${row.tax_amount || 0}"></td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         } else if (section === 'state_duties') {
             html += `
-                 <td>${row.id}</td>
-                 <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${row.date || ''}"></td>
-                 <td>
-                    <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                        <option value="">Выберите портфель</option>
-                        <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
-                        <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
-                        <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
-                        <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
-                    </select>
-                 </td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="case_name" value="${escapeHtml(row.case_name || '')}"></td>
-                 <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}"></td>
-                 <td><input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}"></td>
-                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                 </td>
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" value="${escapeHtml(row.counterparty || '')}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="purpose" value="${escapeHtml(row.purpose || '')}">
+                 <select class="form-select form-select-sm edit-field" data-field="portfolio">
+                     <option value="">Выберите портфель</option>
+                     <option value="Альфа" ${row.portfolio === 'Альфа' ? 'selected' : ''}>Альфа</option>
+                     <option value="АБР" ${row.portfolio === 'АБР' ? 'selected' : ''}>АБР</option>
+                     <option value="КАСМ" ${row.portfolio === 'КАСМ' ? 'selected' : ''}>КАСМ</option>
+                     <option value="Аврора" ${row.portfolio === 'Аврора' ? 'selected' : ''}>Аврора</option>
+                 </select>
+                 <input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="${row.amount || 0}">
+                 <input type="text" class="form-control form-control-sm edit-field" data-field="responsible" value="${escapeHtml(row.responsible || '')}">
+                 <button class="btn btn-sm btn-danger" onclick="deleteSingleRow('${section}', ${row.id})">
+                     <i class="bi bi-trash"></i>
+                 </button>
             `;
         }
         
@@ -871,13 +872,7 @@ function addNewRow(section) {
     const newId = -Date.now();
     
     if (!pendingChanges[section]) pendingChanges[section] = {};
-    pendingChanges[section][newId] = { _isNew: true };
-    
-    const emptyRow = {
-        id: newId,
-        date: new Date().toISOString().split('T')[0],
-        amount: 0
-    };
+    pendingChanges[section][newId] = { _isNew: true, date: currentDate };
     
     const tableBody = $(`#${section}Table tbody`);
     let html = '<tr data-id="' + newId + '" class="table-warning">';
@@ -886,40 +881,31 @@ function addNewRow(section) {
     
     if (section === 'balances') {
         html += `
-            <td><input type="date" class="form-control form-control-sm edit-field" data-field="date" value="${emptyRow.date}"></td>
-            <td>
-                <select class="form-select form-select-sm edit-field" data-field="bank_name">
-                    <option value="">Выберите банк</option>
-                    <option value="Свой банк Альфа">Свой банк Альфа</option>
-                    <option value="Альфабанк Альфа">Альфабанк Альфа</option>
-                    <option value="Тинькофф Альфа">Тинькофф Альфа</option>
-                    <option value="Сбер Альфа">Сбер Альфа</option>
-                    <option value="Альфабанк АБР">Альфабанк АБР</option>
-                    <option value="Альфабанк КАСМ">Альфабанк КАСМ</option>
-                    <option value="Альфабанк Аврора">Альфабанк Аврора</option>
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm edit-field" data-field="portfolio">
-                    <option value="">Выберите портфель</option>
-                    <option value="Альфа">Альфа</option>
-                    <option value="АБР">АБР</option>
-                    <option value="КАСМ">КАСМ</option>
-                    <option value="Аврора">Аврора</option>
-                </select>
-            </td>
+            <td><input type="text" class="form-control form-control-sm edit-field" data-field="bank_name" placeholder="Банк/Наличные"></td>
             <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></td>
             <td>
                 <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
                     <i class="bi bi-trash"></i>
                 </button>
-            </td>
+             </td>
+        `;
+    } else if (section === 'liabilities') {
+        html += `
+            <td><input type="text" class="form-control form-control-sm edit-field" data-field="counterparty" placeholder="Контрагент"></td>
+            <td><input type="text" class="form-control form-control-sm edit-field" data-field="purpose" placeholder="Назначение"></td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm edit-field" data-field="amount" value="0"></td>
+            <td><input type="date" class="form-control form-control-sm edit-field" data-field="due_date"></td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="deletePendingRow('${section}', ${newId})">
+                    <i class="bi bi-trash"></i>
+                </button>
+             </td>
         `;
     } else {
-        // Для других разделов - упрощенная версия, можно расширить по необходимости
+        // Для остальных разделов - добавляем заглушку
         const colCount = $(`#${section}Table thead th`).length - 2;
-        for (let i = 0; i < colCount - 1; i++) {
-            html += '<td><input type="text" class="form-control form-control-sm edit-field" data-field="field_' + i + '" value=""></td>';
+        for (let i = 0; i < colCount; i++) {
+            html += '<td><input type="text" class="form-control form-control-sm edit-field" placeholder="..."></td>';
         }
         html += '<td><button class="btn btn-sm btn-danger" onclick="deletePendingRow(\'' + section + '\', ' + newId + ')"><i class="bi bi-trash"></i></button></td>';
     }
@@ -931,7 +917,7 @@ function addNewRow(section) {
     $(`#${section}Table tr[data-id="${newId}"] .edit-field`).on('change', function() {
         const field = $(this).data('field');
         const value = $(this).val();
-        if (!pendingChanges[section][newId]) pendingChanges[section][newId] = { _isNew: true };
+        if (!pendingChanges[section][newId]) pendingChanges[section][newId] = { _isNew: true, date: currentDate };
         pendingChanges[section][newId][field] = value;
         showUnsavedIndicator();
     });
@@ -1004,7 +990,7 @@ function saveAllChanges() {
     $('#loadingOverlay').show();
     $('#saveAllBtn').prop('disabled', true);
     
-    const sections = ['balances', 'liabilities', 'credits', 'rent_inf', 'evacuations', 'parkings', 'third_party', 'taxes', 'salaries', 'state_duties'];
+    const sections = ['balances', 'liabilities', 'receivables', 'rent_inf', 'evacuations', 'parkings', 'third_party', 'taxes', 'salaries', 'state_duties'];
     const promises = [];
     
     sections.forEach(section => {
@@ -1025,7 +1011,7 @@ function saveAllChanges() {
         .then(() => {
             showAlert('Все изменения успешно сохранены!', 'success');
             loadSummary();
-            loadData(currentSection);
+            loadDataForDate(currentDate);
             pendingChanges = {};
             $('.table-warning').removeClass('table-warning');
         })
@@ -1053,6 +1039,7 @@ function saveSectionChanges(section) {
             toDelete.push(id);
         } else if (data._isNew) {
             const { _isNew, ...createData } = data;
+            createData.date = currentDate;
             toCreate.push(createData);
         } else {
             const { _deleted, ...updateData } = data;
@@ -1111,10 +1098,10 @@ function refreshCurrentTab() {
     if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
         if (confirm('Есть несохраненные изменения. Обновить без сохранения?')) {
             pendingChanges[currentSection] = {};
-            loadData(currentSection);
+            loadDataForDate(currentDate);
         }
     } else {
-        loadData(currentSection);
+        loadDataForDate(currentDate);
     }
 }
 
@@ -1125,8 +1112,12 @@ function loadSummary() {
         success: function(data) {
             $('#totalBalance').html(formatNumber(data.total_balance) + ' ₽');
             $('#totalLiabilities').html(formatNumber(data.total_liabilities) + ' ₽');
+            $('#totalReceivables').html(formatNumber(data.total_receivables) + ' ₽');
             $('#deficit').html(formatNumber(data.deficit) + ' ₽');
             $('#totalThirdParty').html(formatNumber(data.total_third_party) + ' ₽');
+            $('#totalTaxes').html(formatNumber(data.total_taxes) + ' ₽');
+            $('#totalSalaries').html(formatNumber(data.total_salaries) + ' ₽');
+            $('#totalDuties').html(formatNumber(data.total_duties) + ' ₽');
             
             const deficitElement = $('#deficit');
             if (data.deficit >= 0) {
@@ -1150,7 +1141,7 @@ function formatNumber(num) {
 }
 
 function exportSection(section) {
-    window.location.href = `/financial/export/${section}`;
+    window.location.href = `/financial/export/${section}?date=${currentDate}`;
 }
 
 function importSection(section, file) {
@@ -1158,6 +1149,7 @@ function importSection(section, file) {
     
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('date', currentDate);
     
     $.ajax({
         url: `/financial/import/${section}`,
@@ -1172,7 +1164,7 @@ function importSection(section, file) {
                     console.log('Ошибки импорта:', response.errors);
                 }
                 pendingChanges[section] = {};
-                loadData(section);
+                loadDataForDate(currentDate);
                 loadSummary();
             } else {
                 showAlert(response.error || 'Ошибка импорта', 'danger');
@@ -1202,36 +1194,23 @@ function showAlert(message, type) {
         alertDiv.remove();
     }, 5000);
 }
-
-$(document).ready(function() {
-    console.log('Financial module initialized with editable tables');
-    loadSummary();
-    loadData('balances');
-    
-    $('#financialTabs a').on('shown.bs.tab', function(e) {
-        const section = $(e.target).attr('href').replace('#', '');
-        
-        if (pendingChanges[currentSection] && Object.keys(pendingChanges[currentSection]).length > 0) {
-            if (confirm('Есть несохраненные изменения в текущей вкладке. Сохранить перед переключением?')) {
-                saveAllChanges().then(() => {
-                    loadData(section);
-                });
-                return;
-            } else {
-                pendingChanges[currentSection] = {};
-            }
-        }
-        
-        currentSection = section;
-        loadData(section);
-    });
-    
-    $(document).on('keydown', function(e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-            e.preventDefault();
-            saveAllChanges();
-        }
-    });
-});
 </script>
+
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.bg-gradient-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+.bg-gradient-danger {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+.bg-gradient-info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+.table-warning {
+    background-color: #fff3cd !important;
+}
+</style>
 {% endblock %}
