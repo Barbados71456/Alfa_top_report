@@ -102,37 +102,376 @@
                         </li>
                     </ul>
                     
-                    <!-- Контент вкладок - включаем отдельные шаблоны -->
+                    <!-- Контент вкладок -->
                     <div class="tab-content mt-3">
+                        <!-- Остатки -->
                         <div class="tab-pane fade show active" id="balances">
-                            {% include "financial/balances.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('balances')">
+                                        <i class="bi bi-plus-circle"></i> Добавить остаток
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('balances')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileBalances" accept=".xlsx,.xls" style="display:none" onchange="importSection('balances', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileBalances').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="balancesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Банк</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма (руб.)</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Обязательства -->
                         <div class="tab-pane fade" id="liabilities">
-                            {% include "financial/liabilities.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('liabilities')">
+                                        <i class="bi bi-plus-circle"></i> Добавить обязательство
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('liabilities')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileLiabilities" accept=".xlsx,.xls" style="display:none" onchange="importSection('liabilities', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileLiabilities').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="liabilitiesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Срок оплаты</th>
+                                            <th>Описание</th>
+                                            <th>Сумма</th>
+                                            <th>Портфель</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Кредиты/Займы -->
                         <div class="tab-pane fade" id="credits">
-                            {% include "financial/credits.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('credits')">
+                                        <i class="bi bi-plus-circle"></i> Добавить кредит/займ
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('credits')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileCredits" accept=".xlsx,.xls" style="display:none" onchange="importSection('credits', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileCredits').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="creditsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение</th>
+                                            <th>Тип услуги</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Ответственный</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Аренда/Инфо -->
                         <div class="tab-pane fade" id="rent_inf">
-                            {% include "financial/rent_inf.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('rent_inf')">
+                                        <i class="bi bi-plus-circle"></i> Добавить услугу
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('rent_inf')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileRentInf" accept=".xlsx,.xls" style="display:none" onchange="importSection('rent_inf', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileRentInf').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="rent_infTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение</th>
+                                            <th>Тип услуги</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Ответственный</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Эвакуация -->
                         <div class="tab-pane fade" id="evacuations">
-                            {% include "financial/evacuations.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('evacuations')">
+                                        <i class="bi bi-plus-circle"></i> Добавить эвакуацию
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('evacuations')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileEvacuations" accept=".xlsx,.xls" style="display:none" onchange="importSection('evacuations', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileEvacuations').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="evacuationsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Стоянки -->
                         <div class="tab-pane fade" id="parkings">
-                            {% include "financial/parkings.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('parkings')">
+                                        <i class="bi bi-plus-circle"></i> Добавить стоянку
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('parkings')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileParkings" accept=".xlsx,.xls" style="display:none" onchange="importSection('parkings', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileParkings').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="parkingsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Период</th>
+                                            <th>Назначение</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Чужие деньги -->
                         <div class="tab-pane fade" id="third_party">
-                            {% include "financial/third_party.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('third_party')">
+                                        <i class="bi bi-plus-circle"></i> Добавить чужие деньги
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('third_party')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileThirdParty" accept=".xlsx,.xls" style="display:none" onchange="importSection('third_party', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileThirdParty').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="third_partyTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Контрагент</th>
+                                            <th>Назначение</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Срок возврата</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Налоги -->
                         <div class="tab-pane fade" id="taxes">
-                            {% include "financial/taxes.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('taxes')">
+                                        <i class="bi bi-plus-circle"></i> Добавить налог
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('taxes')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileTaxes" accept=".xlsx,.xls" style="display:none" onchange="importSection('taxes', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileTaxes').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="taxesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Тип налога</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Квартал</th>
+                                            <th>Пени</th>
+                                            <th>Статус</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Зарплата -->
                         <div class="tab-pane fade" id="salaries">
-                            {% include "financial/salaries.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('salaries')">
+                                        <i class="bi bi-plus-circle"></i> Добавить зарплату
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('salaries')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileSalaries" accept=".xlsx,.xls" style="display:none" onchange="importSection('salaries', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileSalaries').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="salariesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Портфель</th>
+                                            <th>Сумма</th>
+                                            <th>Сумма налога</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
+                        
+                        <!-- Госпошлины -->
                         <div class="tab-pane fade" id="state_duties">
-                            {% include "financial/state_duties.html" %}
+                            <div class="d-flex justify-content-between mb-3">
+                                <div>
+                                    <button class="btn btn-primary" onclick="showAddModal('state_duties')">
+                                        <i class="bi bi-plus-circle"></i> Добавить госпошлину
+                                    </button>
+                                    <button class="btn btn-success" onclick="exportSection('state_duties')">
+                                        <i class="bi bi-download"></i> Экспорт
+                                    </button>
+                                </div>
+                                <div>
+                                    <input type="file" id="importFileStateDuties" accept=".xlsx,.xls" style="display:none" onchange="importSection('state_duties', this.files[0])">
+                                    <button class="btn btn-info" onclick="document.getElementById('importFileStateDuties').click()">
+                                        <i class="bi bi-upload"></i> Импорт
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="state_dutiesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Дата</th>
+                                            <th>Портфель</th>
+                                            <th>Название дела</th>
+                                            <th>Сумма</th>
+                                            <th>Ответственный</th>
+                                            <th>Действия</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -171,15 +510,17 @@ let currentRecordId = null;
 
 // Загрузка данных для текущего раздела
 function loadData(section) {
+    console.log('Loading data for section:', section);
     $.ajax({
         url: `/financial/${section}`,
         method: 'GET',
         success: function(data) {
+            console.log('Data loaded:', data);
             renderTable(section, data);
         },
         error: function(xhr) {
             console.error('Ошибка загрузки:', xhr.responseText);
-            showAlert('Ошибка загрузки данных', 'danger');
+            showAlert('Ошибка загрузки данных: ' + (xhr.responseJSON?.error || xhr.statusText), 'danger');
         }
     });
 }
@@ -203,9 +544,9 @@ function renderTable(section, data) {
                 <td>${row.date}</td>
                 <td>${row.bank_name}</td>
                 <td>${row.portfolio || '-'}</td>
-                <td class="${row.amount >= 0 ? 'text-success' : 'text-danger'}">${formatNumber(row.amount)}</td>
+                <td class="${parseFloat(row.amount) >= 0 ? 'text-success' : 'text-danger'}">${formatNumber(row.amount)}</td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -215,6 +556,7 @@ function renderTable(section, data) {
             `;
         } else if (section === 'liabilities') {
             const statusClass = row.status === 'paid' ? 'success' : (row.status === 'overdue' ? 'danger' : 'warning');
+            const statusText = row.status === 'paid' ? 'Оплачено' : (row.status === 'overdue' ? 'Просрочено' : 'Ожидает');
             html += `
                 <td>${row.id}</td>
                 <td>${row.date}</td>
@@ -222,9 +564,9 @@ function renderTable(section, data) {
                 <td>${row.description}</td>
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.portfolio || '-'}</td>
-                <td><span class="badge bg-${statusClass}">${getStatusText(row.status)}</span></td>
+                <td><span class="badge bg-${statusClass}">${statusText}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -243,7 +585,7 @@ function renderTable(section, data) {
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.responsible || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -262,7 +604,7 @@ function renderTable(section, data) {
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.responsible || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -271,6 +613,7 @@ function renderTable(section, data) {
                 </td>
             `;
         } else if (section === 'evacuations') {
+            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
                 <td>${row.id}</td>
                 <td>${row.date}</td>
@@ -278,9 +621,9 @@ function renderTable(section, data) {
                 <td>${row.purpose || '-'}</td>
                 <td>${row.portfolio || '-'}</td>
                 <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -289,6 +632,7 @@ function renderTable(section, data) {
                 </td>
             `;
         } else if (section === 'parkings') {
+            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
                 <td>${row.id}</td>
                 <td>${row.date}</td>
@@ -297,9 +641,9 @@ function renderTable(section, data) {
                 <td>${row.purpose || '-'}</td>
                 <td>${row.portfolio || '-'}</td>
                 <td class="text-danger">${formatNumber(row.amount)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -308,6 +652,7 @@ function renderTable(section, data) {
                 </td>
             `;
         } else if (section === 'third_party') {
+            const statusText = row.status === 'paid' ? 'Возвращено' : 'Ожидает';
             html += `
                 <td>${row.id}</td>
                 <td>${row.date}</td>
@@ -316,9 +661,9 @@ function renderTable(section, data) {
                 <td>${row.portfolio || '-'}</td>
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.due_date || '-'}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -327,6 +672,7 @@ function renderTable(section, data) {
                 </td>
             `;
         } else if (section === 'taxes') {
+            const statusText = row.status === 'paid' ? 'Оплачено' : 'Ожидает';
             html += `
                 <td>${row.id}</td>
                 <td>${row.date}</td>
@@ -335,9 +681,9 @@ function renderTable(section, data) {
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.quarter || '-'}</td>
                 <td class="text-danger">${formatNumber(row.penalty)}</td>
-                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${getStatusText(row.status)}</span></td>
+                <td><span class="badge bg-${row.status === 'paid' ? 'success' : 'warning'}">${statusText}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -353,7 +699,7 @@ function renderTable(section, data) {
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td class="text-danger">${formatNumber(row.tax_amount)}</td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -370,7 +716,7 @@ function renderTable(section, data) {
                 <td class="text-danger">${formatNumber(row.amount)}</td>
                 <td>${row.responsible || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-warning" onclick="editRecord('${section}', ${row.id})">
+                    <button class="btn btn-sm btn-warning me-1" onclick="editRecord('${section}', ${row.id})">
                         <i class="bi bi-pencil"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteRecord('${section}', ${row.id})">
@@ -387,20 +733,25 @@ function renderTable(section, data) {
 
 // Показать модальное окно для добавления
 function showAddModal(section) {
+    console.log('Showing add modal for section:', section);
     currentSection = section;
     currentRecordId = null;
-    $('#modalTitle').html(`<i class="bi bi-plus-circle"></i> Добавить запись - ${getSectionName(section)}`);
+    document.getElementById('modalTitle').innerHTML = `<i class="bi bi-plus-circle"></i> Добавить запись - ${getSectionName(section)}`;
     
-    // Загружаем форму для раздела
-    loadForm(section);
-    $('#dataModal').modal('show');
+    // Загружаем пустую форму
+    loadForm(section, null);
+    
+    // Показываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById('dataModal'));
+    modal.show();
 }
 
 // Редактирование записи
 function editRecord(section, id) {
+    console.log('Editing record:', section, id);
     currentSection = section;
     currentRecordId = id;
-    $('#modalTitle').html(`<i class="bi bi-pencil"></i> Редактировать запись - ${getSectionName(section)}`);
+    document.getElementById('modalTitle').innerHTML = `<i class="bi bi-pencil"></i> Редактировать запись - ${getSectionName(section)}`;
     
     // Загружаем данные записи
     $.ajax({
@@ -410,30 +761,41 @@ function editRecord(section, id) {
             const record = data.find(r => r.id === id);
             if (record) {
                 loadForm(section, record);
-                $('#dataModal').modal('show');
+                const modal = new bootstrap.Modal(document.getElementById('dataModal'));
+                modal.show();
+            } else {
+                showAlert('Запись не найдена', 'danger');
             }
+        },
+        error: function(xhr) {
+            showAlert('Ошибка загрузки записи', 'danger');
         }
     });
 }
 
 // Загрузка формы для раздела
 function loadForm(section, data = null) {
-    const formFields = $('#formFields');
+    const formFields = document.getElementById('formFields');
     let html = '';
+    const today = new Date().toISOString().split('T')[0];
     
     if (section === 'balances') {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Банк *</label>
                 <select name="bank_name" class="form-select" required>
+                    <option value="">Выберите банк</option>
                     <option value="Свой банк Альфа" ${data && data.bank_name === 'Свой банк Альфа' ? 'selected' : ''}>Свой банк Альфа</option>
                     <option value="Альфабанк Альфа" ${data && data.bank_name === 'Альфабанк Альфа' ? 'selected' : ''}>Альфабанк Альфа</option>
                     <option value="Тинькофф Альфа" ${data && data.bank_name === 'Тинькофф Альфа' ? 'selected' : ''}>Тинькофф Альфа</option>
                     <option value="Сбер Альфа" ${data && data.bank_name === 'Сбер Альфа' ? 'selected' : ''}>Сбер Альфа</option>
+                    <option value="Альфабанк АБР" ${data && data.bank_name === 'Альфабанк АБР' ? 'selected' : ''}>Альфабанк АБР</option>
+                    <option value="Альфабанк КАСМ" ${data && data.bank_name === 'Альфабанк КАСМ' ? 'selected' : ''}>Альфабанк КАСМ</option>
+                    <option value="Альфабанк Аврора" ${data && data.bank_name === 'Альфабанк Аврора' ? 'selected' : ''}>Альфабанк Аврора</option>
                 </select>
             </div>
             <div class="mb-3">
@@ -455,11 +817,11 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата создания *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Срок оплаты *</label>
-                <input type="date" name="due_date" class="form-control" required value="${data ? data.due_date : getToday()}">
+                <input type="date" name="due_date" class="form-control" required value="${data ? data.due_date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Описание *</label>
@@ -481,7 +843,7 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Комментарий</label>
-                <textarea name="comments" class="form-control" rows="3">${data ? data.comments || '' : ''}</textarea>
+                <textarea name="comments" class="form-control" rows="3">${data ? (data.comments || '') : ''}</textarea>
             </div>
             <div class="mb-3">
                 <label class="form-label">Статус</label>
@@ -496,19 +858,19 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Контрагент *</label>
                 <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Назначение</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+                <label class="form-label">Назначение платежа</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Тип услуги</label>
-                <input type="text" name="service_type" class="form-control" value="${data ? data.service_type || '' : ''}">
+                <label class="form-label">Вид услуги</label>
+                <input type="text" name="service_type" class="form-control" value="${data ? (data.service_type || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -526,26 +888,26 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
             </div>
         `;
     } else if (section === 'rent_inf') {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Контрагент *</label>
                 <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Назначение</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+                <label class="form-label">Назначение платежа</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Тип услуги</label>
-                <input type="text" name="service_type" class="form-control" value="${data ? data.service_type || '' : ''}">
+                <label class="form-label">Вид услуги</label>
+                <input type="text" name="service_type" class="form-control" value="${data ? (data.service_type || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -563,22 +925,22 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
             </div>
         `;
     } else if (section === 'evacuations') {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Контрагент</label>
-                <input type="text" name="counterparty" class="form-control" value="${data ? data.counterparty || '' : ''}">
+                <input type="text" name="counterparty" class="form-control" value="${data ? (data.counterparty || '') : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Назначение</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+                <label class="form-label">Назначение платежа</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -606,7 +968,7 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Контрагент *</label>
@@ -614,11 +976,11 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Период</label>
-                <input type="text" name="period" class="form-control" placeholder="например: февраль 2026" value="${data ? data.period || '' : ''}">
+                <input type="text" name="period" class="form-control" placeholder="например: февраль 2026" value="${data ? (data.period || '') : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Назначение</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+                <label class="form-label">Назначение платежа</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -646,15 +1008,15 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Контрагент *</label>
                 <input type="text" name="counterparty" class="form-control" required value="${data ? data.counterparty : ''}">
             </div>
             <div class="mb-3">
-                <label class="form-label">Назначение</label>
-                <input type="text" name="purpose" class="form-control" value="${data ? data.purpose || '' : ''}">
+                <label class="form-label">Назначение платежа</label>
+                <input type="text" name="purpose" class="form-control" value="${data ? (data.purpose || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -672,7 +1034,7 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Срок возврата</label>
-                <input type="date" name="due_date" class="form-control" value="${data ? data.due_date || '' : ''}">
+                <input type="date" name="due_date" class="form-control" value="${data ? (data.due_date || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Статус</label>
@@ -686,11 +1048,12 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Тип налога *</label>
                 <select name="tax_type" class="form-select" required>
+                    <option value="">Выберите тип налога</option>
                     <option value="НДФЛ" ${data && data.tax_type === 'НДФЛ' ? 'selected' : ''}>НДФЛ</option>
                     <option value="УСН" ${data && data.tax_type === 'УСН' ? 'selected' : ''}>УСН</option>
                     <option value="НДС" ${data && data.tax_type === 'НДС' ? 'selected' : ''}>НДС</option>
@@ -723,8 +1086,8 @@ function loadForm(section, data = null) {
                 </select>
             </div>
             <div class="mb-3">
-                <label class="form-label">Пени</label>
-                <input type="number" name="penalty" class="form-control" step="0.01" value="${data ? data.penalty || 0 : 0}">
+                <label class="form-label">Пени (руб.)</label>
+                <input type="number" name="penalty" class="form-control" step="0.01" value="${data ? (data.penalty || 0) : 0}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Статус</label>
@@ -738,7 +1101,7 @@ function loadForm(section, data = null) {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -756,14 +1119,14 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Сумма налога (руб.)</label>
-                <input type="number" name="tax_amount" class="form-control" step="0.01" value="${data ? data.tax_amount || 0 : 0}">
+                <input type="number" name="tax_amount" class="form-control" step="0.01" value="${data ? (data.tax_amount || 0) : 0}">
             </div>
         `;
     } else if (section === 'state_duties') {
         html = `
             <div class="mb-3">
                 <label class="form-label">Дата *</label>
-                <input type="date" name="date" class="form-control" required value="${data ? data.date : getToday()}">
+                <input type="date" name="date" class="form-control" required value="${data ? data.date : today}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Портфель</label>
@@ -777,7 +1140,7 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Название дела</label>
-                <input type="text" name="case_name" class="form-control" value="${data ? data.case_name || '' : ''}">
+                <input type="text" name="case_name" class="form-control" value="${data ? (data.case_name || '') : ''}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Сумма (руб.) *</label>
@@ -785,19 +1148,24 @@ function loadForm(section, data = null) {
             </div>
             <div class="mb-3">
                 <label class="form-label">Ответственный</label>
-                <input type="text" name="responsible" class="form-control" value="${data ? data.responsible || '' : ''}">
+                <input type="text" name="responsible" class="form-control" value="${data ? (data.responsible || '') : ''}">
             </div>
         `;
     }
     
-    formFields.html(html);
+    formFields.innerHTML = html;
 }
 
 // Сохранение записи
 function saveRecord() {
     const formData = {};
-    $('#dataForm').serializeArray().forEach(field => {
-        formData[field.name] = field.value;
+    const form = document.getElementById('dataForm');
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        if (input.name) {
+            formData[input.name] = input.value;
+        }
     });
     
     const url = currentRecordId 
@@ -806,20 +1174,31 @@ function saveRecord() {
     
     const method = currentRecordId ? 'PUT' : 'POST';
     
+    console.log('Saving record:', url, method, formData);
+    
     $.ajax({
         url: url,
         method: method,
         contentType: 'application/json',
         data: JSON.stringify(formData),
         success: function(response) {
-            $('#dataModal').modal('hide');
-            loadData(currentSection);
-            loadSummary();
-            showAlert('Запись успешно сохранена', 'success');
+            if (response.success) {
+                // Закрываем модальное окно
+                const modal = bootstrap.Modal.getInstance(document.getElementById('dataModal'));
+                modal.hide();
+                
+                // Перезагружаем данные
+                loadData(currentSection);
+                loadSummary();
+                showAlert('Запись успешно сохранена', 'success');
+            } else {
+                showAlert(response.error || 'Ошибка сохранения', 'danger');
+            }
         },
         error: function(xhr) {
             const error = xhr.responseJSON?.error || 'Ошибка сохранения';
             showAlert(error, 'danger');
+            console.error('Save error:', xhr.responseText);
         }
     });
 }
@@ -830,10 +1209,14 @@ function deleteRecord(section, id) {
         $.ajax({
             url: `/financial/${section}/delete/${id}`,
             method: 'DELETE',
-            success: function() {
-                loadData(section);
-                loadSummary();
-                showAlert('Запись удалена', 'success');
+            success: function(response) {
+                if (response.success) {
+                    loadData(section);
+                    loadSummary();
+                    showAlert('Запись удалена', 'success');
+                } else {
+                    showAlert(response.error || 'Ошибка удаления', 'danger');
+                }
             },
             error: function(xhr) {
                 showAlert('Ошибка удаления', 'danger');
@@ -871,6 +1254,8 @@ function importSection(section, file) {
             } else {
                 showAlert(response.error || 'Ошибка импорта', 'danger');
             }
+            // Очищаем input file
+            document.getElementById(`importFile${section.charAt(0).toUpperCase() + section.slice(1)}`).value = '';
         },
         error: function(xhr) {
             showAlert('Ошибка импорта', 'danger');
@@ -884,32 +1269,32 @@ function loadSummary() {
         url: '/financial/summary',
         method: 'GET',
         success: function(data) {
-            $('#totalBalance').text(formatNumber(data.total_balance) + ' ₽');
-            $('#totalLiabilities').text(formatNumber(data.total_liabilities) + ' ₽');
-            $('#deficit').text(formatNumber(data.deficit) + ' ₽');
-            $('#totalThirdParty').text(formatNumber(data.total_third_party) + ' ₽');
+            document.getElementById('totalBalance').innerHTML = formatNumber(data.total_balance) + ' ₽';
+            document.getElementById('totalLiabilities').innerHTML = formatNumber(data.total_liabilities) + ' ₽';
+            document.getElementById('deficit').innerHTML = formatNumber(data.deficit) + ' ₽';
+            document.getElementById('totalThirdParty').innerHTML = formatNumber(data.total_third_party) + ' ₽';
             
             // Меняем цвет дефицита
-            const deficitElement = $('#deficit');
+            const deficitElement = document.getElementById('deficit');
             if (data.deficit >= 0) {
-                deficitElement.css('color', '#34c759');
+                deficitElement.style.color = '#34c759';
             } else {
-                deficitElement.css('color', '#ff3b30');
+                deficitElement.style.color = '#ff3b30';
             }
+        },
+        error: function(xhr) {
+            console.error('Error loading summary:', xhr);
         }
     });
 }
 
 // Вспомогательные функции
 function formatNumber(num) {
+    if (num === null || num === undefined) return '0.00';
     return new Intl.NumberFormat('ru-RU', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(num);
-}
-
-function getToday() {
-    return new Date().toISOString().split('T')[0];
 }
 
 function getSectionName(section) {
@@ -928,34 +1313,33 @@ function getSectionName(section) {
     return names[section] || section;
 }
 
-function getStatusText(status) {
-    const statuses = {
-        'pending': 'Ожидает',
-        'paid': 'Оплачено',
-        'overdue': 'Просрочено'
-    };
-    return statuses[status] || status;
-}
-
 function showAlert(message, type) {
-    const alert = $(`
-        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `);
-    $('.container-fluid').prepend(alert);
-    setTimeout(() => alert.fadeOut(), 5000);
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
 }
 
 // Инициализация при загрузке страницы
 $(document).ready(function() {
+    console.log('Financial module initialized');
     loadSummary();
     loadData('balances');
     
     // Обработка смены вкладок
     $('#financialTabs a').on('shown.bs.tab', function(e) {
         const section = $(e.target).attr('href').replace('#', '');
+        console.log('Tab changed to:', section);
         loadData(section);
     });
 });
