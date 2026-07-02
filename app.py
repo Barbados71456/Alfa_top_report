@@ -6,13 +6,14 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 
 from config import Config
 from auth import login_required, admin_required, authenticate_user
-from db import query, execute
+from db import query, execute, close_connection
 import reports
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.teardown_appcontext(close_connection)
 
 try:
     Config.validate()
