@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: alfa-top-report
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

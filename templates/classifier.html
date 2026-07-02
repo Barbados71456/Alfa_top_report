@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Классификатор статей — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Классификатор статей (dim_level_report)</h4>
+<form class="mb-3" method="get">
+    <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по статье/категории" value="{{ search }}">
+</form>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Признак / Категория / Статья</th>
+            <th class="label-col">Уровень 0</th>
+            <th class="label-col">Уровень 1</th>
+            <th class="label-col">Уровень 2</th>
+            <th class="label-col">Уровень 3</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+        <tr>
+            <td class="label-col">
+                {{ row['Признак'] }} / {{ row['Категория'] }} / {{ row['Статья'] }}
+                <form id="form-{{ row.id }}" method="post" action="{{ url_for('classifier_update', row_id=row.id) }}" style="display:none">
+                    <input type="hidden" name="q" value="{{ search }}">
+                </form>
+            </td>
+            <td class="label-col"><input form="form-{{ row.id }}" class="form-control form-control-sm" name="u0" value="{{ row['СтатьяУровень0'] or '' }}"></td>
+            <td class="label-col"><input form="form-{{ row.id }}" class="form-control form-control-sm" name="u1" value="{{ row['СтатьяУровень1'] or '' }}"></td>
+            <td class="label-col"><input form="form-{{ row.id }}" class="form-control form-control-sm" name="u2" value="{{ row['СтатьяУровень2'] or '' }}"></td>
+            <td class="label-col"><input form="form-{{ row.id }}" class="form-control form-control-sm" name="u3" value="{{ row['СтатьяУровень3'] or '' }}"></td>
+            <td><button form="form-{{ row.id }}" class="btn btn-sm btn-outline-dark" type="submit">Сохранить</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

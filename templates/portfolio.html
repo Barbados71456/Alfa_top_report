@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Портфели — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">Портфель: {{ project or '—' }}</h4>
+    <form class="d-flex gap-2" method="get">
+        <select name="project" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for p in projects %}
+            <option value="{{ p }}" {% if p == project %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if data %}
+<div class="card p-3 mb-4">
+    <canvas id="portfolioChart" height="80"></canvas>
+</div>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Статья</th>
+            {% for m in data.months %}<th>{{ m }}</th>{% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in data.rows %}
+        <tr class="{% if row.bold %}row-bold{% endif %}">
+            <td class="label-col">{{ row.label }}</td>
+            {% for v in row.vals %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+const months = {{ data.months | tojson }};
+const rows = {{ data.rows | tojson }};
+const totalRow = rows.find(r => r.label === 'Итого по портфелю');
+new Chart(document.getElementById('portfolioChart'), {
+    type: 'line',
+    data: {
+        labels: months,
+        datasets: [{
+            label: 'Итого по портфелю, тыс. руб.',
+            data: totalRow ? totalRow.vals : [],
+            borderColor: '#000',
+            backgroundColor: 'rgba(0,0,0,0.05)',
+            fill: true,
+            tension: 0.2
+        }]
+    },
+    options: { plugins: { legend: { display: false } } }
+});
+</script>
+{% else %}
+<p class="text-secondary">Нет данных по выбранному портфелю.</p>
+{% endif %}
+{% endblock %}

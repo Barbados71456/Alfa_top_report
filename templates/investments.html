@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Инвестиции — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Результат по инвестиционной деятельности, тыс. руб.</h4>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Портфель</th>
+            {% for y in data.years %}<th>{{ y }}</th>{% endfor %}
+            <th>План 2026</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in data.rows %}
+        <tr>
+            <td class="label-col">{{ row.project }}</td>
+            {% for v in row.years %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endfor %}
+            <td>{{ '%.1f'|format(row.plan_2026) if row.plan_2026 is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
