@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import date
 
@@ -8,8 +9,16 @@ from auth import login_required, admin_required, authenticate_user
 from db import query, execute
 import reports
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
 app.config.from_object(Config)
+
+try:
+    Config.validate()
+except ValueError:
+    app.logger.exception('Некорректная конфигурация окружения')
+    raise
 
 
 @app.route('/')
@@ -22,7 +31,12 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        ok, user = authenticate_user(username, password)
+        try:
+            ok, user = authenticate_user(username, password)
+        except Exception:
+            app.logger.exception('Ошибка при обращении к БД во время входа')
+            flash('Ошибка подключения к базе данных. Сообщите администратору.', 'danger')
+            return render_template('login.html')
         if ok:
             session['user_id'] = user['id']
             session['username'] = user['username']
@@ -31,6 +45,16 @@ def login():
             return redirect(url_for('svod'))
         flash('Неверный логин или пароль', 'danger')
     return render_template('login.html')
+
+
+@app.route('/healthz')
+def healthz():
+    try:
+        query('SELECT 1')
+        return {'status': 'ok'}
+    except Exception as e:
+        app.logger.exception('healthz: БД недоступна')
+        return {'status': 'error', 'detail': str(e)}, 500
 
 
 @app.route('/logout')
