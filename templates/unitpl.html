@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}UNIT+PL — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">UNIT+PL — вся история и план вперёд одной строкой, тыс. руб.</h4>
+<p class="text-secondary small">Факт там, где он есть за месяц; иначе — план (столбцы отмечены курсивом).</p>
+
+<div class="card p-3 mb-4">
+    <canvas id="unitplChart" height="70"></canvas>
+</div>
+
+<div class="card p-3 table-responsive" style="max-height:75vh;">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Статья</th>
+            {% for p in data.periods %}<th class="{% if data.sources[loop.index0] == 'план' %}fst-italic text-secondary{% endif %}">{{ p }}</th>{% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in data.rows %}
+        {% if row.kind == 'header' %}
+        <tr><td class="label-col fw-bold" colspan="{{ data.periods|length + 1 }}">{{ row.label }}</td></tr>
+        {% else %}
+        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+            <td class="label-col">{{ row.label }}</td>
+            {% for v in row.vals %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endfor %}
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+new Chart(document.getElementById('unitplChart'), {
+    type: 'line',
+    data: {
+        labels: {{ data.periods | tojson }},
+        datasets: [
+            {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, borderColor: '#000', backgroundColor: 'rgba(0,0,0,0.05)', tension: 0.15},
+            {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15}
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
+});
+</script>
+{% endblock %}

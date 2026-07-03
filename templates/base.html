@@ -49,14 +49,18 @@
 <body>
 <nav class="navbar navbar-expand-lg">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{{ url_for('svod') }}">Alfa Top Report</a>
+        <a class="navbar-brand" href="{{ url_for('svod1') }}">Alfa Top Report</a>
         {% if session.get('user_id') %}
         <div class="collapse navbar-collapse">
-            <ul class="navbar-nav me-auto">
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='svod' %}active{% endif %}" href="{{ url_for('svod') }}">Свод</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Дашборд</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='portfolio' %}active{% endif %}" href="{{ url_for('portfolio') }}">Портфели</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='investments' %}active{% endif %}" href="{{ url_for('investments') }}">Инвестиции</a></li>
+            <ul class="navbar-nav me-auto flex-wrap">
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='svod1' %}active{% endif %}" href="{{ url_for('svod1') }}">Свод1</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='svod2' %}active{% endif %}" href="{{ url_for('svod2') }}">Свод2</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='dashboard1' %}active{% endif %}" href="{{ url_for('dashboard1') }}">Dashboard1</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='dashboard2' %}active{% endif %}" href="{{ url_for('dashboard2') }}">Dashboard2</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='unitpl' %}active{% endif %}" href="{{ url_for('unitpl') }}">UNIT+PL</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='fot1' %}active{% endif %}" href="{{ url_for('fot1') }}">ФОТ v1</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='fot2' %}active{% endif %}" href="{{ url_for('fot2') }}">ФОТ v2</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='loans' %}active{% endif %}" href="{{ url_for('loans') }}">Займы</a></li>
                 {% if session.get('role') == 'admin' %}
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
                 {% endif %}

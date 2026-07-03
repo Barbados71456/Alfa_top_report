@@ -1,13 +1,18 @@
 import logging
 import os
+import threading
 from datetime import date
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 
 from config import Config
 from auth import login_required, admin_required, authenticate_user
 from db import query, execute, close_connection
-import reports
+from reporting_refresh import refresh_all
+import pl_report as pr
+import fot_report as fr
+import loans_report as lr
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,10 +26,24 @@ except ValueError:
     app.logger.exception('Некорректная конфигурация окружения')
     raise
 
+# Автообновление reporting.* — без участия пользователя: сразу при старте процесса
+# (в фоновом потоке, чтобы не блокировать старт сервера) и затем каждые 10 минут.
+threading.Thread(target=refresh_all, daemon=True).start()
+
+scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(refresh_all, 'interval', minutes=10)
+scheduler.start()
+
+
+def _pick_year(years, requested):
+    if requested and requested in years:
+        return requested
+    return years[-1] if years else date.today().year
+
 
 @app.route('/')
 def index():
-    return redirect(url_for('svod') if 'user_id' in session else url_for('login'))
+    return redirect(url_for('svod1') if 'user_id' in session else url_for('login'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -43,7 +62,7 @@ def login():
             session['username'] = user['username']
             session['role'] = user['role']
             session.permanent = True
-            return redirect(url_for('svod'))
+            return redirect(url_for('svod1'))
         flash('Неверный логин или пароль', 'danger')
     return render_template('login.html')
 
@@ -64,50 +83,87 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route('/svod')
+@app.route('/svod1')
 @login_required
-def svod():
-    years = reports.get_available_years()
+def svod1():
+    years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    source = request.args.get('source', 'fact')
-    if source not in ('fact', 'plan'):
-        source = 'fact'
-    if source == 'plan' and year != 2026:
-        year = 2026
-    data = reports.get_svod(year, source)
-    plan_years = [2026]
-    return render_template('svod.html', data=data, years=years, year=year, source=source, plan_years=plan_years)
+    pf = request.args.get('pf', 'факт')
+    data = pr.svod1(year, pf)
+    return render_template('svod1.html', data=data, years=years, year=year, pf=pf)
 
 
-@app.route('/dashboard')
+@app.route('/svod2')
 @login_required
-def dashboard():
-    all_lines = reports.SVOD_FACT_LINES + reports.SVOD_FACT_BELOW
-    line = request.args.get('line') or all_lines[0][0]
-    years = reports.get_available_years()
-    selected_years = years[-4:] if len(years) > 4 else years
-    data = reports.get_dashboard(line, selected_years)
-    return render_template('dashboard.html', data=data, lines=all_lines, line=line, years=years)
-
-
-@app.route('/portfolio')
-@login_required
-def portfolio():
-    projects = reports.get_projects()
-    project = request.args.get('project') or (projects[0] if projects else None)
-    years = reports.get_available_years()
+def svod2():
+    years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    data = reports.get_svod_for_project(project, year) if project else None
-    return render_template('portfolio.html', data=data, projects=projects, project=project, years=years, year=year)
+    pf = request.args.get('pf', 'факт')
+    data = pr.svod2(year, pf)
+    return render_template('svod2.html', data=data, years=years, year=year, pf=pf)
 
 
-@app.route('/investments')
+@app.route('/unitpl')
 @login_required
-def investments():
-    years = reports.get_available_years()
-    selected_years = years[-4:] if len(years) > 4 else years
-    data = reports.get_investments(selected_years)
-    return render_template('investments.html', data=data, years=years)
+def unitpl():
+    data = pr.unit_pl()
+    return render_template('unitpl.html', data=data)
+
+
+@app.route('/dashboard1')
+@login_required
+def dashboard1():
+    years = pr.get_available_years()
+    month = request.args.get('month', type=int) or date.today().month
+    plan_year = request.args.get('year', type=int) or years[-1]
+    recent_years = [y for y in years if y <= plan_year][-5:]
+    data = pr.dashboard1(month, recent_years, plan_year)
+    return render_template('dashboard1.html', data=data, years=years, month=month, plan_year=plan_year)
+
+
+@app.route('/dashboard2')
+@login_required
+def dashboard2():
+    years = pr.get_available_years()
+    month = request.args.get('month', type=int) or date.today().month
+    plan_year = request.args.get('year', type=int) or years[-1]
+    recent_years = [y for y in years if y <= plan_year][-5:]
+    data = pr.dashboard2(month, recent_years, plan_year)
+    return render_template('dashboard2.html', data=data, years=years, month=month, plan_year=plan_year)
+
+
+@app.route('/fot1')
+@login_required
+def fot1():
+    years = fr.get_available_years()
+    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+    pf = request.args.get('pf', 'факт')
+    data = fr.fot1(year, pf)
+    return render_template('fot1.html', data=data, years=years, year=year, pf=pf)
+
+
+@app.route('/fot2')
+@login_required
+def fot2():
+    years = fr.get_available_years()
+    month = request.args.get('month', type=int) or date.today().month
+    plan_year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+    recent_years = [y for y in years if y <= plan_year][-5:]
+    data = fr.fot2(month, recent_years, plan_year)
+    return render_template('fot2.html', data=data, years=years, month=month, plan_year=plan_year)
+
+
+@app.route('/loans')
+@login_required
+def loans():
+    periods = lr.get_available_periods()
+    years = sorted({p.year for p in periods}) if periods else [date.today().year]
+    year = request.args.get('year', type=int) or years[-1]
+    month = request.args.get('month', type=int) or date.today().month
+    pf = request.args.get('pf', 'факт')
+    data = lr.loans(year, month, pf)
+    series = lr.loans_balance_series(pf)
+    return render_template('loans.html', data=data, series=series, years=years, year=year, month=month, pf=pf)
 
 
 @app.route('/classifier')
@@ -145,4 +201,4 @@ def classifier_update(row_id):
 
 if __name__ == '__main__':
     Config.validate()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001)), debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001)), debug=True, use_reloader=False)

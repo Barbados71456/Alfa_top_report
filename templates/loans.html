@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Займы — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">Займы — {{ data.month_name }} {{ data.year }}, руб.</h4>
+    <form class="d-flex gap-2" method="get">
+        <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for m in range(1,13) %}<option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+        <select name="pf" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
+            <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
+        </select>
+    </form>
+</div>
+
+<div class="card p-3 mb-4">
+    <canvas id="loansChart" height="70"></canvas>
+</div>
+
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Кредитор</th>
+            <th>Займ на н.п.</th>
+            <th>Привлечение</th>
+            <th>Возврат</th>
+            <th>Займ на к.п.</th>
+            <th>Проценты</th>
+            <th>Ставка, % год.</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr class="row-bold">
+            <td class="label-col">Итого</td>
+            <td>{{ '{:,.0f}'.format(data.total.opening).replace(',', ' ') }}</td>
+            <td>{{ '{:,.0f}'.format(data.total.draw).replace(',', ' ') }}</td>
+            <td>{{ '{:,.0f}'.format(data.total.repay).replace(',', ' ') }}</td>
+            <td>{{ '{:,.0f}'.format(data.total.closing).replace(',', ' ') }}</td>
+            <td>{{ '{:,.0f}'.format(data.total.interest).replace(',', ' ') }}</td>
+            <td>—</td>
+        </tr>
+        {% for r in data.rows %}
+        <tr>
+            <td class="label-col">{{ r.lender }}</td>
+            <td>{{ '{:,.0f}'.format(r.opening).replace(',', ' ') if r.opening else '—' }}</td>
+            <td class="{% if r.draw %}val-pos{% endif %}">{{ '{:,.0f}'.format(r.draw).replace(',', ' ') if r.draw else '—' }}</td>
+            <td class="{% if r.repay %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.repay).replace(',', ' ') if r.repay else '—' }}</td>
+            <td>{{ '{:,.0f}'.format(r.closing).replace(',', ' ') if r.closing else '—' }}</td>
+            <td class="{% if r.interest %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.interest).replace(',', ' ') if r.interest else '—' }}</td>
+            <td>{{ '%.1f'|format(r.rate_pct) if r.rate_pct is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+new Chart(document.getElementById('loansChart'), {
+    type: 'line',
+    data: {
+        labels: {{ series.periods | tojson }},
+        datasets: [{
+            label: 'Суммарный остаток долга, руб.',
+            data: {{ series.vals | tojson }},
+            borderColor: '#000', backgroundColor: 'rgba(0,0,0,0.05)', fill: true, tension: 0.15
+        }]
+    },
+    options: { plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

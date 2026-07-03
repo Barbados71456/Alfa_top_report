@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Свод1 — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">Свод1, тыс. руб.</h4>
+    <form class="d-flex gap-2" method="get">
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+        <select name="pf" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
+            <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
+            <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
+        </select>
+    </form>
+</div>
+
+<div class="card p-3 mb-4">
+    <canvas id="svod1Chart" height="80"></canvas>
+</div>
+
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Статья</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in data.rows %}
+        {% if row.kind == 'header' %}
+        <tr><td class="label-col fw-bold" colspan="{{ data.months|length + 1 }}">{{ row.label }}</td></tr>
+        {% else %}
+        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+            <td class="label-col">{{ row.label }}</td>
+            {% for v in row.vals %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endfor %}
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+new Chart(document.getElementById('svod1Chart'), {
+    type: 'bar',
+    data: {
+        labels: {{ data.months | tojson }},
+        datasets: [
+            {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, backgroundColor: '#000'},
+            {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, type: 'line', borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.1)', tension: 0.2}
+        ]
+    },
+    options: { plugins: { legend: { display: true } } }
+});
+</script>
+{% endblock %}

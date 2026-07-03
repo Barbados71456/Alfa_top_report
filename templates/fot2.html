@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}ФОТ v2 — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">ФОТ v2 — {{ data.month_name }}, годы, руб.</h4>
+    <form class="d-flex gap-2" method="get">
+        <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for m in range(1,13) %}<option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for y in years %}<option value="{{ y }}" {% if y==plan_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+    </form>
+</div>
+
+<div class="card p-3 mb-4">
+    <canvas id="fot2Chart" height="80"></canvas>
+</div>
+
+{% macro block(rows, is_month, title) %}
+<div class="card p-3 table-responsive mb-4">
+    <h6 class="text-secondary">{{ title }}</h6>
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Подразделение / сотрудник</th>
+            {% for y in data.years %}<th>{{ y }} факт</th>{% endfor %}
+            <th>{{ data.plan_year }} план</th>
+            <th>Δ план/факт</th>
+            <th>Δ факт/факт</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+        {% set vals = row.month_vals if is_month else row.ytd_vals %}
+        {% set plan_v = row.plan_month if is_month else row.plan_ytd %}
+        {% set delta_pf = row.delta_pf_month if is_month else row.delta_pf_ytd %}
+        {% set delta_ff = row.delta_ff_month if is_month else row.delta_ff_ytd %}
+        <tr class="{% if row.kind == 'subtotal' %}row-bold{% endif %}">
+            <td class="label-col">{{ row.label }}</td>
+            {% for v in vals %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
+            {% endfor %}
+            <td>{{ '{:,.0f}'.format(plan_v).replace(',', ' ') }}</td>
+            <td class="{% if delta_pf > 0 %}val-pos{% else %}val-neg{% endif %}">{{ '{:,.0f}'.format(delta_pf).replace(',', ' ') }}</td>
+            <td>{{ '{:,.0f}'.format(delta_ff).replace(',', ' ') if delta_ff is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+{{ block(data.rows, true, 'Месяц') }}
+{{ block(data.rows, false, 'Накопительно с начала года') }}
+
+<script>
+const rows = {{ data.rows | tojson }};
+const depts = rows.filter(r => r.kind === 'subtotal' && r.label !== 'ФОТ (всего)');
+new Chart(document.getElementById('fot2Chart'), {
+    type: 'bar',
+    data: {
+        labels: depts.map(r => r.label),
+        datasets: [{
+            label: 'Факт {{ data.plan_year }}',
+            data: depts.map(r => Math.abs(r.month_vals.at(-1))),
+            backgroundColor: '#000'
+        }]
+    },
+    options: { plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

@@ -51,6 +51,17 @@ def query_one(sql, params=None):
     return rows[0] if rows else None
 
 
+def execute_autocommit(sql):
+    """Для команд, которые не могут идти внутри транзакции (REFRESH MATERIALIZED VIEW CONCURRENTLY и т.п.)."""
+    conn = _connect()
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+    finally:
+        conn.close()
+
+
 def execute(sql, params=None):
     if has_app_context():
         conn = _request_connection()
