@@ -6,11 +6,26 @@
 """
 import logging
 
-from db import execute_autocommit
+from db import execute, execute_autocommit
 
 logger = logging.getLogger('reporting_refresh')
 
-VIEWS = ['reporting.pl_monthly', 'reporting.fot_monthly', 'reporting.loans_monthly']
+VIEWS = ['reporting.pl_monthly', 'reporting.pl_monthly_stat3', 'reporting.fot_monthly',
+         'reporting.loans_monthly', 'reporting.counterparty_list']
+
+
+def _sync_employees():
+    """Новых сотрудников, появившихся в fot_monthly, добавляет в reporting.employees
+    с подразделением-заготовкой (взято из FinancialData."Контрагент_report" на
+    момент появления). Уже существующие строки (в т.ч. поправленные админом
+    вручную) не трогает — ON CONFLICT DO NOTHING."""
+    execute('''
+        INSERT INTO reporting.employees (contragent, department)
+        SELECT employee, (array_agg(dept))[1]
+        FROM reporting.fot_monthly
+        GROUP BY employee
+        ON CONFLICT (contragent) DO NOTHING
+    ''')
 
 
 def refresh_all():
@@ -20,3 +35,9 @@ def refresh_all():
             logger.info('Обновлено: %s', view)
         except Exception:
             logger.exception('Не удалось обновить %s', view)
+
+    try:
+        _sync_employees()
+        logger.info('Обновлён справочник reporting.employees')
+    except Exception:
+        logger.exception('Не удалось обновить reporting.employees')

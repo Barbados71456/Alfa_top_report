@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}По контрагенту — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Динамика по контрагенту</h4>
+<form class="d-flex gap-2 mb-4" method="get">
+    <input type="text" name="name" class="form-control" list="contragentList" style="max-width:420px"
+           placeholder="Начните вводить название…" value="{{ contragent }}">
+    <datalist id="contragentList">
+        {% for c in counterparties %}<option value="{{ c }}">{% endfor %}
+    </datalist>
+    <select name="pf" class="form-select" style="max-width:140px">
+        <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
+        <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
+        <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
+    </select>
+    <button type="submit" class="btn btn-dark">Показать</button>
+</form>
+
+{% if data %}
+<div class="d-flex gap-3 mb-3">
+    <div class="card p-3 flex-fill">
+        <div class="text-secondary small">Выручка всего</div>
+        <div class="fs-4 val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill">
+        <div class="text-secondary small">Затраты всего</div>
+        <div class="fs-4 val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
+    </div>
+</div>
+
+<div class="card p-3 mb-4">
+    <canvas id="cpChart" height="80"></canvas>
+</div>
+
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Месяц</th><th>Выручка</th><th>Затраты</th><th>Нетто</th></tr></thead>
+        <tbody>
+        {% for r in data.table %}
+        <tr>
+            <td class="label-col">{{ r.period }}</td>
+            <td class="val-pos">{{ '{:,.0f}'.format(r.revenue).replace(',', ' ') if r.revenue else '—' }}</td>
+            <td class="val-neg">{{ '{:,.0f}'.format(r.cost).replace(',', ' ') if r.cost else '—' }}</td>
+            <td class="{% if r.net > 0 %}val-pos{% elif r.net < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net).replace(',', ' ') }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+new Chart(document.getElementById('cpChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ data.periods | tojson }},
+        datasets: [
+            {label: 'Выручка', data: {{ data.revenue | tojson }}, backgroundColor: '#1a7f37'},
+            {label: 'Затраты', data: {{ data.cost | tojson }}, backgroundColor: '#c0362c'}
+        ]
+    },
+    options: { plugins: { legend: { display: true } } }
+});
+</script>
+{% elif contragent %}
+<p class="text-secondary">Нет данных по этому контрагенту.</p>
+{% endif %}
+{% endblock %}

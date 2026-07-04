@@ -7,6 +7,7 @@
 материализованное представление поверх public."FinancialData".
 """
 from collections import defaultdict
+from datetime import date
 
 from db import query
 
@@ -118,16 +119,54 @@ def _series(d):
     return [d[m] for m in range(1, 13)]
 
 
+def _is_all_zero(vals):
+    return all(abs(v) < 0.005 for v in vals)
+
+
+def _fetch_statya3_detail(year, pf, lines):
+    """{line: {month: [{stat3, val}, ...]}} — для подсказки при наведении, из
+    reporting.pl_monthly_stat3 (не из "живой" FinancialData — там широкий запрос
+    на год выполняется секунды, таблица не помещается в кеш на этом тарифе)."""
+    rows = query(
+        '''SELECT extract(month FROM period)::int AS m, line, stat3, SUM(amount) / 1000.0 AS val
+           FROM reporting.pl_monthly_stat3
+           WHERE extract(year FROM period) = %s AND pf = %s AND line = ANY(%s)
+           GROUP BY 1, 2, 3''',
+        (year, pf, lines)
+    )
+    detail = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        detail[r['line']][r['m']].append({'stat3': r['stat3'], 'val': r['val']})
+    for line, months in detail.items():
+        for m in months:
+            months[m].sort(key=lambda d: -abs(d['val']))
+    return detail
+
+
 def svod1(year, pf='факт'):
-    """Свод1: П&Л по месяцам одного года."""
+    """Свод1: П&Л по месяцам одного года. Строки, пустые за весь период
+    (сейчас неактуальные для этого п_ф в текущей классификации БД), не показываем —
+    как только по ним появятся данные, они вернутся сами. Для каждой строки
+    добавлена детализация до СтатьяУровень3 (row['detail'][m]) — используется
+    подсказкой при наведении на клиенте, без дополнительных запросов."""
     by_line = _fetch_year(year, pf)
+    all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
+    statya3_detail = _fetch_statya3_detail(year, pf, all_lines)
     rows = []
     section_totals = {}
 
     for header, lines, total_label in SECTIONS:
+        focus = 'projects' if lines is REVENUE_LINES else 'statya'
         rows.append({'kind': 'header', 'label': header})
         for line in lines:
-            rows.append({'kind': 'line', 'label': line, 'vals': _series(by_line.get(line, _empty_months()))})
+            vals = _series(by_line.get(line, _empty_months()))
+            if _is_all_zero(vals):
+                continue
+            line_detail = statya3_detail.get(line, {})
+            rows.append({
+                'kind': 'line', 'label': line, 'vals': vals, 'focus': focus,
+                'detail': [line_detail.get(m, []) for m in range(1, 13)],
+            })
         total = _sum_lines(by_line, lines)
         section_totals[total_label] = total
         rows.append({'kind': 'subtotal', 'label': total_label, 'vals': _series(total)})
@@ -140,17 +179,24 @@ def svod1(year, pf='факт'):
 
     rows.append({'kind': 'header', 'label': '  БОНУСЫ МЕНЕДЖЕРОВ (% от ЧП) — с июня 2026'})
     for line in BONUS_LINES:
-        rows.append({'kind': 'line', 'label': line, 'vals': _series(by_line.get(line, _empty_months()))})
+        vals = _series(by_line.get(line, _empty_months()))
+        if _is_all_zero(vals):
+            continue
+        rows.append({'kind': 'line', 'label': line, 'vals': vals})
     profit_after_bonus = _sum_lines(by_line, BONUS_LINES)
     rows.append({'kind': 'subtotal', 'label': 'Прибыль после бонусов', 'vals': _series(profit_after_bonus)})
 
     rows.append({'kind': 'header', 'label': '  ИНВЕСТИЦИИ В ПОРТФЕЛИ'})
     investment = by_line.get(INVESTMENT_LINE, _empty_months())
-    rows.append({'kind': 'line', 'label': INVESTMENT_LINE, 'vals': _series(investment)})
+    if not _is_all_zero(_series(investment)):
+        rows.append({'kind': 'line', 'label': INVESTMENT_LINE, 'vals': _series(investment)})
 
     rows.append({'kind': 'header', 'label': '  ФИНАНСИРОВАНИЕ'})
     for line in FINANCING_LINES:
-        rows.append({'kind': 'line', 'label': line, 'vals': _series(by_line.get(line, _empty_months()))})
+        vals = _series(by_line.get(line, _empty_months()))
+        if _is_all_zero(vals):
+            continue
+        rows.append({'kind': 'line', 'label': line, 'vals': vals})
     financing_total = _sum_lines(by_line, FINANCING_LINES)
     rows.append({'kind': 'subtotal', 'label': 'Итого финансирование', 'vals': _series(financing_total)})
 
@@ -178,6 +224,15 @@ def get_projects():
            WHERE project ILIKE '(DCA)%%' OR project ILIKE '(DP)%%' ORDER BY 1'''
     )
     return [r['project'] for r in rows]
+
+
+def get_projects_with_type():
+    """Справочник проектов для мультиселекта на Dashboard1/2: [(tip_project_1, [name, ...])]."""
+    rows = query('SELECT "name", tip_project_1 FROM public.projects ORDER BY tip_project_1, "name"')
+    groups = defaultdict(list)
+    for r in rows:
+        groups[r['tip_project_1'] or 'Прочие'].append(r['name'])
+    return sorted(groups.items())
 
 
 def _fetch_year_by_project(year, pf, lines):
@@ -309,21 +364,26 @@ def unit_pl(pf_history='факт', pf_forecast='план'):
             'profit': profit_series, 'net_profit': net_profit_series}
 
 
-def _batched_fetch(lines, years, month, pf, dim=None):
+def _batched_fetch(lines, years, month, pf, dim=None, projects=None):
     """Одним проходом (2 запроса: месяц + накопительно) тянет суммы по всем годам сразу,
-    опционально разбитые по dim (имя колонки, либо список колонок, например ['line','project']).
-    Возвращает (month_map, ytd_map), ключ — год, либо (год, *значения dim)."""
+    опционально разбитые по dim (имя колонки, либо список колонок, например ['line','project'])
+    и отфильтрованные по списку проектов. Возвращает (month_map, ytd_map), ключ — год,
+    либо (год, *значения dim)."""
     dims = [] if dim is None else ([dim] if isinstance(dim, str) else list(dim))
     group_cols = ['extract(year FROM period)::int AS y'] + dims
     group_sql = ', '.join(group_cols)
     group_by = ', '.join(str(i + 1) for i in range(len(group_cols)))
+    project_filter = ' AND project = ANY(%s)' if projects else ''
 
     def run(month_cmp):
         sql = f'''SELECT {group_sql}, SUM(amount) / 1000.0 AS val FROM reporting.pl_monthly
                   WHERE pf = %s AND line = ANY(%s) AND extract(year FROM period) = ANY(%s)
-                    AND extract(month FROM period) {month_cmp} %s
+                    AND extract(month FROM period) {month_cmp} %s{project_filter}
                   GROUP BY {group_by}'''
-        return query(sql, (pf, lines, years, month))
+        params = [pf, lines, years, month]
+        if projects:
+            params.append(projects)
+        return query(sql, params)
 
     def to_map(rows):
         if dims:
@@ -333,93 +393,254 @@ def _batched_fetch(lines, years, month, pf, dim=None):
     return to_map(run('=')), to_map(run('<='))
 
 
-def _yoy_row(label, years, plan_year, month_vals, ytd_vals, plan_month_vals, plan_ytd_vals, bold=False):
-    fact_month = month_vals.get(plan_year, 0.0)
-    fact_ytd = ytd_vals.get(plan_year, 0.0)
-    plan_month = plan_month_vals.get(plan_year, 0.0)
-    plan_ytd = plan_ytd_vals.get(plan_year, 0.0)
-    prev_years = [y for y in years if y != plan_year]
-    prev_year = max(prev_years) if prev_years else None
+def default_series_deltas(years):
+    """Дефолт: факт(N-1), прогноз(N), факт(N) + отклонения факт(N)-факт(N-1) и
+    факт(N)-прогноз(N), где N — последний доступный год."""
+    if not years:
+        return [], []
+    latest = max(years)
+    sorted_years = sorted(years)
+    prev = latest - 1 if (latest - 1) in years else (sorted_years[-2] if len(sorted_years) > 1 else latest)
+    series = [('факт', prev), ('прогноз', latest), ('факт', latest)]
+    deltas = [(2, 0), (2, 1)]
+    return series, deltas
+
+
+def _series_row(label, series, deltas, month_map, ytd_map, bold=False, lines=None, project=None):
+    sm = [month_map.get(key, 0.0) for key in series]
+    sy = [ytd_map.get(key, 0.0) for key in series]
     return {
         'kind': 'subtotal' if bold else 'line',
         'label': label,
-        'month_vals': [month_vals.get(y, 0.0) for y in years],
-        'ytd_vals': [ytd_vals.get(y, 0.0) for y in years],
-        'plan_month': plan_month,
-        'plan_ytd': plan_ytd,
-        'delta_pf_month': fact_month - plan_month,
-        'delta_pf_ytd': fact_ytd - plan_ytd,
-        'delta_ff_month': (fact_month - month_vals.get(prev_year, 0.0)) if prev_year else None,
-        'delta_ff_ytd': (fact_ytd - ytd_vals.get(prev_year, 0.0)) if prev_year else None,
+        'series_month': sm,
+        'series_ytd': sy,
+        'delta_month': [sm[i] - sm[j] for i, j in deltas],
+        'delta_ytd': [sy[i] - sy[j] for i, j in deltas],
+        'lines': lines,
+        'project': project,
     }
 
 
-def dashboard2(month, years, plan_year=None):
-    """Dashboard2: Свод1-строки за один месяц, годы в столбцах + накопительно, план/факт.
-    Всего 4 SQL-запроса независимо от числа строк/лет."""
-    plan_year = plan_year or max(years)
+def dashboard2(month, series, deltas, projects=None):
+    """Dashboard2: Свод1-строки за один месяц, настраиваемые колонки сравнения
+    (series = [(pf, year), ...], deltas = [(i, j), ...] => series[i]-series[j]),
+    опционально отфильтровано по проектам. Кол-во SQL = 2 × число разных pf в series."""
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
-    fact_month, fact_ytd = _batched_fetch(all_lines, years, month, 'факт', dim='line')
-    plan_month, plan_ytd = _batched_fetch(all_lines, [plan_year], month, 'план', dim='line')
+    by_pf = defaultdict(set)
+    for pf, year in series:
+        by_pf[pf].add(year)
 
-    def line_maps(line):
-        fm = {y: fact_month.get((y, line), 0.0) for y in years}
-        fy = {y: fact_ytd.get((y, line), 0.0) for y in years}
-        pm = {plan_year: plan_month.get((plan_year, line), 0.0)}
-        py = {plan_year: plan_ytd.get((plan_year, line), 0.0)}
-        return fm, fy, pm, py
+    month_map, ytd_map = {}, {}
+    for pf, years_set in by_pf.items():
+        m, y = _batched_fetch(all_lines, sorted(years_set), month, pf, dim='line', projects=projects)
+        for (yr, line), v in m.items():
+            month_map[(pf, yr, line)] = v
+        for (yr, line), v in y.items():
+            ytd_map[(pf, yr, line)] = v
 
     rows = []
     for header, lines, total_label in SECTIONS:
         rows.append({'kind': 'header', 'label': header})
         for line in lines:
-            rows.append(_yoy_row(line, years, plan_year, *line_maps(line)))
+            mm = {(pf, yr): month_map.get((pf, yr, line), 0.0) for pf, yr in series}
+            ym = {(pf, yr): ytd_map.get((pf, yr, line), 0.0) for pf, yr in series}
+            row = _series_row(line, series, deltas, mm, ym, lines=[line], project=projects)
+            if _is_all_zero(row['series_month']) and _is_all_zero(row['series_ytd']):
+                continue
+            rows.append(row)
 
-        fm = {y: sum(fact_month.get((y, l), 0.0) for l in lines) for y in years}
-        fy = {y: sum(fact_ytd.get((y, l), 0.0) for l in lines) for y in years}
-        pm = {plan_year: sum(plan_month.get((plan_year, l), 0.0) for l in lines)}
-        py = {plan_year: sum(plan_ytd.get((plan_year, l), 0.0) for l in lines)}
-        rows.append(_yoy_row(total_label, years, plan_year, fm, fy, pm, py, bold=True))
-    return {'rows': rows, 'years': years, 'plan_year': plan_year, 'month_name': MONTHS_RU[month - 1]}
+        mm = {(pf, yr): sum(month_map.get((pf, yr, l), 0.0) for l in lines) for pf, yr in series}
+        ym = {(pf, yr): sum(ytd_map.get((pf, yr, l), 0.0) for l in lines) for pf, yr in series}
+        rows.append(_series_row(total_label, series, deltas, mm, ym, bold=True, lines=lines, project=projects))
+    return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 
-def dashboard1(month, years, plan_year=None, top_n=12):
-    """Dashboard1: Свод2-разбивка по портфелям за один месяц, годы + накопительно.
-    Всего 4 SQL-запроса (по line+project сразу, одним проходом на все 3 секции)."""
-    plan_year = plan_year or max(years)
+def dashboard1(month, series, deltas, projects=None, top_n=12):
+    """Dashboard1: Свод2-разбивка по портфелям, настраиваемые колонки сравнения (см.
+    dashboard2). Кол-во SQL = 2 × число разных pf в series."""
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
-    line_to_section = {}
-    for _, lines, total_label in SECTIONS:
-        for line in lines:
-            line_to_section[line] = total_label
+    by_pf = defaultdict(set)
+    for pf, year in series:
+        by_pf[pf].add(year)
 
-    fact_month, fact_ytd = _batched_fetch(all_lines, years, month, 'факт', dim=['line', 'project'])
-    plan_month, plan_ytd = _batched_fetch(all_lines, [plan_year], month, 'план', dim=['line', 'project'])
+    month_map, ytd_map = {}, {}
+    for pf, years_set in by_pf.items():
+        m, y = _batched_fetch(all_lines, sorted(years_set), month, pf, dim=['line', 'project'], projects=projects)
+        for (yr, line, p), v in m.items():
+            month_map[(pf, yr, line, p)] = v
+        for (yr, line, p), v in y.items():
+            ytd_map[(pf, yr, line, p)] = v
 
-    def agg(data, year, section_lines, project=None):
+    def agg(data, pf, yr, lines, project=None):
         total = 0.0
-        for (y, line, p), v in data.items():
-            if y == year and line in section_lines and (project is None or p == project):
+        for (p_, y_, line_, proj_), v in data.items():
+            if p_ == pf and y_ == yr and line_ in lines and (project is None or proj_ == project):
                 total += v
         return total
 
+    latest_pf, latest_year = series[-1]
+
     rows = []
     for header, lines, total_label in SECTIONS:
         rows.append({'kind': 'header', 'label': header})
-        fm_total = {y: agg(fact_month, y, lines) for y in years}
-        fy_total = {y: agg(fact_ytd, y, lines) for y in years}
-        pm_total = {plan_year: agg(plan_month, plan_year, lines)}
-        py_total = {plan_year: agg(plan_ytd, plan_year, lines)}
-        rows.append(_yoy_row(total_label, years, plan_year, fm_total, fy_total, pm_total, py_total, bold=True))
+        mm = {(pf, yr): agg(month_map, pf, yr, lines) for pf, yr in series}
+        ym = {(pf, yr): agg(ytd_map, pf, yr, lines) for pf, yr in series}
+        rows.append(_series_row(total_label, series, deltas, mm, ym, bold=True, lines=lines, project=projects))
 
-        projects = sorted(
-            {p for (y, line, p) in fact_month if y == plan_year and line in lines},
-            key=lambda p: -abs(agg(fact_month, plan_year, lines, project=p))
+        candidate_projects = projects or sorted(
+            {p for (p_, y_, l_, p) in month_map if p_ == latest_pf and y_ == latest_year and l_ in lines},
+            key=lambda p: -abs(agg(month_map, latest_pf, latest_year, lines, project=p))
         )[:top_n]
-        for p in projects:
-            fm = {y: agg(fact_month, y, lines, project=p) for y in years}
-            fy = {y: agg(fact_ytd, y, lines, project=p) for y in years}
-            pm = {plan_year: agg(plan_month, plan_year, lines, project=p)}
-            py = {plan_year: agg(plan_ytd, plan_year, lines, project=p)}
-            rows.append(_yoy_row(p, years, plan_year, fm, fy, pm, py))
-    return {'rows': rows, 'years': years, 'plan_year': plan_year, 'month_name': MONTHS_RU[month - 1]}
+        for p in candidate_projects:
+            mmp = {(pf, yr): agg(month_map, pf, yr, lines, project=p) for pf, yr in series}
+            ymp = {(pf, yr): agg(ytd_map, pf, yr, lines, project=p) for pf, yr in series}
+            row = _series_row(p, series, deltas, mmp, ymp, lines=lines, project=[p])
+            if _is_all_zero(row['series_month']) and _is_all_zero(row['series_ytd']):
+                continue
+            rows.append(row)
+    return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
+
+
+def cell_detail(lines, year, month, pf, projects=None):
+    """Детализация ячейки Свод1/Dashboard2 (lines — список "Строка отчета", обычно
+    одна строка, для итоговых строк — весь список секции): дерево
+    СтатьяУровень3 -> Контрагент -> [{comment, amount, project}], плюс отдельно
+    разбивка по проектам. Живой запрос к FinancialData — узкий фильтр
+    (Строка отчета + Период + п_ф), под индекс idx_financialdata_line_period_pf,
+    выполняется за единицы миллисекунд."""
+    if isinstance(lines, str):
+        lines = [lines]
+    period = date(year, month, 1)
+    sql = '''SELECT "СтатьяУровень3" AS stat3, "Контрагент" AS contragent, "Комментарии" AS comment,
+                    "Проект" AS project, "Сумма" AS amount
+             FROM public."FinancialData"
+             WHERE "Строка отчета" = ANY(%s) AND "Период" = %s AND "п_ф" = %s'''
+    params = [lines, period, pf]
+    if projects:
+        sql += ' AND "Проект" = ANY(%s)'
+        params.append(projects)
+    rows = query(sql, params)
+
+    by_stat3 = {}
+    by_project = defaultdict(float)
+    total = 0.0
+    for r in rows:
+        amt = float(r['amount'] or 0)
+        total += amt
+        proj = (r['project'] or '').strip() or '(без проекта)'
+        by_project[proj] += amt
+
+        stat3 = (r['stat3'] or '').strip() or '(без статьи)'
+        contragent = (r['contragent'] or '').strip() or '(без контрагента)'
+        comment = (r['comment'] or '').strip()
+
+        s = by_stat3.setdefault(stat3, {'total': 0.0, 'contragents': {}})
+        s['total'] += amt
+        c = s['contragents'].setdefault(contragent, {'total': 0.0, 'comments': []})
+        c['total'] += amt
+        if comment:
+            c['comments'].append({'comment': comment, 'amount': amt, 'project': proj})
+
+    stat3_list = []
+    for stat3, s in by_stat3.items():
+        contragents = []
+        for contragent, c in s['contragents'].items():
+            c['comments'].sort(key=lambda x: -abs(x['amount']))
+            contragents.append({
+                'contragent': contragent, 'total': c['total'],
+                'comments': c['comments'][:50],
+            })
+        contragents.sort(key=lambda x: -abs(x['total']))
+        stat3_list.append({'stat3': stat3, 'total': s['total'], 'contragents': contragents})
+    stat3_list.sort(key=lambda x: -abs(x['total']))
+
+    project_list = sorted(
+        ({'project': p, 'total': t} for p, t in by_project.items()),
+        key=lambda x: -abs(x['total'])
+    )
+
+    return {'total': total, 'by_statya3': stat3_list, 'by_project': project_list, 'row_count': len(rows)}
+
+
+def _raw_group(lines, year, month, pf, projects=None):
+    """{(project, stat3, contragent): amount} — живой запрос, узкий фильтр (под
+    idx_financialdata_line_period_pf), для акт-анализа отклонений."""
+    period = date(year, month, 1)
+    sql = '''SELECT "Проект" AS project, "СтатьяУровень3" AS stat3, "Контрагент" AS contragent,
+                    SUM("Сумма") AS amount
+             FROM public."FinancialData"
+             WHERE "Строка отчета" = ANY(%s) AND "Период" = %s AND "п_ф" = %s'''
+    params = [lines, period, pf]
+    if projects:
+        sql += ' AND "Проект" = ANY(%s)'
+        params.append(projects)
+    sql += ' GROUP BY 1, 2, 3'
+    result = {}
+    for r in query(sql, params):
+        key = (
+            (r['project'] or '').strip() or '(без проекта)',
+            (r['stat3'] or '').strip() or '(без статьи)',
+            (r['contragent'] or '').strip() or '(без контрагента)',
+        )
+        result[key] = result.get(key, 0.0) + float(r['amount'] or 0)
+    return result
+
+
+def deviation_detail(lines, series_a, series_b, projects=None, top_n=20):
+    """Акт-анализ отклонения между двумя срезами (series_a, series_b — каждый
+    (pf, year, month)): топ-N (проект, СтатьяУровень3, Контрагент) по |разница|."""
+    a = _raw_group(lines, series_a[1], series_a[2], series_a[0], projects)
+    b = _raw_group(lines, series_b[1], series_b[2], series_b[0], projects)
+    drivers = []
+    for key in set(a) | set(b):
+        va, vb = a.get(key, 0.0), b.get(key, 0.0)
+        delta = va - vb
+        if abs(delta) < 0.5:
+            continue
+        drivers.append({'project': key[0], 'stat3': key[1], 'contragent': key[2],
+                         'a': va, 'b': vb, 'delta': delta})
+    drivers.sort(key=lambda d: -abs(d['delta']))
+    return {'total_delta': sum(d['delta'] for d in drivers), 'drivers': drivers[:top_n]}
+
+
+def get_counterparties():
+    rows = query('SELECT name FROM reporting.counterparty_list ORDER BY 1')
+    return [r['name'] for r in rows]
+
+
+def counterparty_series(contragent, pf='факт'):
+    """Динамика выручки/затрат по одному контрагенту за всю историю (индекс по
+    "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый
+    независимо от диапазона дат)."""
+    all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
+    rows = query(
+        '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
+           FROM public."FinancialData"
+           WHERE "Контрагент" = %s AND "п_ф" = %s AND "Строка отчета" = ANY(%s)
+           GROUP BY 1, 2 ORDER BY 1''',
+        (contragent, pf, all_lines)
+    )
+    revenue_set = set(REVENUE_LINES)
+    by_period = defaultdict(lambda: {'revenue': 0.0, 'cost': 0.0})
+    for r in rows:
+        bucket = 'revenue' if r['line'] in revenue_set else 'cost'
+        by_period[r['period']][bucket] += float(r['amount'] or 0)
+
+    periods = sorted(by_period)
+    table = [
+        {
+            'period': p.strftime('%m.%Y'),
+            'revenue': by_period[p]['revenue'],
+            'cost': by_period[p]['cost'],
+            'net': by_period[p]['revenue'] + by_period[p]['cost'],
+        }
+        for p in periods
+    ]
+    return {
+        'periods': [p.strftime('%Y-%m') for p in periods],
+        'revenue': [by_period[p]['revenue'] for p in periods],
+        'cost': [by_period[p]['cost'] for p in periods],
+        'table': table,
+        'total_revenue': sum(by_period[p]['revenue'] for p in periods),
+        'total_cost': sum(by_period[p]['cost'] for p in periods),
+    }

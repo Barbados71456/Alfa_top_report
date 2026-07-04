@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Сотрудники — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Справочник сотрудников (для ФОТ)</h4>
+<p class="text-secondary small">
+    Новые сотрудники подхватываются сюда автоматически при обновлении отчётности (каждые
+    10 минут) с предположительным подразделением. Здесь можно поправить подразделение,
+    указать должность и статус — эти правки уже не будут перезаписаны.
+</p>
+<form class="mb-3" method="get">
+    <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по ФИО" value="{{ search }}">
+</form>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Контрагент</th>
+            <th class="label-col">Подразделение</th>
+            <th class="label-col">Должность</th>
+            <th class="label-col">Статус</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+            <form id="form-{{ loop.index }}" method="post" action="{{ url_for('employees_update', contragent=r.contragent) }}" style="display:none">
+                <input type="hidden" name="q" value="{{ search }}">
+            </form>
+            <td class="label-col">{{ r.contragent }}</td>
+            <td class="label-col">
+                <select form="form-{{ loop.index }}" name="department" class="form-select form-select-sm dept-select" data-idx="{{ loop.index }}">
+                    <option value="">—</option>
+                    {% for d in dept_order %}<option value="{{ d }}" {% if r.department==d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+                    <option value="__custom__" {% if r.department and r.department not in dept_order %}selected{% endif %}>Другое…</option>
+                </select>
+                <input type="text" form="form-{{ loop.index }}" name="department_custom" class="form-control form-control-sm mt-1 custom-dept"
+                       id="custom-{{ loop.index }}"
+                       style="display:{% if r.department and r.department not in dept_order %}block{% else %}none{% endif %}"
+                       value="{% if r.department and r.department not in dept_order %}{{ r.department }}{% endif %}">
+            </td>
+            <td class="label-col"><input form="form-{{ loop.index }}" class="form-control form-control-sm" name="position" value="{{ r.position or '' }}"></td>
+            <td class="label-col">
+                <select form="form-{{ loop.index }}" name="status" class="form-select form-select-sm">
+                    <option value="Работает" {% if r.status=='Работает' %}selected{% endif %}>Работает</option>
+                    <option value="Уволен" {% if r.status=='Уволен' %}selected{% endif %}>Уволен</option>
+                </select>
+            </td>
+            <td><button form="form-{{ loop.index }}" class="btn btn-sm btn-outline-dark" type="submit">Сохранить</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+document.querySelectorAll('.dept-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+        document.getElementById('custom-' + sel.dataset.idx).style.display = sel.value === '__custom__' ? 'block' : 'none';
+    });
+});
+</script>
+{% endblock %}

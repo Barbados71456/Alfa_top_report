@@ -30,7 +30,14 @@
         <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
             <td class="label-col">{{ row.label }}</td>
             {% for v in row.vals %}
+            {% if row.kind == 'line' and v and row.detail is defined %}
+            <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
+                data-lines='{{ [row.label] | tojson }}' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
+                data-label="{{ row.label }}" data-focus="{{ row.focus }}"
+                data-detail='{{ row.detail[loop.index0] | tojson }}'>{{ '%.1f'|format(v) }}</td>
+            {% else %}
             <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endif %}
             {% endfor %}
         </tr>
         {% endif %}

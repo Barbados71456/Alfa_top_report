@@ -22,11 +22,16 @@ def get_available_years():
 
 
 def fot1(year, pf='факт', top_n_per_dept=15):
-    """ФОТ v1: помесячно за один год, по подразделениям и (топ) сотрудникам."""
+    """ФОТ v1: помесячно за один год, по подразделениям и (топ) сотрудникам.
+    Подразделение — из reporting.employees (справочник, редактируется на
+    /employees), если сотрудник ещё не докатегоризирован — берётся исходная
+    группировка из FinancialData."Контрагент_report" (fm.dept)."""
     rows_raw = query(
-        '''SELECT extract(month FROM period)::int AS m, dept, employee, SUM(amount) AS val
-           FROM reporting.fot_monthly
-           WHERE extract(year FROM period) = %s AND pf = %s
+        '''SELECT extract(month FROM fm.period)::int AS m, COALESCE(e.department, fm.dept) AS dept,
+                  fm.employee, SUM(fm.amount) AS val
+           FROM reporting.fot_monthly fm
+           LEFT JOIN reporting.employees e ON e.contragent = fm.employee
+           WHERE extract(year FROM fm.period) = %s AND fm.pf = %s
            GROUP BY 1, 2, 3''',
         (year, pf)
     )
@@ -54,19 +59,31 @@ def fot1(year, pf='факт', top_n_per_dept=15):
     return {'rows': rows, 'months': MONTHS_RU}
 
 
-def _batched_fetch(years, month, pf, top_dept_employee=None):
-    where = ['pf = %s', 'extract(year FROM period) = ANY(%s)']
-    params = [pf, years]
-    if top_dept_employee:
-        where.append('dept = %s AND employee = %s')
-        params += list(top_dept_employee)
+def get_available_pf():
+    rows = query('SELECT DISTINCT pf FROM reporting.fot_monthly ORDER BY 1')
+    return [r['pf'] for r in rows]
 
+
+def default_series_deltas(years):
+    """Тот же дефолт, что в pl_report: факт(N-1), прогноз(N), факт(N) + 2 отклонения."""
+    if not years:
+        return [], []
+    latest = max(years)
+    sorted_years = sorted(years)
+    prev = latest - 1 if (latest - 1) in years else (sorted_years[-2] if len(sorted_years) > 1 else latest)
+    return [('факт', prev), ('прогноз', latest), ('факт', latest)], [(2, 0), (2, 1)]
+
+
+def _batched_fetch(years, month, pf):
     def run(month_cmp):
-        sql = f'''SELECT extract(year FROM period)::int AS y, dept, employee, SUM(amount) AS val
-                  FROM reporting.fot_monthly
-                  WHERE {' AND '.join(where)} AND extract(month FROM period) {month_cmp} %s
+        sql = f'''SELECT extract(year FROM fm.period)::int AS y, COALESCE(e.department, fm.dept) AS dept,
+                         fm.employee, SUM(fm.amount) AS val
+                  FROM reporting.fot_monthly fm
+                  LEFT JOIN reporting.employees e ON e.contragent = fm.employee
+                  WHERE fm.pf = %s AND extract(year FROM fm.period) = ANY(%s)
+                    AND extract(month FROM fm.period) {month_cmp} %s
                   GROUP BY 1, 2, 3'''
-        return query(sql, params + [month])
+        return query(sql, (pf, years, month))
 
     def to_map(rows):
         return {(r['y'], r['dept'], r['employee']): float(r['val'] or 0) for r in rows}
@@ -74,64 +91,63 @@ def _batched_fetch(years, month, pf, top_dept_employee=None):
     return to_map(run('=')), to_map(run('<='))
 
 
-def fot2(month, years, plan_year=None, top_n_per_dept=10):
-    """ФОТ v2: один месяц, годы в столбцах (факт) + план/факт текущего года + Δ."""
-    plan_year = plan_year or max(years)
-    fact_month, fact_ytd = _batched_fetch(years, month, 'факт')
-    plan_month, plan_ytd = _batched_fetch([plan_year], month, 'план')
+def _series_row(label, series, deltas, month_map, ytd_map, bold=False):
+    sm = [month_map.get(key, 0.0) for key in series]
+    sy = [ytd_map.get(key, 0.0) for key in series]
+    return {
+        'kind': 'subtotal' if bold else 'line',
+        'label': label,
+        'series_month': sm,
+        'series_ytd': sy,
+        'delta_month': [sm[i] - sm[j] for i, j in deltas],
+        'delta_ytd': [sy[i] - sy[j] for i, j in deltas],
+    }
 
-    depts = sorted({d for (y, d, e) in fact_month if y == plan_year}, key=_dept_sort_key)
 
-    def agg(data, year, dept=None, employee=None):
+def fot2(month, series, deltas, top_n_per_dept=10):
+    """ФОТ v2: один месяц, настраиваемые колонки сравнения (см. pl_report.dashboard2)."""
+    by_pf = {}
+    for pf, year in series:
+        by_pf.setdefault(pf, set()).add(year)
+
+    month_map, ytd_map = {}, {}
+    for pf, years_set in by_pf.items():
+        m, y = _batched_fetch(sorted(years_set), month, pf)
+        for (yr, d, e), v in m.items():
+            month_map[(pf, yr, d, e)] = v
+        for (yr, d, e), v in y.items():
+            ytd_map[(pf, yr, d, e)] = v
+
+    def agg(data, pf, yr, dept=None, employee=None):
         total = 0.0
-        for (y, d, e), v in data.items():
-            if y == year and (dept is None or d == dept) and (employee is None or e == employee):
+        for (p_, y_, d_, e_), v in data.items():
+            if p_ == pf and y_ == yr and (dept is None or d_ == dept) and (employee is None or e_ == employee):
                 total += v
         return total
 
-    def yoy_row(label, fm, fy, pm, py, bold=False):
-        fact_m = fm.get(plan_year, 0.0)
-        fact_y = fy.get(plan_year, 0.0)
-        plan_m = pm.get(plan_year, 0.0)
-        plan_y = py.get(plan_year, 0.0)
-        prev_years = [y for y in years if y != plan_year]
-        prev_year = max(prev_years) if prev_years else None
-        return {
-            'kind': 'subtotal' if bold else 'line',
-            'label': label,
-            'month_vals': [fm.get(y, 0.0) for y in years],
-            'ytd_vals': [fy.get(y, 0.0) for y in years],
-            'plan_month': plan_m,
-            'plan_ytd': plan_y,
-            'delta_pf_month': fact_m - plan_m,
-            'delta_pf_ytd': fact_y - plan_y,
-            'delta_ff_month': (fact_m - fm.get(prev_year, 0.0)) if prev_year else None,
-            'delta_ff_ytd': (fact_y - fy.get(prev_year, 0.0)) if prev_year else None,
-        }
+    latest_pf, latest_year = series[-1]
+    depts = sorted(
+        {d for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year},
+        key=_dept_sort_key
+    )
 
     rows = []
-    fm_all = {y: agg(fact_month, y) for y in years}
-    fy_all = {y: agg(fact_ytd, y) for y in years}
-    pm_all = {plan_year: agg(plan_month, plan_year)}
-    py_all = {plan_year: agg(plan_ytd, plan_year)}
-    rows.append(yoy_row('ФОТ (всего)', fm_all, fy_all, pm_all, py_all, bold=True))
+    mm = {(pf, yr): agg(month_map, pf, yr) for pf, yr in series}
+    ym = {(pf, yr): agg(ytd_map, pf, yr) for pf, yr in series}
+    rows.append(_series_row('ФОТ (всего)', series, deltas, mm, ym, bold=True))
 
     for dept in depts:
-        fm = {y: agg(fact_month, y, dept=dept) for y in years}
-        fy = {y: agg(fact_ytd, y, dept=dept) for y in years}
-        pm = {plan_year: agg(plan_month, plan_year, dept=dept)}
-        py = {plan_year: agg(plan_ytd, plan_year, dept=dept)}
-        rows.append(yoy_row(dept, fm, fy, pm, py, bold=True))
+        mmd = {(pf, yr): agg(month_map, pf, yr, dept=dept) for pf, yr in series}
+        ymd = {(pf, yr): agg(ytd_map, pf, yr, dept=dept) for pf, yr in series}
+        rows.append(_series_row(dept, series, deltas, mmd, ymd, bold=True))
 
         employees = sorted(
-            {e for (y, d, e) in fact_month if y == plan_year and d == dept},
-            key=lambda e: -abs(agg(fact_month, plan_year, dept=dept, employee=e))
+            {e for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year and d == dept},
+            key=lambda e: -abs(agg(month_map, latest_pf, latest_year, dept=dept, employee=e))
         )[:top_n_per_dept]
         for emp in employees:
-            fme = {y: agg(fact_month, y, dept=dept, employee=emp) for y in years}
-            fye = {y: agg(fact_ytd, y, dept=dept, employee=emp) for y in years}
-            pme = {plan_year: agg(plan_month, plan_year, dept=dept, employee=emp)}
-            pye = {plan_year: agg(plan_ytd, plan_year, dept=dept, employee=emp)}
-            rows.append(yoy_row(emp, fme, fye, pme, pye))
+            mme = {(pf, yr): agg(month_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
+            yme = {(pf, yr): agg(ytd_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
+            rows.append(_series_row(emp, series, deltas, mme, yme))
 
-    return {'rows': rows, 'years': years, 'plan_year': plan_year, 'month_name': MONTHS_RU[month - 1]}
+    return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}

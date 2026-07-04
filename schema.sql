@@ -20,6 +20,23 @@ CREATE INDEX pl_monthly_period_idx ON reporting.pl_monthly (period);
 CREATE INDEX pl_monthly_line_idx ON reporting.pl_monthly (line);
 CREATE INDEX pl_monthly_project_idx ON reporting.pl_monthly (project);
 
+-- Для подсказки при наведении (детализация до СтатьяУровень3): широкий запрос на
+-- целый год по "живой" FinancialData занимает секунды (таблица не помещается в кеш
+-- на этом тарифе Postgres) — поэтому тоже предвычисляем.
+DROP MATERIALIZED VIEW IF EXISTS reporting.pl_monthly_stat3;
+CREATE MATERIALIZED VIEW reporting.pl_monthly_stat3 AS
+SELECT "Период" AS period,
+       "Строка отчета" AS line,
+       COALESCE(NULLIF(TRIM("СтатьяУровень3"), ''), '(без статьи)') AS stat3,
+       "п_ф" AS pf,
+       SUM("Сумма") AS amount
+FROM public."FinancialData"
+WHERE "Строка отчета" IS NOT NULL AND TRIM("Строка отчета") <> ''
+GROUP BY 1, 2, 3, 4;
+
+CREATE UNIQUE INDEX pl_monthly_stat3_uq ON reporting.pl_monthly_stat3 (period, line, stat3, pf);
+CREATE INDEX pl_monthly_stat3_period_idx ON reporting.pl_monthly_stat3 (period);
+
 DROP MATERIALIZED VIEW IF EXISTS reporting.fot_monthly;
 CREATE MATERIALIZED VIEW reporting.fot_monthly AS
 SELECT "Период" AS period,
@@ -50,3 +67,30 @@ GROUP BY 1, 2, 3, 4;
 CREATE UNIQUE INDEX loans_monthly_uq ON reporting.loans_monthly (period, lender, line, pf);
 CREATE INDEX loans_monthly_period_idx ON reporting.loans_monthly (period);
 CREATE INDEX loans_monthly_lender_idx ON reporting.loans_monthly (lender);
+
+-- Список контрагентов для /counterparty (DISTINCT по 434k строкам без индекса —
+-- полный seq scan ~11с; предвычисляем, как и остальные тяжёлые агрегаты).
+DROP MATERIALIZED VIEW IF EXISTS reporting.counterparty_list;
+CREATE MATERIALIZED VIEW reporting.counterparty_list AS
+SELECT DISTINCT "Контрагент" AS name
+FROM public."FinancialData"
+WHERE "Контрагент" IS NOT NULL AND TRIM("Контрагент") <> '';
+
+CREATE UNIQUE INDEX counterparty_list_uq ON reporting.counterparty_list (name);
+
+-- Под живые (не через materialized view) запросы детализации ячеек Свод1/Dashboard2 —
+-- поиск по (Строка отчета, Период, п_ф) с опциональным фильтром по Проекту.
+CREATE INDEX IF NOT EXISTS idx_financialdata_line_period_pf
+    ON public."FinancialData" ("Строка отчета", "Период", "п_ф");
+
+-- Справочник сотрудников для ФОТ (подразделение/должность/статус) — заполняется
+-- автоматически новыми именами из reporting.fot_monthly (см. reporting_refresh.py),
+-- редактируется вручную на /employees. ON CONFLICT DO NOTHING никогда не затирает
+-- то, что уже поправили руками.
+CREATE TABLE IF NOT EXISTS reporting.employees (
+    contragent TEXT PRIMARY KEY,
+    department TEXT,
+    position TEXT,
+    status TEXT DEFAULT 'Работает',
+    updated_at TIMESTAMP DEFAULT now()
+);
