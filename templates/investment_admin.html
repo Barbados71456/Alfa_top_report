@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Справочник портфелей DP — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Справочник портфелей DP</h4>
+<p class="text-secondary small">
+    Дата уступки, к-во, ОСЗ (номинал долга) и цена покупки — внешние данные, которых нет в
+    FinancialData, вносятся вручную. «Привязанные Проект» — сырые имена в FinancialData,
+    относящиеся к этому портфелю (могут отличаться пробелами/регистром).
+</p>
+
+<div class="card p-3 table-responsive mb-4">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Портфель</th>
+            <th>Дата покупки</th>
+            <th>К-во</th>
+            <th>ОСЗ, руб</th>
+            <th>Цена, руб</th>
+            <th>Заметки</th>
+            <th>Привязанные "Проект"</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for p in portfolios %}
+        <tr>
+            <form id="form-{{ p.id }}" method="post" action="{{ url_for('investment_admin_update', portfolio_id=p.id) }}"></form>
+            <td class="label-col">{{ p.canonical_name }}</td>
+            <td><input form="form-{{ p.id }}" type="date" class="form-control form-control-sm" name="purchase_date" value="{{ p.purchase_date.isoformat() if p.purchase_date else '' }}"></td>
+            <td><input form="form-{{ p.id }}" type="number" step="1" class="form-control form-control-sm" style="width:90px" name="units" value="{{ p.units|int if p.units else '' }}"></td>
+            <td><input form="form-{{ p.id }}" type="number" step="0.01" class="form-control form-control-sm" style="width:140px" name="face_value_rub" value="{{ p.face_value_rub if p.face_value_rub is not none else '' }}"></td>
+            <td><input form="form-{{ p.id }}" type="number" step="0.01" class="form-control form-control-sm" style="width:140px" name="price_rub" value="{{ p.price_rub if p.price_rub is not none else '' }}"></td>
+            <td><input form="form-{{ p.id }}" type="text" class="form-control form-control-sm" name="notes" value="{{ p.notes or '' }}"></td>
+            <td>
+                {% for a in p.aliases %}
+                <form method="post" action="{{ url_for('investment_admin_remove_alias') }}" class="d-inline">
+                    <input type="hidden" name="project_name" value="{{ a }}">
+                    <span class="badge bg-light text-dark border mb-1">{{ a }} <button type="submit" class="btn btn-sm btn-link p-0 text-danger" style="text-decoration:none">×</button></span>
+                </form>
+                {% else %}
+                <span class="text-secondary small">нет</span>
+                {% endfor %}
+            </td>
+            <td><button form="form-{{ p.id }}" class="btn btn-sm btn-outline-dark" type="submit">Сохранить</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card p-3 mb-4">
+    <h6 class="text-secondary">Добавить портфель</h6>
+    <form method="post" action="{{ url_for('investment_admin_new') }}" class="row g-2 align-items-end">
+        <div class="col-auto"><label class="form-label small mb-0">Название</label><input type="text" class="form-control form-control-sm" name="canonical_name" placeholder="(DP) ..." required></div>
+        <div class="col-auto"><label class="form-label small mb-0">Дата покупки</label><input type="date" class="form-control form-control-sm" name="purchase_date"></div>
+        <div class="col-auto"><label class="form-label small mb-0">К-во</label><input type="number" step="1" class="form-control form-control-sm" style="width:90px" name="units"></div>
+        <div class="col-auto"><label class="form-label small mb-0">ОСЗ, руб</label><input type="number" step="0.01" class="form-control form-control-sm" style="width:140px" name="face_value_rub"></div>
+        <div class="col-auto"><label class="form-label small mb-0">Цена, руб</label><input type="number" step="0.01" class="form-control form-control-sm" style="width:140px" name="price_rub"></div>
+        <div class="col-auto"><label class="form-label small mb-0">Заметки</label><input type="text" class="form-control form-control-sm" name="notes"></div>
+        <div class="col-auto">
+            <label class="form-label small mb-0">Привязать "Проект"</label>
+            <select class="form-select form-select-sm" name="alias_for_project">
+                <option value="">—</option>
+                {% for u in unmatched %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-auto"><button type="submit" class="btn btn-sm btn-dark">Создать</button></div>
+    </form>
+</div>
+
+<div class="card p-3">
+    <h6 class="text-secondary">Непривязанные "Проект" в данных ({{ unmatched | length }})</h6>
+    {% if unmatched %}
+    <table class="table table-sm mb-0">
+        <thead><tr><th>Проект</th><th>Привязать к портфелю</th><th></th></tr></thead>
+        <tbody>
+        {% for u in unmatched %}
+        <tr>
+            <form id="alias-form-{{ loop.index }}" method="post" action="{{ url_for('investment_admin_add_alias') }}">
+                <input type="hidden" name="project_name" value="{{ u }}">
+            </form>
+            <td>{{ u }}</td>
+            <td>
+                <select form="alias-form-{{ loop.index }}" name="portfolio_id" class="form-select form-select-sm">
+                    {% for p in portfolios %}<option value="{{ p.id }}">{{ p.canonical_name }}</option>{% endfor %}
+                </select>
+            </td>
+            <td><button form="alias-form-{{ loop.index }}" class="btn btn-sm btn-outline-dark" type="submit">Привязать</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary small mb-0">Все "Проект" из данных привязаны к портфелям.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -13,6 +13,7 @@ from reporting_refresh import refresh_all
 import pl_report as pr
 import fot_report as fr
 import loans_report as lr
+import investment_report as ir
 
 logging.basicConfig(level=logging.INFO)
 
@@ -300,6 +301,92 @@ def counterparty():
         counterparties=pr.get_counterparties(),
         all_projects=pr.get_projects_with_type(),
     )
+
+
+@app.route('/investment')
+@login_required
+def investment():
+    rows = ir.all_dp_summary()
+    return render_template('investment_summary.html', rows=rows)
+
+
+@app.route('/investment/<path:name>')
+@login_required
+def investment_detail(name):
+    include_allocation = request.args.get('allocation', '1') != '0'
+    data = ir.portfolio_detail(name, include_allocation)
+    if data is None:
+        flash(f'Портфель «{name}» не найден', 'danger')
+        return redirect(url_for('investment'))
+    return render_template('investment_detail.html', data=data, name=name, include_allocation=include_allocation)
+
+
+@app.route('/investment/admin')
+@admin_required
+def investment_admin():
+    portfolios = ir.get_dp_portfolios()
+    for p in portfolios:
+        p['aliases'] = ir.get_portfolio_aliases(p['id'])
+    unmatched = ir.get_unmatched_dp_projects()
+    return render_template('investment_admin.html', portfolios=portfolios, unmatched=unmatched)
+
+
+@app.route('/investment/admin/<int:portfolio_id>', methods=['POST'])
+@admin_required
+def investment_admin_update(portfolio_id):
+    ir.update_portfolio(
+        portfolio_id,
+        request.form.get('purchase_date') or None,
+        request.form.get('units') or None,
+        request.form.get('face_value_rub') or None,
+        request.form.get('price_rub') or None,
+        request.form.get('notes', '').strip(),
+    )
+    flash('Карточка портфеля обновлена', 'success')
+    return redirect(url_for('investment_admin'))
+
+
+@app.route('/investment/admin/new', methods=['POST'])
+@admin_required
+def investment_admin_new():
+    name = request.form.get('canonical_name', '').strip()
+    if name:
+        ir.create_portfolio(
+            name,
+            request.form.get('purchase_date') or None,
+            request.form.get('units') or None,
+            request.form.get('face_value_rub') or None,
+            request.form.get('price_rub') or None,
+            request.form.get('notes', '').strip(),
+        )
+        alias_for = request.form.get('alias_for_project', '').strip()
+        if alias_for:
+            portfolio = query('SELECT id FROM reporting.dp_portfolios WHERE canonical_name = %s', (name,))
+            if portfolio:
+                ir.add_alias(portfolio[0]['id'], alias_for)
+        flash(f'Портфель «{name}» создан', 'success')
+    return redirect(url_for('investment_admin'))
+
+
+@app.route('/investment/admin/alias', methods=['POST'])
+@admin_required
+def investment_admin_add_alias():
+    portfolio_id = request.form.get('portfolio_id', type=int)
+    project_name = request.form.get('project_name', '').strip()
+    if portfolio_id and project_name:
+        ir.add_alias(portfolio_id, project_name)
+        flash(f'«{project_name}» привязан к портфелю', 'success')
+    return redirect(url_for('investment_admin'))
+
+
+@app.route('/investment/admin/alias/remove', methods=['POST'])
+@admin_required
+def investment_admin_remove_alias():
+    project_name = request.form.get('project_name', '').strip()
+    if project_name:
+        ir.remove_alias(project_name)
+        flash(f'«{project_name}» отвязан', 'success')
+    return redirect(url_for('investment_admin'))
 
 
 @app.route('/employees')

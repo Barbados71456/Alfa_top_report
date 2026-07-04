@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Инвестанализ — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">Инвестиционный анализ портфелей DP — свод</h4>
+        <p class="text-secondary small mb-0">Окупаемость и денежный поток посчитаны дважды: без учёта и с учётом распределения общих расходов.</p>
+    </div>
+    {% if session.get('role') == 'admin' %}<a href="{{ url_for('investment_admin') }}" class="btn btn-sm btn-outline-dark">Справочник портфелей</a>{% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Топ-10 по остатку задолженности, тыс. руб.</div><canvas id="invRemaining" height="150"></canvas></div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Собираемость по портфелям, %</div><canvas id="invCollection" height="150"></canvas></div>
+    </div>
+</div>
+
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Портфель</th>
+            <th>Дата покупки</th>
+            <th>Ед.</th>
+            <th>ОСЗ, тыс</th>
+            <th>Цена, тыс</th>
+            <th>Собрано, тыс</th>
+            <th>Остаток, тыс</th>
+            <th>Собираемость</th>
+            <th>ДП на сегодня (без аллок.), тыс</th>
+            <th>ДП на сегодня (с аллок.), тыс</th>
+            <th>Окупаемость без аллок., мес</th>
+            <th>Окупаемость с аллок., мес</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        <tr class="{% if not r.has_card %}text-secondary fst-italic{% endif %}">
+            <td class="label-col">
+                {% if r.has_card %}<a href="{{ url_for('investment_detail', name=r.name) }}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
+            </td>
+            <td>{{ r.purchase_date.strftime('%d.%m.%Y') if r.purchase_date else '—' }}</td>
+            <td>{{ r.units|int if r.units else '—' }}</td>
+            <td>{{ '%.1f'|format(r.face_value_rub / 1000) if r.face_value_rub else '—' }}</td>
+            <td>{{ '%.1f'|format(r.price_rub / 1000) if r.price_rub else '—' }}</td>
+            <td>{{ '%.1f'|format(r.collected_revenue / 1000) if r.collected_revenue else '—' }}</td>
+            <td class="{% if r.remaining_balance and r.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.remaining_balance / 1000) if r.remaining_balance is not none else '—' }}</td>
+            <td>{{ '%.1f'|format(r.collection_pct) + '%' if r.collection_pct is not none else '—' }}</td>
+            <td class="{% if r.cf_to_date_no_alloc > 0 %}val-pos{% elif r.cf_to_date_no_alloc < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cf_to_date_no_alloc / 1000) }}</td>
+            <td class="{% if r.cf_to_date_with_alloc > 0 %}val-pos{% elif r.cf_to_date_with_alloc < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cf_to_date_with_alloc / 1000) }}</td>
+            <td>{{ '%.1f'|format(r.payback_no_alloc) if r.payback_no_alloc is not none else 'не окупился' }}</td>
+            <td>{{ '%.1f'|format(r.payback_with_alloc) if r.payback_with_alloc is not none else 'не окупился' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+(function() {
+try {
+const rows = {{ rows | tojson }};
+const withCard = rows.filter(r => r.has_card);
+const byRemaining = [...withCard].filter(r => r.remaining_balance !== null).sort((a,b) => b.remaining_balance - a.remaining_balance).slice(0, 10);
+const byCollection = [...withCard].filter(r => r.collection_pct !== null).sort((a,b) => b.collection_pct - a.collection_pct).slice(0, 10);
+
+const mk = (id, config) => {
+    const existing = Chart.getChart(id);
+    if (existing) existing.destroy();
+    return new Chart(document.getElementById(id), config);
+};
+
+mk('invRemaining', {
+    type: 'bar',
+    data: {
+        labels: byRemaining.map(r => r.name),
+        datasets: [{ data: byRemaining.map(r => r.remaining_balance / 1000), backgroundColor: '#c0362c' }]
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+});
+
+mk('invCollection', {
+    type: 'bar',
+    data: {
+        labels: byCollection.map(r => r.name),
+        datasets: [{ data: byCollection.map(r => r.collection_pct), backgroundColor: '#1a7f37' }]
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+});
+} catch (e) { console.error('investment summary script failed:', e); }
+})();
+</script>
+{% endblock %}

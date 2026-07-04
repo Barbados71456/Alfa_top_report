@@ -7,11 +7,12 @@
 import logging
 
 from db import execute, execute_autocommit
+import investment_report as ir
 
 logger = logging.getLogger('reporting_refresh')
 
 VIEWS = ['reporting.pl_monthly', 'reporting.pl_monthly_stat3', 'reporting.fot_monthly',
-         'reporting.loans_monthly', 'reporting.counterparty_list']
+         'reporting.loans_monthly', 'reporting.counterparty_list', 'reporting.dp_monthly']
 
 
 def _sync_employees():
@@ -41,3 +42,9 @@ def refresh_all():
         logger.info('Обновлён справочник reporting.employees')
     except Exception:
         logger.exception('Не удалось обновить reporting.employees')
+
+    try:
+        ir.sync_aliases()
+        logger.info('Обновлены алиасы reporting.dp_portfolio_aliases')
+    except Exception:
+        logger.exception('Не удалось обновить reporting.dp_portfolio_aliases')

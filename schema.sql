@@ -94,3 +94,48 @@ CREATE TABLE IF NOT EXISTS reporting.employees (
     status TEXT DEFAULT 'Работает',
     updated_at TIMESTAMP DEFAULT now()
 );
+
+-- Инвестиционный анализ портфелей DP (окупаемость, собираемость): денежный поток
+-- портфеля = СтатьяСвод (выручка/расходы портфельные/расходы прочие) с разбивкой по
+-- Распределение (до распределения / распределение) — это и есть "с учётом и без учёта
+-- распределения затрат". См. investment_report.py.
+DROP MATERIALIZED VIEW IF EXISTS reporting.dp_monthly;
+CREATE MATERIALIZED VIEW reporting.dp_monthly AS
+SELECT "Период" AS period,
+       "Проект" AS project,
+       "СтатьяСвод" AS statya_svod,
+       "Распределение" AS allocation,
+       "п_ф" AS pf,
+       SUM("Сумма") AS amount
+FROM public."FinancialData"
+WHERE "СтатьяСвод" IN ('01. Выручка профильная (+)', '03. Расходы портфельные (-)',
+                        '04. Расходы Прочие (-)', '06. Инвестиции (+/-)')
+  AND "Проект" ILIKE '(DP)%%'
+GROUP BY 1, 2, 3, 4, 5;
+
+CREATE UNIQUE INDEX dp_monthly_uq ON reporting.dp_monthly (period, project, statya_svod, allocation, pf);
+CREATE INDEX dp_monthly_project_idx ON reporting.dp_monthly (project);
+
+-- Справочник купленных портфелей ДЗ (дата уступки, к-во, ОСЗ = номинал долга,
+-- фактически уплаченная цена) — внешние данные, которых нет в FinancialData, заполняется
+-- разово из листа "Список" эталонного Excel и правится вручную на /investment/admin.
+CREATE TABLE IF NOT EXISTS reporting.dp_portfolios (
+    id SERIAL PRIMARY KEY,
+    canonical_name TEXT UNIQUE NOT NULL,
+    purchase_date DATE,
+    units NUMERIC,
+    face_value_rub NUMERIC,
+    price_rub NUMERIC,
+    notes TEXT,
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+-- Соответствие "сырое имя Проект в FinancialData" -> канонический портфель. В
+-- FinancialData один и тот же портфель встречается с вариациями (пробелы/регистр/NBSP) —
+-- автоматически привязываются точные совпадения (см. investment_report.sync_aliases()),
+-- расхождения донастраиваются на /investment/admin.
+CREATE TABLE IF NOT EXISTS reporting.dp_portfolio_aliases (
+    id SERIAL PRIMARY KEY,
+    dp_portfolio_id INTEGER NOT NULL REFERENCES reporting.dp_portfolios(id) ON DELETE CASCADE,
+    project_name TEXT UNIQUE NOT NULL
+);

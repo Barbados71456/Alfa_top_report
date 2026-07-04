@@ -68,9 +68,11 @@
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='fot2' %}active{% endif %}" href="{{ url_for('fot2') }}">ФОТ v2</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='loans' %}active{% endif %}" href="{{ url_for('loans') }}">Займы</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='counterparty' %}active{% endif %}" href="{{ url_for('counterparty') }}">По контрагенту</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint in ('investment','investment_detail') %}active{% endif %}" href="{{ url_for('investment') }}">Инвестанализ</a></li>
                 {% if session.get('role') == 'admin' %}
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='employees' %}active{% endif %}" href="{{ url_for('employees') }}">Сотрудники</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='investment_admin' %}active{% endif %}" href="{{ url_for('investment_admin') }}">Портфели DP</a></li>
                 {% endif %}
             </ul>
             <span class="navbar-text me-3">{{ session.get('username') }}</span>
