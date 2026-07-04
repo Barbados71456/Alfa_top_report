@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Обзор — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">Обзор — {{ data.year }} vs {{ data.prev_year }}, тыс. руб.</h4>
+    <form class="d-flex gap-2" method="get">
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+        <select name="pf" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
+            <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
+            <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
+        </select>
+    </form>
+</div>
+<p class="text-secondary small">Клик по столбцу выручки или по портфелю открывает детализацию.</p>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">Выручка по месяцам</div><canvas id="ovRevenue" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">Прибыль / Чистая прибыль</div><canvas id="ovProfit" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">GM%, по месяцам</div><canvas id="ovGm" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3"><div class="small text-secondary mb-1">Топ-5 портфелей по выручке, {{ data.year }}</div><canvas id="ovTopProjects" height="140"></canvas></div>
+    </div>
+</div>
+
+<script>
+(function() {
+try {
+const MONTHS = {{ data.months | tojson }};
+const YEAR = {{ data.year }};
+const PREV_YEAR = {{ data.prev_year }};
+const PF = {{ data.pf | tojson }};
+
+const mk = (id, config) => {
+    const existing = Chart.getChart(id);
+    if (existing) existing.destroy();
+    return new Chart(document.getElementById(id), config);
+};
+
+mk('ovRevenue', {
+    type: 'bar',
+    data: {
+        labels: MONTHS,
+        datasets: [
+            {label: String(PREV_YEAR), data: {{ data.revenue_prev | tojson }}, backgroundColor: '#86868b'},
+            {label: String(YEAR), data: {{ data.revenue_cur | tojson }}, backgroundColor: '#1a7f37'}
+        ]
+    },
+    options: {
+        plugins: { legend: { display: true } },
+        onClick: (evt, elements, chart) => {
+            if (!elements.length || !window.showCellDetail) return;
+            const el = elements[0];
+            const year = el.datasetIndex === 0 ? PREV_YEAR : YEAR;
+            const month = el.index + 1;
+            window.showCellDetail({
+                lines: ['Выручка DP (цессия)', 'Выручка DCA (агентская)', 'Депозиты', 'Прочая выручка (перепродажа)'],
+                year, month, pf: PF, focus: 'projects', label: 'Выручка'
+            });
+        }
+    }
+});
+
+mk('ovProfit', {
+    type: 'line',
+    data: {
+        labels: MONTHS,
+        datasets: [
+            {label: 'Прибыль ' + YEAR, data: {{ data.profit_cur | tojson }}, borderColor: '#000', tension: 0.15},
+            {label: 'Чистая прибыль ' + YEAR, data: {{ data.net_profit_cur | tojson }}, borderColor: '#c0362c', tension: 0.15},
+            {label: 'Прибыль ' + PREV_YEAR, data: {{ data.profit_prev | tojson }}, borderColor: '#86868b', borderDash: [4,4], tension: 0.15}
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
+});
+
+mk('ovGm', {
+    type: 'line',
+    data: {
+        labels: MONTHS,
+        datasets: [
+            {label: String(YEAR), data: {{ data.gm_pct_cur | tojson }}, borderColor: '#1a7f37', tension: 0.15},
+            {label: String(PREV_YEAR), data: {{ data.gm_pct_prev | tojson }}, borderColor: '#86868b', borderDash: [4,4], tension: 0.15}
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
+});
+
+mk('ovCostStructure', {
+    type: 'doughnut',
+    data: {
+        labels: ['Переменные', 'Постоянные'],
+        datasets: [{ data: [{{ data.total_variable }}, {{ data.total_fixed }}], backgroundColor: ['#c0362c', '#86868b'] }]
+    },
+    options: { plugins: { legend: { display: true } } }
+});
+
+mk('ovFot', {
+    data: {
+        labels: MONTHS,
+        datasets: [
+            {type: 'bar', label: 'ФОТ, руб.', data: {{ (fot_total.vals if fot_total else []) | tojson }}.map(v => Math.abs(v)), backgroundColor: '#0d6efd', yAxisID: 'y'},
+            {type: 'line', label: 'Численность', data: {{ (headcount.vals if headcount else []) | tojson }}, borderColor: '#c0362c', yAxisID: 'y1', tension: 0.15}
+        ]
+    },
+    options: {
+        plugins: { legend: { display: true } },
+        scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } }
+    }
+});
+
+mk('ovLoans', {
+    type: 'line',
+    data: {
+        labels: {{ loans_series.periods | tojson }},
+        datasets: [{ label: 'Остаток долга', data: {{ loans_series.vals | tojson }}, borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15 }]
+    },
+    options: { plugins: { legend: { display: false } }, elements: { point: { radius: 0 } } }
+});
+
+const topProjects = {{ data.top_projects | tojson }};
+mk('ovTopProjects', {
+    type: 'bar',
+    data: {
+        labels: topProjects.map(p => p.project),
+        datasets: [{ data: topProjects.map(p => p.revenue), backgroundColor: '#1a7f37' }]
+    },
+    options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        onClick: (evt, elements) => {
+            if (!elements.length) return;
+            const project = topProjects[elements[0].index].project;
+            window.location.href = '/dashboard2?project=' + encodeURIComponent(project);
+        }
+    }
+});
+} catch (e) { console.error('overview script failed:', e); }
+})();
+</script>
+{% endblock %}

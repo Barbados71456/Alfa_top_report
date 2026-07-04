@@ -15,48 +15,67 @@
     </form>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="svod1Chart" height="80"></canvas>
-</div>
-
-<div class="card p-3 table-responsive">
-    <table class="table report-table mb-0">
-        <thead><tr><th class="label-col">Статья</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
-        <tbody>
-        {% for row in data.rows %}
-        {% if row.kind == 'header' %}
-        <tr><td class="label-col fw-bold" colspan="{{ data.months|length + 1 }}">{{ row.label }}</td></tr>
-        {% else %}
-        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
-            <td class="label-col">{{ row.label }}</td>
-            {% for v in row.vals %}
-            {% if row.kind == 'line' and v and row.detail is defined %}
-            <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
-                data-lines='{{ [row.label] | tojson }}' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
-                data-label="{{ row.label }}" data-focus="{{ row.focus }}"
-                data-detail='{{ row.detail[loop.index0] | tojson }}'>{{ '%.1f'|format(v) }}</td>
-            {% else %}
-            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
-            {% endif %}
-            {% endfor %}
-        </tr>
-        {% endif %}
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card p-3 table-responsive">
+            <table class="table report-table mb-0">
+                <thead><tr><th class="label-col">Статья</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in data.rows %}
+                {% if row.kind == 'header' %}
+                <tr><td class="label-col fw-bold" colspan="{{ data.months|length + 1 }}">{{ row.label }}</td></tr>
+                {% else %}
+                <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+                    <td class="label-col">{{ row.label }}</td>
+                    {% for v in row.vals %}
+                    {% if row.kind == 'line' and v and row.detail is defined %}
+                    <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
+                        data-lines='{{ [row.label] | tojson }}' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
+                        data-label="{{ row.label }}" data-focus="{{ row.focus }}"
+                        data-detail='{{ row.detail[loop.index0] | tojson }}'>{{ '%.1f'|format(v) }}</td>
+                    {% else %}
+                    <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="d-flex flex-column gap-3">
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка</div><canvas id="chartRevenue" height="90"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Переменные</div><canvas id="chartVariable" height="90"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">GM (Выручка + Переменные)</div><canvas id="chartGm" height="90"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Постоянные</div><canvas id="chartFixed" height="90"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Прибыль</div><canvas id="chartProfit" height="90"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Чистая прибыль</div><canvas id="chartNetProfit" height="90"></canvas></div>
+        </div>
+    </div>
 </div>
 
 <script>
-new Chart(document.getElementById('svod1Chart'), {
-    type: 'bar',
-    data: {
-        labels: {{ data.months | tojson }},
-        datasets: [
-            {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, backgroundColor: '#000'},
-            {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, type: 'line', borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.1)', tension: 0.2}
-        ]
-    },
-    options: { plugins: { legend: { display: true } } }
-});
+(function() {
+try {
+    const months = {{ data.months | tojson }};
+    const mkChart = (id, data, color) => {
+        const existing = Chart.getChart(id);
+        if (existing) existing.destroy();
+        new Chart(document.getElementById(id), {
+            type: 'bar',
+            data: { labels: months, datasets: [{ data: data, backgroundColor: data.map(v => v >= 0 ? color : '#c0362c') }] },
+            options: { plugins: { legend: { display: false } }, scales: { x: { display: false } } }
+        });
+    };
+    mkChart('chartRevenue', {{ data.revenue_series | tojson }}, '#1a7f37');
+    mkChart('chartVariable', {{ data.variable_series | tojson }}, '#c0362c');
+    mkChart('chartGm', {{ data.gm_series | tojson }}, '#0d6efd');
+    mkChart('chartFixed', {{ data.fixed_series | tojson }}, '#c0362c');
+    mkChart('chartProfit', {{ data.profit | tojson }}, '#000');
+    mkChart('chartNetProfit', {{ data.net_profit | tojson }}, '#6f42c1');
+} catch (e) { console.error('svod1 charts failed:', e); }
+})();
 </script>
 {% endblock %}

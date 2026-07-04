@@ -125,6 +125,23 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/overview')
+@login_required
+def overview():
+    years = pr.get_available_years()
+    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+    pf = request.args.get('pf', 'факт')
+    data = pr.overview_data(year, pf)
+    fot_data = fr.fot1(year, pf)
+    fot_total = next((r for r in fot_data['rows'] if r['label'] == 'ФОТ (всего)'), None)
+    headcount = next((r for r in fot_data['rows'] if r['label'] == 'Численность (всего)'), None)
+    loans_series = lr.loans_balance_series(pf)
+    return render_template(
+        'overview.html', data=data, years=years, year=year, pf=pf,
+        fot_total=fot_total, headcount=headcount, loans_series=loans_series,
+    )
+
+
 @app.route('/svod1')
 @login_required
 def svod1():
@@ -166,7 +183,9 @@ def svod2():
 @app.route('/unitpl')
 @login_required
 def unitpl():
-    data = pr.unit_pl()
+    start = request.args.get('start', type=int)
+    end = request.args.get('end', type=int)
+    data = pr.unit_pl(start=start, end=end)
     return render_template('unitpl.html', data=data)
 
 
@@ -177,16 +196,17 @@ def api_deviation_detail():
     projects = request.args.getlist('project') or None
     a = request.args.get('a', '')
     b = request.args.get('b', '')
-    month = request.args.get('month', type=int)
     try:
-        a_pf, a_year = a.split(':')
-        b_pf, b_year = b.split(':')
+        a_pf, a_year, a_month = a.split(':')
+        b_pf, b_year, b_month = b.split(':')
     except ValueError:
-        return {'error': 'Некорректные параметры a/b (ожидается pf:year)'}, 400
-    if not (lines and month):
-        return {'error': 'line, month обязательны'}, 400
+        return {'error': 'Некорректные параметры a/b (ожидается pf:год:месяц)'}, 400
+    if not lines:
+        return {'error': 'line обязателен'}, 400
     try:
-        data = pr.deviation_detail(lines, (a_pf, int(a_year), month), (b_pf, int(b_year), month), projects)
+        data = pr.deviation_detail(
+            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)), projects
+        )
     except Exception:
         app.logger.exception('deviation_detail error')
         return {'error': 'Ошибка при получении акт-анализа'}, 500
@@ -269,10 +289,16 @@ def loans():
 def counterparty():
     contragent = request.args.get('name', '').strip()
     pf = request.args.get('pf', 'факт')
-    data = pr.counterparty_series(contragent, pf) if contragent else None
+    project = request.args.get('project', '').strip() or None
+    default_from, default_to = pr.default_counterparty_range(pf)
+    date_from = request.args.get('date_from') or default_from.isoformat()
+    date_to = request.args.get('date_to') or default_to.isoformat()
+    data = pr.counterparty_series(contragent, pf, project, date_from, date_to) if contragent else None
     return render_template(
-        'counterparty.html', data=data, contragent=contragent, pf=pf,
+        'counterparty.html', data=data, contragent=contragent, pf=pf, project=project,
+        date_from=date_from, date_to=date_to,
         counterparties=pr.get_counterparties(),
+        all_projects=pr.get_projects_with_type(),
     )
 
 

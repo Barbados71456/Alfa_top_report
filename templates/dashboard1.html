@@ -70,14 +70,15 @@
             {% endfor %}
             {% for dv in dvals %}
             {% set di = loop.index0 %}
+            {% set eff = dv * (row.polarity or 1) %}
             {% if row.lines and dv %}
-            <td class="delta-cell {% if dv > 0 %}val-pos{% elif dv < 0 %}val-neg{% endif %}"
-                data-lines='{{ row.lines | tojson }}' data-month="{{ month }}"
-                data-a="{{ data.series[data.deltas[di][0]][0] }}:{{ data.series[data.deltas[di][0]][1] }}"
-                data-b="{{ data.series[data.deltas[di][1]][0] }}:{{ data.series[data.deltas[di][1]][1] }}"
+            <td class="delta-cell {% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}"
+                data-lines='{{ row.lines | tojson }}' data-month="{{ month }}" data-polarity="{{ row.polarity or 1 }}"
+                data-a="{{ data.series[data.deltas[di][0]][0] }}:{{ data.series[data.deltas[di][0]][1] }}:{{ month }}"
+                data-b="{{ data.series[data.deltas[di][1]][0] }}:{{ data.series[data.deltas[di][1]][1] }}:{{ month }}"
                 data-label="{{ row.label }}" data-projects='{{ (row.project or []) | tojson }}'>{{ '%.1f'|format(dv) }}</td>
             {% else %}
-            <td class="{% if dv > 0 %}val-pos{% elif dv < 0 %}val-neg{% endif %}">{{ '%.1f'|format(dv) if dv else '—' }}</td>
+            <td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '%.1f'|format(dv) if dv else '—' }}</td>
             {% endif %}
             {% endfor %}
         </tr>
@@ -92,8 +93,12 @@
 {{ block(data.rows, false, 'Накопительно с начала года') }}
 
 <script>
+(function() {
+try {
 const rows = {{ data.rows | tojson }};
 const top = rows.filter(r => r.kind === 'line').sort((a,b) => Math.abs(b.series_month.at(-1)) - Math.abs(a.series_month.at(-1))).slice(0, 10);
+const existingChart = Chart.getChart('dash1Chart');
+if (existingChart) existingChart.destroy();
 new Chart(document.getElementById('dash1Chart'), {
     type: 'bar',
     data: {
@@ -152,6 +157,8 @@ function renderDeltaRows() {
 }
 
 function removeDelta(idx) { deltasState.splice(idx, 1); renderDeltaRows(); }
+window.removeSeries = removeSeries;
+window.removeDelta = removeDelta;
 
 document.getElementById('addSeriesBtn').onclick = () => { seriesState.push({ pf: 'факт', year: YEARS.at(-1) }); renderSeriesRows(); };
 document.getElementById('addDeltaBtn').onclick = () => { deltasState.push({ i: seriesState.length - 1, j: 0 }); renderDeltaRows(); };
@@ -163,5 +170,7 @@ document.getElementById('applyCompareBtn').onclick = () => {
 };
 
 renderSeriesRows();
+} catch (e) { console.error('dashboard1 script failed:', e); }
+})();
 </script>
 {% endblock %}

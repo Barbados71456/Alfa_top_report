@@ -205,7 +205,17 @@ def svod1(year, pf='факт'):
         net_profit[m] = profit_after_bonus[m] + financing_total[m] + investment[m] + profit[m]
     rows.append({'kind': 'total', 'label': '💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ', 'vals': _series(net_profit)})
 
-    return {'rows': rows, 'months': MONTHS_RU, 'profit': _series(profit), 'net_profit': _series(net_profit)}
+    gm = _empty_months()
+    for m in range(1, 13):
+        gm[m] = section_totals['Итого выручка'][m] + section_totals['Итого переменные'][m]
+
+    return {
+        'rows': rows, 'months': MONTHS_RU, 'profit': _series(profit), 'net_profit': _series(net_profit),
+        'revenue_series': _series(section_totals['Итого выручка']),
+        'variable_series': _series(section_totals['Итого переменные']),
+        'fixed_series': _series(section_totals['Итого постоянные']),
+        'gm_series': _series(gm),
+    }
 
 
 def get_available_years():
@@ -249,36 +259,62 @@ def _fetch_year_by_project(year, pf, lines):
     return by_project
 
 
-def _project_breakdown(year, pf, lines, section_total, top_n=15):
+_PROJECT_TYPE_CACHE = None
+
+
+def _project_type_map():
+    """{project_name: (tip_project_1, tip_project_2)} — из public.projects; кэш на процесс
+    (справочник маленький и меняется редко, но переживём рестарт процесса при деплое)."""
+    global _PROJECT_TYPE_CACHE
+    if _PROJECT_TYPE_CACHE is None:
+        rows = query('SELECT "name", tip_project_1, tip_project_2 FROM public.projects')
+        _PROJECT_TYPE_CACHE = {r['name']: (r['tip_project_1'] or 'Прочие', r['tip_project_2'] or 'Прочие') for r in rows}
+    return _PROJECT_TYPE_CACHE
+
+
+def _project_hierarchy(year, pf, lines, section_id):
+    """Свёрнутая по умолчанию 3-уровневая иерархия: tip_project_1 -> tip_project_2 ->
+    проект (справочник public.projects; проекты не из справочника — в "Прочие"). Полное
+    разбиение — сумма всех строк уровня 1 точно равна итогу секции."""
     by_project = _fetch_year_by_project(year, pf, lines)
-    dca = [p for p in by_project if p.startswith('(DCA)')]
-    dp = [p for p in by_project if p.startswith('(DP)')]
+    type_map = _project_type_map()
 
-    def rank(projects):
-        return sorted(projects, key=lambda p: -sum(abs(v) for v in by_project[p].values()))[:top_n]
+    tree = defaultdict(lambda: defaultdict(list))
+    for p in by_project:
+        tip1, tip2 = type_map.get(p, ('Прочие', 'Прочие'))
+        tree[tip1][tip2].append(p)
 
-    dca_shown = rank(dca)
-    dp_shown = rank(dp)
-
-    dca_total = _sum_lines(by_project, dca)
-    dp_total = _sum_lines(by_project, dp)
-    other_total = _empty_months()
-    for m in range(1, 13):
-        other_total[m] = section_total[m] - dca_total[m] - dp_total[m]
-
-    block = []
-    block.append({'kind': 'subtotal', 'label': 'DCA', 'vals': _series(dca_total)})
-    for p in dca_shown:
-        block.append({'kind': 'line', 'label': p, 'vals': _series(by_project[p])})
-    block.append({'kind': 'subtotal', 'label': 'DP', 'vals': _series(dp_total)})
-    for p in dp_shown:
-        block.append({'kind': 'line', 'label': p, 'vals': _series(by_project[p])})
-    block.append({'kind': 'line', 'label': 'Прочие', 'vals': _series(other_total)})
-    return block
+    rows = []
+    for i1, tip1 in enumerate(sorted(tree)):
+        row_id1 = f'{section_id}-{i1}'
+        tip1_total = _empty_months()
+        for tip2, projects in tree[tip1].items():
+            for p in projects:
+                for m in range(1, 13):
+                    tip1_total[m] += by_project[p][m]
+        rows.append({
+            'kind': 'subtotal', 'label': tip1, 'vals': _series(tip1_total),
+            'level': 1, 'row_id': row_id1, 'parent_id': None,
+        })
+        for i2, tip2 in enumerate(sorted(tree[tip1])):
+            row_id2 = f'{row_id1}-{i2}'
+            projects = tree[tip1][tip2]
+            tip2_total = _sum_lines(by_project, projects)
+            rows.append({
+                'kind': 'subtotal', 'label': tip2, 'vals': _series(tip2_total),
+                'level': 2, 'row_id': row_id2, 'parent_id': row_id1,
+            })
+            for p in sorted(projects):
+                rows.append({
+                    'kind': 'line', 'label': p, 'vals': _series(by_project[p]),
+                    'level': 3, 'row_id': f'{row_id2}-{p}', 'parent_id': row_id2,
+                })
+    return rows
 
 
 def svod2(year, pf='факт'):
-    """Свод2: Свод1, но ВЫРУЧКА/ПЕРЕМЕННЫЕ/ПОСТОЯННЫЕ разбиты по портфелям (DCA/DP)."""
+    """Свод2: Свод1, но ВЫРУЧКА/ПЕРЕМЕННЫЕ/ПОСТОЯННЫЕ разбиты по иерархии портфелей
+    tip_project_1 -> tip_project_2 -> проект (public.projects), свёрнуто по умолчанию."""
     by_line = _fetch_year(year, pf)
     revenue_total = _sum_lines(by_line, REVENUE_LINES)
     variable_total = _sum_lines(by_line, VARIABLE_LINES)
@@ -287,11 +323,11 @@ def svod2(year, pf='факт'):
     rows = []
     rows.append({'kind': 'header', 'label': '  ВЫРУЧКА'})
     rows.append({'kind': 'total', 'label': 'Итого выручка', 'vals': _series(revenue_total)})
-    rows.extend(_project_breakdown(year, pf, REVENUE_LINES, revenue_total))
+    rows.extend(_project_hierarchy(year, pf, REVENUE_LINES, 'rev'))
 
     rows.append({'kind': 'header', 'label': '  РАСХОДЫ ПЕРЕМЕННЫЕ'})
     rows.append({'kind': 'total', 'label': 'Итого переменные', 'vals': _series(variable_total)})
-    rows.extend(_project_breakdown(year, pf, VARIABLE_LINES, variable_total))
+    rows.extend(_project_hierarchy(year, pf, VARIABLE_LINES, 'var'))
 
     gm_total = _empty_months()
     for m in range(1, 13):
@@ -301,7 +337,7 @@ def svod2(year, pf='факт'):
 
     rows.append({'kind': 'header', 'label': '  РАСХОДЫ ПОСТОЯННЫЕ'})
     rows.append({'kind': 'total', 'label': 'Итого постоянные', 'vals': _series(fixed_total)})
-    rows.extend(_project_breakdown(year, pf, FIXED_LINES, fixed_total))
+    rows.extend(_project_hierarchy(year, pf, FIXED_LINES, 'fix'))
 
     profit = _empty_months()
     for m in range(1, 13):
@@ -311,18 +347,19 @@ def svod2(year, pf='факт'):
     return {'rows': rows, 'months': MONTHS_RU, 'profit': _series(profit)}
 
 
-def unit_pl(pf_history='факт', pf_forecast='план'):
-    """UNIT+PL: непрерывный ряд по всей истории — факт там, где он есть, иначе план."""
+def unit_pl(pf_history='факт', pf_forecast='план', start=None, end=None):
+    """UNIT+PL: непрерывный ряд по всей истории — факт там, где он есть, иначе план.
+    start/end — индексы диапазона (включительно) в полном списке периодов; None = весь ряд."""
     years = get_available_years()
     rows_by_line = {line: [] for line in ALL_LINES}
     period_labels = []
+    periods_meta = []
 
     fact_by_year = _fetch_all_years(years, pf_history)
     plan_by_year = _fetch_all_years(years, pf_forecast)
 
     profit_series = []
     net_profit_series = []
-    source_series = []
 
     for y in years:
         fact = fact_by_year[y]
@@ -330,16 +367,18 @@ def unit_pl(pf_history='факт', pf_forecast='план'):
         for m in range(1, 13):
             has_fact = any(fact.get(line, {}).get(m, 0.0) != 0.0 for line in ALL_LINES)
             src = fact if has_fact else plan
-            source_series.append('факт' if has_fact else 'план')
-            period_labels.append(f'{MONTHS_RU[m - 1]} {y}')
+            pf = pf_history if has_fact else pf_forecast
+            label = f'{MONTHS_RU[m - 1]} {y}'
+            period_labels.append(label)
+            periods_meta.append({'label': label, 'year': y, 'month': m, 'pf': pf})
             for line in ALL_LINES:
                 rows_by_line[line].append(src.get(line, {}).get(m, 0.0))
 
     def col_sum(lines, idx):
         return sum(rows_by_line[line][idx] for line in lines)
 
-    n = len(period_labels)
-    for i in range(n):
+    n_full = len(period_labels)
+    for i in range(n_full):
         rev = col_sum(REVENUE_LINES, i)
         var = col_sum(VARIABLE_LINES, i)
         fix = col_sum(FIXED_LINES, i)
@@ -350,18 +389,45 @@ def unit_pl(pf_history='факт', pf_forecast='план'):
         profit_series.append(profit)
         net_profit_series.append(bonus + fin + inv + profit)
 
+    start = start if start is not None and 0 <= start < n_full else 0
+    end = end if end is not None and start <= end < n_full else n_full - 1
+    sl = slice(start, end + 1)
+
+    def endpoint_delta(vals):
+        rng = vals[sl]
+        return (rng[-1] - rng[0]) if len(rng) > 1 else 0.0
+
     rows = []
+    all_profit_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
+    all_net_lines = all_profit_lines + BONUS_LINES + FINANCING_LINES + [INVESTMENT_LINE]
+
     for header, lines, total_label in SECTIONS:
         rows.append({'kind': 'header', 'label': header})
         for line in lines:
-            rows.append({'kind': 'line', 'label': line, 'vals': rows_by_line[line]})
-        rows.append({'kind': 'subtotal', 'label': total_label,
-                      'vals': [col_sum(lines, i) for i in range(n)]})
-    rows.append({'kind': 'total', 'label': 'ПРИБЫЛЬ', 'vals': profit_series})
-    rows.append({'kind': 'total', 'label': '💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ', 'vals': net_profit_series})
+            vals = rows_by_line[line]
+            rows.append({'kind': 'line', 'label': line, 'lines': [line],
+                         'vals': vals[sl], 'endpoint_delta': endpoint_delta(vals)})
+        subtotal_vals = [col_sum(lines, i) for i in range(n_full)]
+        rows.append({'kind': 'subtotal', 'label': total_label, 'lines': lines,
+                     'vals': subtotal_vals[sl], 'endpoint_delta': endpoint_delta(subtotal_vals)})
+    rows.append({'kind': 'total', 'label': 'ПРИБЫЛЬ', 'lines': all_profit_lines,
+                 'vals': profit_series[sl], 'endpoint_delta': endpoint_delta(profit_series)})
+    rows.append({'kind': 'total', 'label': '💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ', 'lines': all_net_lines,
+                 'vals': net_profit_series[sl], 'endpoint_delta': endpoint_delta(net_profit_series)})
 
-    return {'rows': rows, 'periods': period_labels, 'sources': source_series,
-            'profit': profit_series, 'net_profit': net_profit_series}
+    revenue_series = [col_sum(REVENUE_LINES, i) for i in range(n_full)]
+    cost_series = [col_sum(VARIABLE_LINES, i) + col_sum(FIXED_LINES, i) for i in range(n_full)]
+
+    return {
+        'rows': rows,
+        'periods': period_labels[sl],
+        'periods_meta': periods_meta[sl],
+        'full_periods_meta': periods_meta,
+        'start_idx': start, 'end_idx': end,
+        'profit': profit_series[sl], 'net_profit': net_profit_series[sl],
+        'revenue_series': revenue_series[sl], 'cost_series': cost_series[sl],
+        'endpoint_a': periods_meta[end], 'endpoint_b': periods_meta[start],
+    }
 
 
 def _batched_fetch(lines, years, month, pf, dim=None, projects=None):
@@ -406,7 +472,9 @@ def default_series_deltas(years):
     return series, deltas
 
 
-def _series_row(label, series, deltas, month_map, ytd_map, bold=False, lines=None, project=None):
+def _series_row(label, series, deltas, month_map, ytd_map, bold=False, lines=None, project=None, polarity=1):
+    """polarity: +1 — рост показателя это хорошо (зелёный при Δ>0), по умолчанию;
+    -1 — для показателей вроде остатка долга, где рост это плохо (зелёный при Δ<0)."""
     sm = [month_map.get(key, 0.0) for key in series]
     sy = [ytd_map.get(key, 0.0) for key in series]
     return {
@@ -418,6 +486,7 @@ def _series_row(label, series, deltas, month_map, ytd_map, bold=False, lines=Non
         'delta_ytd': [sy[i] - sy[j] for i, j in deltas],
         'lines': lines,
         'project': project,
+        'polarity': polarity,
     }
 
 
@@ -608,18 +677,41 @@ def get_counterparties():
     return [r['name'] for r in rows]
 
 
-def counterparty_series(contragent, pf='факт'):
-    """Динамика выручки/затрат по одному контрагенту за всю историю (индекс по
-    "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый
-    независимо от диапазона дат)."""
+def get_latest_period(pf='факт'):
+    rows = query('SELECT MAX(period) AS mx FROM reporting.pl_monthly WHERE pf = %s', (pf,))
+    return rows[0]['mx'] if rows and rows[0]['mx'] else date.today().replace(day=1)
+
+
+def default_counterparty_range(pf='факт'):
+    """Диапазон по умолчанию — последние 12 месяцев доступных данных для этого pf."""
+    latest = get_latest_period(pf)
+    y, m = latest.year, latest.month - 11
+    while m <= 0:
+        m += 12
+        y -= 1
+    return date(y, m, 1), latest
+
+
+def counterparty_series(contragent, pf='факт', project=None, date_from=None, date_to=None):
+    """Динамика выручки/затрат по одному контрагенту (индекс по "Контрагент"
+    уже есть — idx_financial_data_contragent, запрос быстрый), опционально
+    отфильтрованная по проекту и диапазону дат."""
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
-    rows = query(
-        '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
-           FROM public."FinancialData"
-           WHERE "Контрагент" = %s AND "п_ф" = %s AND "Строка отчета" = ANY(%s)
-           GROUP BY 1, 2 ORDER BY 1''',
-        (contragent, pf, all_lines)
-    )
+    sql = '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
+             FROM public."FinancialData"
+             WHERE "Контрагент" = %s AND "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
+    params = [contragent, pf, all_lines]
+    if project:
+        sql += ' AND "Проект" = %s'
+        params.append(project)
+    if date_from:
+        sql += ' AND "Период" >= %s'
+        params.append(date_from)
+    if date_to:
+        sql += ' AND "Период" <= %s'
+        params.append(date_to)
+    sql += ' GROUP BY 1, 2 ORDER BY 1'
+    rows = query(sql, params)
     revenue_set = set(REVENUE_LINES)
     by_period = defaultdict(lambda: {'revenue': 0.0, 'cost': 0.0})
     for r in rows:
@@ -643,4 +735,49 @@ def counterparty_series(contragent, pf='факт'):
         'table': table,
         'total_revenue': sum(by_period[p]['revenue'] for p in periods),
         'total_cost': sum(by_period[p]['cost'] for p in periods),
+    }
+
+
+def overview_data(year, pf='факт'):
+    """Обзорный дашборд: выручка/прибыль/GM%/структура расходов/топ-5 портфелей,
+    этот год против прошлого, тыс. руб."""
+    prev_year = year - 1
+    cur = _fetch_year(year, pf)
+    prev = _fetch_year(prev_year, pf)
+
+    def sums(by_line, lines):
+        return [sum(by_line.get(l, _empty_months())[m] for l in lines) for m in range(1, 13)]
+
+    revenue_cur, revenue_prev = sums(cur, REVENUE_LINES), sums(prev, REVENUE_LINES)
+    variable_cur, variable_prev = sums(cur, VARIABLE_LINES), sums(prev, VARIABLE_LINES)
+    fixed_cur, fixed_prev = sums(cur, FIXED_LINES), sums(prev, FIXED_LINES)
+    gm_cur = [revenue_cur[i] + variable_cur[i] for i in range(12)]
+    gm_prev = [revenue_prev[i] + variable_prev[i] for i in range(12)]
+    profit_cur = [gm_cur[i] + fixed_cur[i] for i in range(12)]
+    profit_prev = [gm_prev[i] + fixed_prev[i] for i in range(12)]
+
+    bonus_cur, bonus_prev = sums(cur, BONUS_LINES), sums(prev, BONUS_LINES)
+    fin_cur, fin_prev = sums(cur, FINANCING_LINES), sums(prev, FINANCING_LINES)
+    inv_cur = _series(cur.get(INVESTMENT_LINE, _empty_months()))
+    inv_prev = _series(prev.get(INVESTMENT_LINE, _empty_months()))
+    net_profit_cur = [profit_cur[i] + bonus_cur[i] + fin_cur[i] + inv_cur[i] for i in range(12)]
+    net_profit_prev = [profit_prev[i] + bonus_prev[i] + fin_prev[i] + inv_prev[i] for i in range(12)]
+
+    gm_pct_cur = [(gm_cur[i] / revenue_cur[i] * 100) if revenue_cur[i] else 0.0 for i in range(12)]
+    gm_pct_prev = [(gm_prev[i] / revenue_prev[i] * 100) if revenue_prev[i] else 0.0 for i in range(12)]
+
+    by_project_cur = _fetch_year_by_project(year, pf, REVENUE_LINES)
+    top_projects = sorted(
+        ((p, sum(vals.values())) for p, vals in by_project_cur.items()),
+        key=lambda kv: -kv[1]
+    )[:5]
+
+    return {
+        'year': year, 'prev_year': prev_year, 'months': MONTHS_RU, 'pf': pf,
+        'revenue_cur': revenue_cur, 'revenue_prev': revenue_prev,
+        'profit_cur': profit_cur, 'profit_prev': profit_prev,
+        'net_profit_cur': net_profit_cur, 'net_profit_prev': net_profit_prev,
+        'gm_pct_cur': gm_pct_cur, 'gm_pct_prev': gm_pct_prev,
+        'total_variable': abs(sum(variable_cur)), 'total_fixed': abs(sum(fixed_cur)),
+        'top_projects': [{'project': p, 'revenue': v} for p, v in top_projects],
     }

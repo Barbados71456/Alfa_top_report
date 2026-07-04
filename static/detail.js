@@ -9,6 +9,15 @@ function fmtAmount(v) {
     return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(v);
 }
 
+// polarity: +1 (по умолчанию) — рост показателя это хорошо, зелёный при value>0;
+// -1 — для показателей вроде остатка долга, где рост это плохо, зелёный при value<0.
+function deltaColorClass(value, polarity) {
+    const eff = value * (polarity || 1);
+    if (eff > 0) return 'val-pos';
+    if (eff < 0) return 'val-neg';
+    return '';
+}
+
 function buildTooltipHtml(detail) {
     if (!detail || !detail.length) return null;
     const rows = detail.slice(0, 8).map(d => `<div class="d-flex justify-content-between gap-3">
@@ -51,6 +60,7 @@ function showCellDetail(opts) {
     detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
     document.getElementById('detailModalTitle').textContent = `${opts.label} — ${opts.month}.${opts.year} (${opts.pf})`;
     document.getElementById('detailModalSummary').textContent = '';
+    document.getElementById('detailModalSummary').className = 'mb-2 fw-bold';
     document.getElementById('detailModalTabs').style.display = '';
     document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
     detailModalInstance.show();
@@ -140,10 +150,10 @@ function initDeltaCells(root) {
             showDeviationDetail({
                 lines: JSON.parse(td.dataset.lines),
                 projects: td.dataset.projects ? JSON.parse(td.dataset.projects) : null,
-                month: td.dataset.month,
                 a: td.dataset.a,
                 b: td.dataset.b,
                 label: td.dataset.label,
+                polarity: td.dataset.polarity ? parseInt(td.dataset.polarity, 10) : 1,
             });
         });
     });
@@ -158,28 +168,29 @@ function showDeviationDetail(opts) {
     document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
     detailModalInstance.show();
 
-    const params = new URLSearchParams({ month: opts.month, a: opts.a, b: opts.b });
+    const params = new URLSearchParams({ a: opts.a, b: opts.b });
     opts.lines.forEach(l => params.append('line', l));
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
 
     fetch('/api/deviation_detail?' + params.toString())
         .then(r => r.json())
-        .then(data => renderDeviationDetail(data))
+        .then(data => renderDeviationDetail(data, opts.polarity || 1))
         .catch(() => {
             document.getElementById('detailModalBody').innerHTML = '<div class="text-danger">Не удалось загрузить акт-анализ.</div>';
         });
 }
 
-function renderDeviationDetail(data) {
+function renderDeviationDetail(data, polarity) {
     if (data.error) {
         document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
         return;
     }
     document.getElementById('detailModalSummary').textContent = `Итого отклонение: ${fmtAmount(data.total_delta)}`;
+    document.getElementById('detailModalSummary').className = `mb-2 fw-bold ${deltaColorClass(data.total_delta, polarity)}`;
     const rows = data.drivers.map(d => `<tr>
         <td>${d.project}</td><td>${d.stat3}</td><td>${d.contragent}</td>
         <td class="text-end">${fmtAmount(d.a)}</td><td class="text-end">${fmtAmount(d.b)}</td>
-        <td class="text-end fw-bold ${d.delta > 0 ? 'val-pos' : 'val-neg'}">${fmtAmount(d.delta)}</td>
+        <td class="text-end fw-bold ${deltaColorClass(d.delta, polarity)}">${fmtAmount(d.delta)}</td>
         </tr>`).join('');
     document.getElementById('detailModalBody').innerHTML = `
         <p class="text-secondary small">Топ-${data.drivers.length} драйверов отклонения по модулю разницы (руб.).</p>

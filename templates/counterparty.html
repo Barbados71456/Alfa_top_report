@@ -2,17 +2,28 @@
 {% block title %}По контрагенту — Alfa Top Report{% endblock %}
 {% block content %}
 <h4 class="mb-3">Динамика по контрагенту</h4>
-<form class="d-flex gap-2 mb-4" method="get">
-    <input type="text" name="name" class="form-control" list="contragentList" style="max-width:420px"
+<form class="d-flex gap-2 mb-4 flex-wrap align-items-center" method="get">
+    <input type="text" name="name" class="form-control" list="contragentList" style="max-width:320px"
            placeholder="Начните вводить название…" value="{{ contragent }}">
     <datalist id="contragentList">
         {% for c in counterparties %}<option value="{{ c }}">{% endfor %}
     </datalist>
+    <select name="project" class="form-select" style="max-width:220px">
+        <option value="">Все проекты</option>
+        {% for tip, names in all_projects %}
+        <optgroup label="{{ tip }}">
+            {% for n in names %}<option value="{{ n }}" {% if project == n %}selected{% endif %}>{{ n }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+    </select>
     <select name="pf" class="form-select" style="max-width:140px">
         <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
         <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
         <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
     </select>
+    <input type="date" name="date_from" class="form-control" style="max-width:160px" value="{{ date_from }}">
+    <span class="text-secondary">—</span>
+    <input type="date" name="date_to" class="form-control" style="max-width:160px" value="{{ date_to }}">
     <button type="submit" class="btn btn-dark">Показать</button>
 </form>
 
@@ -28,27 +39,34 @@
     </div>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="cpChart" height="80"></canvas>
-</div>
-
-<div class="card p-3 table-responsive">
-    <table class="table report-table mb-0">
-        <thead><tr><th class="label-col">Месяц</th><th>Выручка</th><th>Затраты</th><th>Нетто</th></tr></thead>
-        <tbody>
-        {% for r in data.table %}
-        <tr>
-            <td class="label-col">{{ r.period }}</td>
-            <td class="val-pos">{{ '{:,.0f}'.format(r.revenue).replace(',', ' ') if r.revenue else '—' }}</td>
-            <td class="val-neg">{{ '{:,.0f}'.format(r.cost).replace(',', ' ') if r.cost else '—' }}</td>
-            <td class="{% if r.net > 0 %}val-pos{% elif r.net < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net).replace(',', ' ') }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card p-3 table-responsive">
+            <table class="table report-table mb-0">
+                <thead><tr><th class="label-col">Месяц</th><th>Выручка</th><th>Затраты</th><th>Нетто</th></tr></thead>
+                <tbody>
+                {% for r in data.table %}
+                <tr>
+                    <td class="label-col">{{ r.period }}</td>
+                    <td class="val-pos">{{ '{:,.0f}'.format(r.revenue).replace(',', ' ') if r.revenue else '—' }}</td>
+                    <td class="val-neg">{{ '{:,.0f}'.format(r.cost).replace(',', ' ') if r.cost else '—' }}</td>
+                    <td class="{% if r.net > 0 %}val-pos{% elif r.net < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net).replace(',', ' ') }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка / Затраты по месяцам</div><canvas id="cpChart" height="220"></canvas></div>
+    </div>
 </div>
 
 <script>
+(function() {
+try {
+const existing = Chart.getChart('cpChart');
+if (existing) existing.destroy();
 new Chart(document.getElementById('cpChart'), {
     type: 'bar',
     data: {
@@ -60,6 +78,8 @@ new Chart(document.getElementById('cpChart'), {
     },
     options: { plugins: { legend: { display: true } } }
 });
+} catch (e) { console.error('counterparty script failed:', e); }
+})();
 </script>
 {% elif contragent %}
 <p class="text-secondary">Нет данных по этому контрагенту.</p>

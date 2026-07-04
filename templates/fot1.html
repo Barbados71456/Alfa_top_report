@@ -14,29 +14,55 @@
     </form>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="fot1Chart" height="80"></canvas>
-</div>
-
-<div class="card p-3 table-responsive">
-    <table class="table report-table mb-0">
-        <thead><tr><th class="label-col">Подразделение / сотрудник</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
-        <tbody>
-        {% for row in data.rows %}
-        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
-            <td class="label-col">{{ row.label }}</td>
-            {% for v in row.vals %}
-            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
-            {% endfor %}
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card p-3 table-responsive">
+            <table class="table report-table mb-0">
+                <thead><tr><th class="label-col">Подразделение / сотрудник</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in data.rows %}
+                {% if row.parent_id %}
+                <tr class="emp-row" data-parent-id="{{ row.parent_id }}" style="display:none">
+                    <td class="label-col ps-4">{{ row.label }}</td>
+                    {% for v in row.vals %}
+                    <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
+                    {% endfor %}
+                </tr>
+                {% elif row.kind == 'metric' %}
+                <tr class="text-secondary small">
+                    <td class="label-col ps-3">{{ row.label }}</td>
+                    {% for v in row.vals %}
+                    <td>{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+                    <td class="label-col">
+                        {% if row.row_id %}<button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>{% endif %}
+                        {{ row.label }}
+                    </td>
+                    {% for v in row.vals %}
+                    <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
+                    {% endfor %}
+                </tr>
+                {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">ФОТ по подразделениям</div><canvas id="fot1Chart" height="200"></canvas></div>
+    </div>
 </div>
 
 <script>
+(function() {
+try {
 const rows = {{ data.rows | tojson }};
 const depts = rows.filter(r => r.kind === 'subtotal');
+const existing = Chart.getChart('fot1Chart');
+if (existing) existing.destroy();
 new Chart(document.getElementById('fot1Chart'), {
     type: 'bar',
     data: {
@@ -49,5 +75,16 @@ new Chart(document.getElementById('fot1Chart'), {
     },
     options: { plugins: { legend: { display: true } }, scales: { x: { stacked: true }, y: { stacked: true } } }
 });
+
+document.querySelectorAll('.tree-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.dataset.target;
+        const expanding = btn.textContent.trim() === '▶';
+        btn.textContent = expanding ? '▼' : '▶';
+        document.querySelectorAll(`tr[data-parent-id="${id}"]`).forEach(tr => { tr.style.display = expanding ? '' : 'none'; });
+    });
+});
+} catch (e) { console.error('fot1 script failed:', e); }
+})();
 </script>
 {% endblock %}

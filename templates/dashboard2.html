@@ -73,14 +73,15 @@
             {% endfor %}
             {% for dv in dvals %}
             {% set di = loop.index0 %}
+            {% set eff = dv * (row.polarity or 1) %}
             {% if row.lines and dv %}
-            <td class="delta-cell {% if dv > 0 %}val-pos{% elif dv < 0 %}val-neg{% endif %}"
-                data-lines='{{ row.lines | tojson }}' data-month="{{ month }}"
-                data-a="{{ data.series[data.deltas[di][0]][0] }}:{{ data.series[data.deltas[di][0]][1] }}"
-                data-b="{{ data.series[data.deltas[di][1]][0] }}:{{ data.series[data.deltas[di][1]][1] }}"
+            <td class="delta-cell {% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}"
+                data-lines='{{ row.lines | tojson }}' data-month="{{ month }}" data-polarity="{{ row.polarity or 1 }}"
+                data-a="{{ data.series[data.deltas[di][0]][0] }}:{{ data.series[data.deltas[di][0]][1] }}:{{ month }}"
+                data-b="{{ data.series[data.deltas[di][1]][0] }}:{{ data.series[data.deltas[di][1]][1] }}:{{ month }}"
                 data-label="{{ row.label }}" data-projects='{{ (row.project or projects or []) | tojson }}'>{{ '%.1f'|format(dv) }}</td>
             {% else %}
-            <td class="{% if dv > 0 %}val-pos{% elif dv < 0 %}val-neg{% endif %}">{{ '%.1f'|format(dv) if dv else '—' }}</td>
+            <td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '%.1f'|format(dv) if dv else '—' }}</td>
             {% endif %}
             {% endfor %}
         </tr>
@@ -91,10 +92,39 @@
 </div>
 {% endmacro %}
 
-{{ block(data.rows, true, 'Месяц') }}
-{{ block(data.rows, false, 'Накопительно с начала года') }}
+<div class="row g-3">
+    <div class="col-lg-8">
+        {{ block(data.rows, true, 'Месяц') }}
+        {{ block(data.rows, false, 'Накопительно с начала года') }}
+    </div>
+    <div class="col-lg-4">
+        <div class="d-flex flex-column gap-3">
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого выручка</div><canvas id="chartRevenue" height="110"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого переменные</div><canvas id="chartVariable" height="110"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого постоянные</div><canvas id="chartFixed" height="110"></canvas></div>
+        </div>
+    </div>
+</div>
 
 <script>
+(function() {
+try {
+const seriesLabels = {{ data.series | tojson }}.map(s => s[0] + ' ' + s[1]);
+const findRow = (label) => {{ data.rows | tojson }}.find(r => r.label === label);
+const mkChart = (id, row) => {
+    if (!row) return;
+    const existing = Chart.getChart(id);
+    if (existing) existing.destroy();
+    new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: { labels: seriesLabels, datasets: [{ data: row.series_month, backgroundColor: row.series_month.map(v => v >= 0 ? '#1a7f37' : '#c0362c') }] },
+        options: { plugins: { legend: { display: false } } }
+    });
+};
+mkChart('chartRevenue', findRow('Итого выручка'));
+mkChart('chartVariable', findRow('Итого переменные'));
+mkChart('chartFixed', findRow('Итого постоянные'));
+
 const PF_OPTIONS = ['факт', 'план', 'прогноз'];
 const YEARS = {{ years | tojson }};
 let seriesState = {{ series_str.split(',') | tojson }}.map(s => { const [pf, y] = s.split(':'); return { pf, year: parseInt(y) }; });
@@ -140,6 +170,8 @@ function renderDeltaRows() {
 }
 
 function removeDelta(idx) { deltasState.splice(idx, 1); renderDeltaRows(); }
+window.removeSeries = removeSeries;
+window.removeDelta = removeDelta;
 
 document.getElementById('addSeriesBtn').onclick = () => { seriesState.push({ pf: 'факт', year: YEARS.at(-1) }); renderSeriesRows(); };
 document.getElementById('addDeltaBtn').onclick = () => { deltasState.push({ i: seriesState.length - 1, j: 0 }); renderDeltaRows(); };
@@ -151,5 +183,7 @@ document.getElementById('applyCompareBtn').onclick = () => {
 };
 
 renderSeriesRows();
+} catch (e) { console.error('dashboard2 script failed:', e); }
+})();
 </script>
 {% endblock %}

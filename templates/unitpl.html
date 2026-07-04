@@ -1,49 +1,106 @@
 {% extends "base.html" %}
 {% block title %}UNIT+PL — Alfa Top Report{% endblock %}
 {% block content %}
-<h4 class="mb-3">UNIT+PL — вся история и план вперёд одной строкой, тыс. руб.</h4>
-<p class="text-secondary small">Факт там, где он есть за месяц; иначе — план (столбцы отмечены курсивом).</p>
-
-<div class="card p-3 mb-4">
-    <canvas id="unitplChart" height="70"></canvas>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">UNIT+PL — вся история и план вперёд одной строкой, тыс. руб.</h4>
+        <p class="text-secondary small mb-0">Факт там, где он есть за месяц; иначе — план (столбцы отмечены курсивом).</p>
+    </div>
+    <form class="d-flex gap-2 align-items-center" method="get">
+        <span class="small text-secondary">Диапазон:</span>
+        <select name="start" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for p in data.full_periods_meta %}
+            <option value="{{ loop.index0 }}" {% if loop.index0 == data.start_idx %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
+        <span class="small text-secondary">—</span>
+        <select name="end" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for p in data.full_periods_meta %}
+            <option value="{{ loop.index0 }}" {% if loop.index0 == data.end_idx %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
+    </form>
 </div>
 
-<div class="card p-3 table-responsive" style="max-height:75vh;">
-    <table class="table report-table mb-0">
-        <thead>
-        <tr>
-            <th class="label-col">Статья</th>
-            {% for p in data.periods %}<th class="{% if data.sources[loop.index0] == 'план' %}fst-italic text-secondary{% endif %}">{{ p }}</th>{% endfor %}
-        </tr>
-        </thead>
-        <tbody>
-        {% for row in data.rows %}
-        {% if row.kind == 'header' %}
-        <tr><td class="label-col fw-bold" colspan="{{ data.periods|length + 1 }}">{{ row.label }}</td></tr>
-        {% else %}
-        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
-            <td class="label-col">{{ row.label }}</td>
-            {% for v in row.vals %}
-            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
-            {% endfor %}
-        </tr>
-        {% endif %}
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card p-3 table-responsive" style="max-height:75vh;">
+            <table class="table report-table mb-0">
+                <thead>
+                <tr>
+                    <th class="label-col">Статья</th>
+                    {% for p in data.periods_meta %}<th class="{% if p.pf == 'план' %}fst-italic text-secondary{% endif %}">{{ p.label }}</th>{% endfor %}
+                    <th>Δ ({{ data.endpoint_a.label }} − {{ data.endpoint_b.label }})</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in data.rows %}
+                {% if row.kind == 'header' %}
+                <tr><td class="label-col fw-bold" colspan="{{ data.periods_meta|length + 2 }}">{{ row.label }}</td></tr>
+                {% else %}
+                <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+                    <td class="label-col">{{ row.label }}</td>
+                    {% for v in row.vals %}
+                    {% set p = data.periods_meta[loop.index0] %}
+                    {% if row.lines and v %}
+                    <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
+                        data-lines='{{ row.lines | tojson }}' data-year="{{ p.year }}" data-month="{{ p.month }}"
+                        data-pf="{{ p.pf }}" data-label="{{ row.label }}" data-focus="statya">{{ '%.1f'|format(v) }}</td>
+                    {% else %}
+                    <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+                    {% endif %}
+                    {% endfor %}
+                    {% set eff = row.endpoint_delta * (row.polarity or 1) %}
+                    {% if row.lines and row.endpoint_delta %}
+                    <td class="delta-cell {% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}"
+                        data-lines='{{ row.lines | tojson }}' data-polarity="{{ row.polarity or 1 }}"
+                        data-a="{{ data.endpoint_a.pf }}:{{ data.endpoint_a.year }}:{{ data.endpoint_a.month }}"
+                        data-b="{{ data.endpoint_b.pf }}:{{ data.endpoint_b.year }}:{{ data.endpoint_b.month }}"
+                        data-label="{{ row.label }}">{{ '%.1f'|format(row.endpoint_delta) }}</td>
+                    {% else %}
+                    <td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '%.1f'|format(row.endpoint_delta) if row.endpoint_delta else '—' }}</td>
+                    {% endif %}
+                </tr>
+                {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="d-flex flex-column gap-3">
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Прибыль / Чистая прибыль</div><canvas id="unitplChart" height="110"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка</div><canvas id="unitplRevenue" height="110"></canvas></div>
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Расходы (переменные + постоянные)</div><canvas id="unitplCost" height="110"></canvas></div>
+        </div>
+    </div>
 </div>
 
 <script>
-new Chart(document.getElementById('unitplChart'), {
-    type: 'line',
-    data: {
-        labels: {{ data.periods | tojson }},
-        datasets: [
-            {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, borderColor: '#000', backgroundColor: 'rgba(0,0,0,0.05)', tension: 0.15},
-            {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15}
-        ]
-    },
-    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
-});
+(function() {
+try {
+const periods = {{ data.periods | tojson }};
+const mk = (id, labels, datasets, type) => {
+    const existing = Chart.getChart(id);
+    if (existing) existing.destroy();
+    new Chart(document.getElementById(id), {
+        type: type || 'line',
+        data: { labels, datasets },
+        options: { plugins: { legend: { display: type !== 'bar' } }, elements: { point: { radius: 0 } } }
+    });
+};
+mk('unitplChart', periods, [
+    {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, borderColor: '#000', backgroundColor: 'rgba(0,0,0,0.05)', tension: 0.15},
+    {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15}
+]);
+mk('unitplRevenue', periods, [
+    {data: {{ data.revenue_series | tojson }}, backgroundColor: '#1a7f37'}
+], 'bar');
+mk('unitplCost', periods, [
+    {data: {{ data.cost_series | tojson }}, backgroundColor: '#c0362c'}
+], 'bar');
+} catch (e) { console.error('unitpl script failed:', e); }
+})();
 </script>
 {% endblock %}

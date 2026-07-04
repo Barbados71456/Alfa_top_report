@@ -19,7 +19,11 @@
     <canvas id="svod2Chart" height="90"></canvas>
 </div>
 
-<p class="text-secondary small">Показаны портфели с наибольшим оборотом за год; остальные — в строке «Прочие» (сумма сходится с итогом точно).</p>
+<p class="text-secondary small">
+    Верхний уровень — группы портфелей (справочник проектов), свёрнуто по умолчанию.
+    Стрелка разворачивает подгруппу, затем — конкретные портфели. «Прочие» — портфели вне
+    справочника; сумма всех строк точно равна итогу.
+</p>
 
 <div class="card p-3 table-responsive">
     <table class="table report-table mb-0">
@@ -28,8 +32,20 @@
         {% for row in data.rows %}
         {% if row.kind == 'header' %}
         <tr><td class="label-col fw-bold" colspan="{{ data.months|length + 1 }}">{{ row.label }}</td></tr>
+        {% elif row.level %}
+        <tr class="tree-row {% if row.level > 1 %}tree-hidden{% endif %}" data-row-id="{{ row.row_id }}" data-parent-id="{{ row.parent_id or '' }}" style="{% if row.level > 1 %}display:none{% endif %}">
+            <td class="label-col" style="padding-left: {{ 0.75 + (row.level - 1) * 1.25 }}rem">
+                {% if row.kind == 'subtotal' %}
+                <button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>
+                {% endif %}
+                {{ row.label }}
+            </td>
+            {% for v in row.vals %}
+            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            {% endfor %}
+        </tr>
         {% else %}
-        <tr class="{% if row.kind in ('subtotal','total') %}row-bold{% endif %}">
+        <tr class="row-bold">
             <td class="label-col">{{ row.label }}</td>
             {% for v in row.vals %}
             <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
@@ -42,20 +58,42 @@
 </div>
 
 <script>
-const rows = {{ data.rows | tojson }};
-const revenue = rows.find(r => r.label === 'Итого выручка');
-const top = rows.filter(r => r.kind === 'line' && r.label !== 'Прочие').slice(0, 10);
-new Chart(document.getElementById('svod2Chart'), {
-    type: 'bar',
-    data: {
-        labels: top.map(r => r.label),
-        datasets: [{
-            label: 'Сумма за год, тыс. руб.',
-            data: top.map(r => r.vals.reduce((a,b) => a+b, 0)),
-            backgroundColor: top.map(r => r.vals.reduce((a,b)=>a+b,0) >= 0 ? '#1a7f37' : '#c0362c')
-        }]
-    },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
-});
+(function() {
+try {
+    const rows = {{ data.rows | tojson }};
+    const top = rows.filter(r => r.level === 1 && r.row_id.startsWith('rev-')).slice(0, 10);
+    const existing = Chart.getChart('svod2Chart');
+    if (existing) existing.destroy();
+    new Chart(document.getElementById('svod2Chart'), {
+        type: 'bar',
+        data: {
+            labels: top.map(r => r.label),
+            datasets: [{
+                label: 'Выручка за год по группам портфелей, тыс. руб.',
+                data: top.map(r => r.vals.reduce((a,b) => a+b, 0)),
+                backgroundColor: top.map(r => r.vals.reduce((a,b)=>a+b,0) >= 0 ? '#1a7f37' : '#c0362c')
+            }]
+        },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+    });
+
+    document.querySelectorAll('.tree-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.target;
+            const expanding = btn.textContent.trim() === '▶';
+            btn.textContent = expanding ? '▼' : '▶';
+            const directChildren = document.querySelectorAll(`tr[data-parent-id="${id}"]`);
+            directChildren.forEach(tr => { tr.style.display = expanding ? '' : 'none'; });
+            if (!expanding) {
+                // сворачивая родителя, сворачиваем и все вложенные уровни
+                directChildren.forEach(tr => {
+                    const childToggle = tr.querySelector('.tree-toggle');
+                    if (childToggle && childToggle.textContent.trim() === '▼') childToggle.click();
+                });
+            }
+        });
+    });
+} catch (e) { console.error('svod2 script failed:', e); }
+})();
 </script>
 {% endblock %}

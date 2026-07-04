@@ -34,10 +34,6 @@
     </div>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="fot2Chart" height="80"></canvas>
-</div>
-
 {% macro block(rows, is_month, title) %}
 <div class="card p-3 table-responsive mb-4">
     <h6 class="text-secondary">{{ title }}</h6>
@@ -53,27 +49,52 @@
         {% for row in rows %}
         {% set vals = row.series_month if is_month else row.series_ytd %}
         {% set dvals = row.delta_month if is_month else row.delta_ytd %}
-        <tr class="{% if row.kind == 'subtotal' %}row-bold{% endif %}">
-            <td class="label-col">{{ row.label }}</td>
-            {% for v in vals %}
-            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>
-            {% endfor %}
-            {% for dv in dvals %}
-            <td class="{% if dv > 0 %}val-pos{% elif dv < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(dv).replace(',', ' ') if dv else '—' }}</td>
-            {% endfor %}
+        {% set polarity = row.polarity or 1 %}
+        {% if row.parent_id %}
+        <tr class="emp-row" data-parent-id="{{ row.parent_id }}" style="display:none">
+            <td class="label-col ps-4">{{ row.label }}</td>
+            {% for v in vals %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+            {% for dv in dvals %}{% set eff = dv * polarity %}<td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(dv).replace(',', ' ') if dv else '—' }}</td>{% endfor %}
         </tr>
+        {% elif row.kind == 'metric' %}
+        <tr class="text-secondary small">
+            <td class="label-col ps-3">{{ row.label }}</td>
+            {% for v in vals %}<td>{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+            {% for dv in dvals %}<td>{{ '{:,.0f}'.format(dv).replace(',', ' ') if dv else '—' }}</td>{% endfor %}
+        </tr>
+        {% else %}
+        <tr class="{% if row.kind == 'subtotal' %}row-bold{% endif %}">
+            <td class="label-col">
+                {% if row.row_id %}<button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>{% endif %}
+                {{ row.label }}
+            </td>
+            {% for v in vals %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+            {% for dv in dvals %}{% set eff = dv * polarity %}<td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(dv).replace(',', ' ') if dv else '—' }}</td>{% endfor %}
+        </tr>
+        {% endif %}
         {% endfor %}
         </tbody>
     </table>
 </div>
 {% endmacro %}
 
-{{ block(data.rows, true, 'Месяц') }}
-{{ block(data.rows, false, 'Накопительно с начала года') }}
+<div class="row g-3">
+    <div class="col-lg-8">
+        {{ block(data.rows, true, 'Месяц') }}
+        {{ block(data.rows, false, 'Накопительно с начала года') }}
+    </div>
+    <div class="col-lg-4">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">ФОТ по подразделениям, последняя колонка</div><canvas id="fot2Chart" height="200"></canvas></div>
+    </div>
+</div>
 
 <script>
+(function() {
+try {
 const rows = {{ data.rows | tojson }};
 const depts = rows.filter(r => r.kind === 'subtotal' && r.label !== 'ФОТ (всего)');
+const existing = Chart.getChart('fot2Chart');
+if (existing) existing.destroy();
 new Chart(document.getElementById('fot2Chart'), {
     type: 'bar',
     data: {
@@ -84,7 +105,16 @@ new Chart(document.getElementById('fot2Chart'), {
             backgroundColor: '#000'
         }]
     },
-    options: { plugins: { legend: { display: false } } }
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+});
+
+document.querySelectorAll('.tree-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.dataset.target;
+        const expanding = btn.textContent.trim() === '▶';
+        btn.textContent = expanding ? '▼' : '▶';
+        document.querySelectorAll(`tr[data-parent-id="${id}"]`).forEach(tr => { tr.style.display = expanding ? '' : 'none'; });
+    });
 });
 
 const PF_OPTIONS = ['факт', 'план', 'прогноз'];
@@ -132,6 +162,8 @@ function renderDeltaRows() {
 }
 
 function removeDelta(idx) { deltasState.splice(idx, 1); renderDeltaRows(); }
+window.removeSeries = removeSeries;
+window.removeDelta = removeDelta;
 
 document.getElementById('addSeriesBtn').onclick = () => { seriesState.push({ pf: 'факт', year: YEARS.at(-1) }); renderSeriesRows(); };
 document.getElementById('addDeltaBtn').onclick = () => { deltasState.push({ i: seriesState.length - 1, j: 0 }); renderDeltaRows(); };
@@ -143,5 +175,7 @@ document.getElementById('applyCompareBtn').onclick = () => {
 };
 
 renderSeriesRows();
+} catch (e) { console.error('fot2 script failed:', e); }
+})();
 </script>
 {% endblock %}

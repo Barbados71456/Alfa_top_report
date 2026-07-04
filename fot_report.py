@@ -25,7 +25,10 @@ def fot1(year, pf='факт', top_n_per_dept=15):
     """ФОТ v1: помесячно за один год, по подразделениям и (топ) сотрудникам.
     Подразделение — из reporting.employees (справочник, редактируется на
     /employees), если сотрудник ещё не докатегоризирован — берётся исходная
-    группировка из FinancialData."Контрагент_report" (fm.dept)."""
+    группировка из FinancialData."Контрагент_report" (fm.dept). Сотрудники
+    свёрнуты по умолчанию — раскрываются кнопкой на строке подразделения.
+    СЗП = ФОТ подразделения / численность (кол-во сотрудников с ненулевым
+    начислением в месяце)."""
     rows_raw = query(
         '''SELECT extract(month FROM fm.period)::int AS m, COALESCE(e.department, fm.dept) AS dept,
                   fm.employee, SUM(fm.amount) AS val
@@ -44,18 +47,35 @@ def fot1(year, pf='факт', top_n_per_dept=15):
     def series(d):
         return [d[m] for m in range(1, 13)]
 
-    rows = []
     total_by_month = {m: 0.0 for m in range(1, 13)}
-    for dept, employees in sorted(depts.items(), key=lambda kv: _dept_sort_key(kv[0])):
+    total_headcount_sets = {m: set() for m in range(1, 13)}
+    dept_rows = []
+    for di, (dept, employees) in enumerate(sorted(depts.items(), key=lambda kv: _dept_sort_key(kv[0]))):
         dept_total = {m: sum(e[m] for e in employees.values()) for m in range(1, 13)}
+        dept_headcount = {m: sum(1 for e in employees.values() if e[m] != 0.0) for m in range(1, 13)}
+        dept_szp = {m: (dept_total[m] / dept_headcount[m] if dept_headcount[m] else 0.0) for m in range(1, 13)}
         for m in range(1, 13):
             total_by_month[m] += dept_total[m]
-        rows.append({'kind': 'subtotal', 'label': dept, 'vals': series(dept_total)})
+            for emp_name, vals in employees.items():
+                if vals[m] != 0.0:
+                    total_headcount_sets[m].add((dept, emp_name))
+
+        row_id = f'dept-{di}'
+        dept_rows.append({'kind': 'subtotal', 'label': dept, 'row_id': row_id, 'vals': series(dept_total)})
+        dept_rows.append({'kind': 'metric', 'label': 'СЗП', 'unit': 'руб', 'vals': series(dept_szp)})
+        dept_rows.append({'kind': 'metric', 'label': 'Численность', 'unit': 'чел', 'vals': series(dept_headcount)})
         top_employees = sorted(employees.items(), key=lambda kv: -sum(abs(v) for v in kv[1].values()))[:top_n_per_dept]
         for emp, vals in top_employees:
-            rows.append({'kind': 'line', 'label': emp, 'vals': series(vals)})
+            dept_rows.append({'kind': 'line', 'label': emp, 'parent_id': row_id, 'vals': series(vals)})
 
-    rows.insert(0, {'kind': 'total', 'label': 'ФОТ (всего)', 'vals': series(total_by_month)})
+    total_headcount = {m: len(total_headcount_sets[m]) for m in range(1, 13)}
+    total_szp = {m: (total_by_month[m] / total_headcount[m] if total_headcount[m] else 0.0) for m in range(1, 13)}
+
+    rows = [
+        {'kind': 'total', 'label': 'ФОТ (всего)', 'vals': series(total_by_month)},
+        {'kind': 'metric', 'label': 'СЗП (всего)', 'unit': 'руб', 'vals': series(total_szp)},
+        {'kind': 'metric', 'label': 'Численность (всего)', 'unit': 'чел', 'vals': series(total_headcount)},
+    ] + dept_rows
     return {'rows': rows, 'months': MONTHS_RU}
 
 
@@ -91,17 +111,31 @@ def _batched_fetch(years, month, pf):
     return to_map(run('=')), to_map(run('<='))
 
 
-def _series_row(label, series, deltas, month_map, ytd_map, bold=False):
+def _series_row(label, series, deltas, month_map, ytd_map, bold=False, row_id=None, parent_id=None, kind=None, polarity=1):
     sm = [month_map.get(key, 0.0) for key in series]
     sy = [ytd_map.get(key, 0.0) for key in series]
-    return {
-        'kind': 'subtotal' if bold else 'line',
+    row = {
+        'kind': kind or ('subtotal' if bold else 'line'),
         'label': label,
         'series_month': sm,
         'series_ytd': sy,
         'delta_month': [sm[i] - sm[j] for i, j in deltas],
         'delta_ytd': [sy[i] - sy[j] for i, j in deltas],
+        'polarity': polarity,
     }
+    if row_id:
+        row['row_id'] = row_id
+    if parent_id:
+        row['parent_id'] = parent_id
+    return row
+
+
+def _headcount(data, pf, yr, dept=None):
+    emps = set()
+    for (p_, y_, d_, e_), v in data.items():
+        if p_ == pf and y_ == yr and (dept is None or d_ == dept) and v != 0:
+            emps.add(e_)
+    return len(emps)
 
 
 def fot2(month, series, deltas, top_n_per_dept=10):
@@ -136,10 +170,25 @@ def fot2(month, series, deltas, top_n_per_dept=10):
     ym = {(pf, yr): agg(ytd_map, pf, yr) for pf, yr in series}
     rows.append(_series_row('ФОТ (всего)', series, deltas, mm, ym, bold=True))
 
-    for dept in depts:
+    hc_mm = {(pf, yr): _headcount(month_map, pf, yr) for pf, yr in series}
+    hc_ym = {(pf, yr): _headcount(ytd_map, pf, yr) for pf, yr in series}
+    szp_mm = {(pf, yr): (mm[(pf, yr)] / hc_mm[(pf, yr)] if hc_mm[(pf, yr)] else 0.0) for pf, yr in series}
+    szp_ym = {(pf, yr): (ym[(pf, yr)] / hc_ym[(pf, yr)] if hc_ym[(pf, yr)] else 0.0) for pf, yr in series}
+    rows.append(_series_row('СЗП (всего)', series, deltas, szp_mm, szp_ym, kind='metric'))
+    rows.append(_series_row('Численность (всего)', series, deltas, hc_mm, hc_ym, kind='metric'))
+
+    for di, dept in enumerate(depts):
+        row_id = f'dept-{di}'
         mmd = {(pf, yr): agg(month_map, pf, yr, dept=dept) for pf, yr in series}
         ymd = {(pf, yr): agg(ytd_map, pf, yr, dept=dept) for pf, yr in series}
-        rows.append(_series_row(dept, series, deltas, mmd, ymd, bold=True))
+        rows.append(_series_row(dept, series, deltas, mmd, ymd, bold=True, row_id=row_id))
+
+        hc_mmd = {(pf, yr): _headcount(month_map, pf, yr, dept=dept) for pf, yr in series}
+        hc_ymd = {(pf, yr): _headcount(ytd_map, pf, yr, dept=dept) for pf, yr in series}
+        szp_mmd = {(pf, yr): (mmd[(pf, yr)] / hc_mmd[(pf, yr)] if hc_mmd[(pf, yr)] else 0.0) for pf, yr in series}
+        szp_ymd = {(pf, yr): (ymd[(pf, yr)] / hc_ymd[(pf, yr)] if hc_ymd[(pf, yr)] else 0.0) for pf, yr in series}
+        rows.append(_series_row('СЗП', series, deltas, szp_mmd, szp_ymd, kind='metric'))
+        rows.append(_series_row('Численность', series, deltas, hc_mmd, hc_ymd, kind='metric'))
 
         employees = sorted(
             {e for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year and d == dept},
@@ -148,6 +197,6 @@ def fot2(month, series, deltas, top_n_per_dept=10):
         for emp in employees:
             mme = {(pf, yr): agg(month_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
             yme = {(pf, yr): agg(ytd_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
-            rows.append(_series_row(emp, series, deltas, mme, yme))
+            rows.append(_series_row(emp, series, deltas, mme, yme, parent_id=row_id))
 
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
