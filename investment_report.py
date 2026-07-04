@@ -341,3 +341,25 @@ def add_alias(portfolio_id, project_name):
 
 def remove_alias(project_name):
     execute('DELETE FROM reporting.dp_portfolio_aliases WHERE project_name = %s', (project_name,))
+
+
+def export_summary(rows):
+    headers = ['Портфель', 'Дата покупки', 'Ед.', 'ОСЗ, руб', 'Цена, руб', 'Собрано, руб',
+               'Остаток, руб', 'Собираемость %', 'ДП без аллок., руб', 'ДП с аллок., руб',
+               'Окупаемость без аллок., мес', 'Окупаемость с аллок., мес']
+    out = [
+        [r['name'], r['purchase_date'], r['units'], r['face_value_rub'], r['price_rub'],
+         r['collected_revenue'], r['remaining_balance'], r['collection_pct'],
+         r['cf_to_date_no_alloc'], r['cf_to_date_with_alloc'], r['payback_no_alloc'], r['payback_with_alloc']]
+        for r in rows
+    ]
+    return [('Инвестанализ - свод', headers, out)]
+
+
+def export_detail(data):
+    headers = ['Период', 'Возраст', 'pf', 'Выручка', 'Расходы', 'Инвестиция', 'ДП', 'Накопленный ДП', 'Остаток портфеля']
+    rows = [
+        [r['label'], r['age'], r['pf'], r['revenue'], r['cost'], r['investment'], r['cf'], r['pv'], r['remaining_balance']]
+        for r in data['rows']
+    ]
+    return [(data['portfolio']['canonical_name'][:31], headers, rows)]

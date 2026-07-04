@@ -4,16 +4,20 @@ import threading
 from datetime import date
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 
 from config import Config
-from auth import login_required, admin_required, authenticate_user
+from auth import admin_required, report_required, classifier_required, authenticate_user, set_password
+from auth import hash_password as auth_hash_password
 from db import query, execute, close_connection
 from reporting_refresh import refresh_all
 import pl_report as pr
 import fot_report as fr
 import loans_report as lr
 import investment_report as ir
+import audit
+import chat_assistant
+import export
 
 logging.basicConfig(level=logging.INFO)
 
@@ -127,7 +131,7 @@ def logout():
 
 
 @app.route('/overview')
-@login_required
+@report_required
 def overview():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -144,7 +148,7 @@ def overview():
 
 
 @app.route('/svod1')
-@login_required
+@report_required
 def svod1():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -154,7 +158,7 @@ def svod1():
 
 
 @app.route('/api/cell_detail')
-@login_required
+@report_required
 def api_cell_detail():
     lines = request.args.getlist('line')
     year = request.args.get('year', type=int)
@@ -172,7 +176,7 @@ def api_cell_detail():
 
 
 @app.route('/svod2')
-@login_required
+@report_required
 def svod2():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -182,7 +186,7 @@ def svod2():
 
 
 @app.route('/unitpl')
-@login_required
+@report_required
 def unitpl():
     start = request.args.get('start', type=int)
     end = request.args.get('end', type=int)
@@ -191,7 +195,7 @@ def unitpl():
 
 
 @app.route('/api/deviation_detail')
-@login_required
+@report_required
 def api_deviation_detail():
     lines = request.args.getlist('line')
     projects = request.args.getlist('project') or None
@@ -215,7 +219,7 @@ def api_deviation_detail():
 
 
 @app.route('/dashboard1')
-@login_required
+@report_required
 def dashboard1():
     years = pr.get_available_years()
     month = request.args.get('month', type=int) or date.today().month
@@ -230,7 +234,7 @@ def dashboard1():
 
 
 @app.route('/dashboard2')
-@login_required
+@report_required
 def dashboard2():
     years = pr.get_available_years()
     month = request.args.get('month', type=int) or date.today().month
@@ -245,7 +249,7 @@ def dashboard2():
 
 
 @app.route('/fot1')
-@login_required
+@report_required
 def fot1():
     years = fr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -255,7 +259,7 @@ def fot1():
 
 
 @app.route('/fot2')
-@login_required
+@report_required
 def fot2():
     years = fr.get_available_years()
     month = request.args.get('month', type=int) or date.today().month
@@ -273,7 +277,7 @@ def fot2():
 
 
 @app.route('/loans')
-@login_required
+@report_required
 def loans():
     periods = lr.get_available_periods()
     years = sorted({p.year for p in periods}) if periods else [date.today().year]
@@ -286,7 +290,7 @@ def loans():
 
 
 @app.route('/counterparty')
-@login_required
+@report_required
 def counterparty():
     contragent = request.args.get('name', '').strip()
     pf = request.args.get('pf', 'факт')
@@ -304,14 +308,14 @@ def counterparty():
 
 
 @app.route('/investment')
-@login_required
+@report_required
 def investment():
     rows = ir.all_dp_summary()
     return render_template('investment_summary.html', rows=rows)
 
 
 @app.route('/investment/<path:name>')
-@login_required
+@report_required
 def investment_detail(name):
     include_allocation = request.args.get('allocation', '1') != '0'
     data = ir.portfolio_detail(name, include_allocation)
@@ -322,7 +326,7 @@ def investment_detail(name):
 
 
 @app.route('/investment/admin')
-@admin_required
+@classifier_required
 def investment_admin():
     portfolios = ir.get_dp_portfolios()
     for p in portfolios:
@@ -332,7 +336,7 @@ def investment_admin():
 
 
 @app.route('/investment/admin/<int:portfolio_id>', methods=['POST'])
-@admin_required
+@classifier_required
 def investment_admin_update(portfolio_id):
     ir.update_portfolio(
         portfolio_id,
@@ -342,12 +346,13 @@ def investment_admin_update(portfolio_id):
         request.form.get('price_rub') or None,
         request.form.get('notes', '').strip(),
     )
+    audit.log_action(session.get('username'), 'edit_investment_portfolio', f'portfolio_id={portfolio_id}')
     flash('Карточка портфеля обновлена', 'success')
     return redirect(url_for('investment_admin'))
 
 
 @app.route('/investment/admin/new', methods=['POST'])
-@admin_required
+@classifier_required
 def investment_admin_new():
     name = request.form.get('canonical_name', '').strip()
     if name:
@@ -364,33 +369,36 @@ def investment_admin_new():
             portfolio = query('SELECT id FROM reporting.dp_portfolios WHERE canonical_name = %s', (name,))
             if portfolio:
                 ir.add_alias(portfolio[0]['id'], alias_for)
+        audit.log_action(session.get('username'), 'create_investment_portfolio', name)
         flash(f'Портфель «{name}» создан', 'success')
     return redirect(url_for('investment_admin'))
 
 
 @app.route('/investment/admin/alias', methods=['POST'])
-@admin_required
+@classifier_required
 def investment_admin_add_alias():
     portfolio_id = request.form.get('portfolio_id', type=int)
     project_name = request.form.get('project_name', '').strip()
     if portfolio_id and project_name:
         ir.add_alias(portfolio_id, project_name)
+        audit.log_action(session.get('username'), 'add_investment_alias', f'{project_name} -> portfolio_id={portfolio_id}')
         flash(f'«{project_name}» привязан к портфелю', 'success')
     return redirect(url_for('investment_admin'))
 
 
 @app.route('/investment/admin/alias/remove', methods=['POST'])
-@admin_required
+@classifier_required
 def investment_admin_remove_alias():
     project_name = request.form.get('project_name', '').strip()
     if project_name:
         ir.remove_alias(project_name)
+        audit.log_action(session.get('username'), 'remove_investment_alias', project_name)
         flash(f'«{project_name}» отвязан', 'success')
     return redirect(url_for('investment_admin'))
 
 
 @app.route('/employees')
-@admin_required
+@classifier_required
 def employees():
     search = request.args.get('q', '').strip()
     sql = 'SELECT contragent, department, position, status FROM reporting.employees'
@@ -404,7 +412,7 @@ def employees():
 
 
 @app.route('/employees/<contragent>', methods=['POST'])
-@admin_required
+@classifier_required
 def employees_update(contragent):
     department = request.form.get('department', '').strip()
     if department == '__custom__':
@@ -415,12 +423,13 @@ def employees_update(contragent):
         (department or None, request.form.get('position', '').strip() or None,
          request.form.get('status', 'Работает'), contragent)
     )
+    audit.log_action(session.get('username'), 'edit_employee', contragent)
     flash(f'Данные сотрудника «{contragent}» обновлены', 'success')
     return redirect(url_for('employees', q=request.form.get('q', '')))
 
 
 @app.route('/classifier')
-@admin_required
+@classifier_required
 def classifier():
     search = request.args.get('q', '').strip()
     sql = 'SELECT * FROM dim_level_report'
@@ -434,7 +443,7 @@ def classifier():
 
 
 @app.route('/classifier/<int:row_id>', methods=['POST'])
-@admin_required
+@classifier_required
 def classifier_update(row_id):
     execute(
         '''UPDATE dim_level_report
@@ -448,8 +457,175 @@ def classifier_update(row_id):
             row_id,
         )
     )
+    audit.log_action(session.get('username'), 'edit_classifier', f'row_id={row_id}')
     flash('Строка обновлена', 'success')
     return redirect(url_for('classifier', q=request.form.get('q', '')))
+
+
+@app.route('/admin/log')
+@admin_required
+def admin_log():
+    search = request.args.get('q', '').strip()
+    rows = audit.get_log(search)
+    return render_template('admin_log.html', rows=rows, search=search)
+
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    rows = query('SELECT id, username, email, role, is_active, created_at FROM users ORDER BY username')
+    return render_template('admin_users.html', rows=rows)
+
+
+@app.route('/admin/users/create', methods=['POST'])
+@admin_required
+def admin_users_create():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    role = request.form.get('role', 'shareholder')
+    email = request.form.get('email', '').strip() or None
+    if username and password:
+        execute(
+            'INSERT INTO users (username, password_hash, email, role, is_active) VALUES (%s, %s, %s, %s, true)',
+            (username, auth_hash_password(password), email, role)
+        )
+        audit.log_action(session.get('username'), 'create_user', f'{username} ({role})')
+        flash(f'Пользователь «{username}» создан', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/update', methods=['POST'])
+@admin_required
+def admin_users_update(user_id):
+    role = request.form.get('role')
+    is_active = request.form.get('is_active') == 'on'
+    execute('UPDATE users SET role = %s, is_active = %s WHERE id = %s', (role, is_active, user_id))
+    audit.log_action(session.get('username'), 'update_user', f'user_id={user_id} role={role} is_active={is_active}')
+    flash('Пользователь обновлён', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/password', methods=['POST'])
+@admin_required
+def admin_users_password(user_id):
+    new_password = request.form.get('password', '')
+    user = query('SELECT username FROM users WHERE id = %s', (user_id,))
+    if user and new_password:
+        set_password(user[0]['username'], new_password)
+        audit.log_action(session.get('username'), 'reset_password', f'user_id={user_id}')
+        flash(f'Пароль для «{user[0]["username"]}» обновлён', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/export/<kind>')
+@report_required
+def export_report(kind):
+    try:
+        if kind == 'svod1':
+            years = pr.get_available_years()
+            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+            pf = request.args.get('pf', 'факт')
+            sheets = pr.export_svod1(pr.svod1(year, pf))
+        elif kind == 'svod2':
+            years = pr.get_available_years()
+            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+            pf = request.args.get('pf', 'факт')
+            sheets = pr.export_svod2(pr.svod2(year, pf))
+        elif kind == 'dashboard1':
+            years = pr.get_available_years()
+            month = request.args.get('month', type=int) or date.today().month
+            series, deltas = _series_deltas_from_request(years)
+            projects = request.args.getlist('project') or None
+            sheets = pr.export_dashboard(pr.dashboard1(month, series, deltas, projects), 'Dashboard1')
+        elif kind == 'dashboard2':
+            years = pr.get_available_years()
+            month = request.args.get('month', type=int) or date.today().month
+            series, deltas = _series_deltas_from_request(years)
+            projects = request.args.getlist('project') or None
+            sheets = pr.export_dashboard(pr.dashboard2(month, series, deltas, projects), 'Dashboard2')
+        elif kind == 'unitpl':
+            start = request.args.get('start', type=int)
+            end = request.args.get('end', type=int)
+            sheets = pr.export_unitpl(pr.unit_pl(start=start, end=end))
+        elif kind == 'fot1':
+            years = fr.get_available_years()
+            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+            pf = request.args.get('pf', 'факт')
+            sheets = fr.export_fot1(fr.fot1(year, pf))
+        elif kind == 'fot2':
+            years = fr.get_available_years()
+            month = request.args.get('month', type=int) or date.today().month
+            series = _parse_series(request.args.get('series'))
+            deltas = _parse_deltas(request.args.get('deltas'))
+            if series is None or deltas is None:
+                default_series, default_deltas = fr.default_series_deltas(years)
+                series = series or default_series
+                deltas = deltas or default_deltas
+            sheets = fr.export_fot2(fr.fot2(month, series, deltas))
+        elif kind == 'loans':
+            periods = lr.get_available_periods()
+            years = sorted({p.year for p in periods}) if periods else [date.today().year]
+            year = request.args.get('year', type=int) or years[-1]
+            month = request.args.get('month', type=int) or date.today().month
+            pf = request.args.get('pf', 'факт')
+            sheets = lr.export_loans(lr.loans(year, month, pf))
+        elif kind == 'counterparty':
+            contragent = request.args.get('name', '').strip()
+            if not contragent:
+                return {'error': 'name обязателен'}, 400
+            pf = request.args.get('pf', 'факт')
+            project = request.args.get('project', '').strip() or None
+            default_from, default_to = pr.default_counterparty_range(pf)
+            date_from = request.args.get('date_from') or default_from.isoformat()
+            date_to = request.args.get('date_to') or default_to.isoformat()
+            sheets = pr.export_counterparty(pr.counterparty_series(contragent, pf, project, date_from, date_to))
+        elif kind == 'overview':
+            years = pr.get_available_years()
+            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+            pf = request.args.get('pf', 'факт')
+            sheets = pr.export_overview(pr.overview_data(year, pf))
+        elif kind == 'investment':
+            sheets = ir.export_summary(ir.all_dp_summary())
+        elif kind == 'investment_detail':
+            name = request.args.get('name', '')
+            include_allocation = request.args.get('allocation', '1') != '0'
+            data = ir.portfolio_detail(name, include_allocation)
+            if data is None:
+                return {'error': 'Портфель не найден'}, 404
+            sheets = ir.export_detail(data)
+        else:
+            return {'error': f'Неизвестный отчёт: {kind}'}, 404
+    except Exception:
+        app.logger.exception('Ошибка экспорта kind=%s', kind)
+        return {'error': 'Ошибка при формировании отчёта'}, 500
+
+    audit.log_action(session.get('username'), 'export', kind)
+    buf = export.build_workbook(sheets)
+    return send_file(
+        buf, as_attachment=True, download_name=f'{kind}.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@app.route('/chat')
+@report_required
+def chat():
+    return render_template('chat.html', configured=bool(Config.ANTHROPIC_API_KEY))
+
+
+@app.route('/api/chat', methods=['POST'])
+@report_required
+def api_chat():
+    payload = request.get_json(silent=True) or {}
+    question = (payload.get('question') or '').strip()
+    history = payload.get('history') or []
+    if not question:
+        return jsonify({'error': 'Пустой вопрос'}), 400
+    result = chat_assistant.ask(question, history)
+    audit.log_action(session.get('username'), 'chat', question[:500])
+    if 'error' in result:
+        return jsonify(result), 200
+    return jsonify(result)
 
 
 if __name__ == '__main__':

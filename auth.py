@@ -5,6 +5,7 @@ from functools import wraps
 from flask import session, redirect, url_for, flash, request
 
 from db import query_one, execute
+import audit
 
 auth_logger = logging.getLogger('auth')
 auth_logger.setLevel(logging.INFO)
@@ -40,15 +41,24 @@ def login_required(f):
     return decorated_function
 
 
-def admin_required(f):
-    @wraps(f)
-    @login_required
-    def decorated_function(*args, **kwargs):
-        if session.get('role') != 'admin':
-            flash('Недостаточно прав', 'danger')
-            return redirect(url_for('svod'))
-        return f(*args, **kwargs)
-    return decorated_function
+def role_required(*roles):
+    """Доступ только ролям из roles. Роли: admin, accountant (бухгалтер),
+    shareholder (акционер)."""
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if session.get('role') not in roles:
+                flash('Недостаточно прав', 'danger')
+                return redirect(url_for('svod1'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+admin_required = role_required('admin')
+report_required = role_required('admin', 'accountant', 'shareholder')
+classifier_required = role_required('admin', 'accountant')
 
 
 def authenticate_user(username, password):
@@ -58,17 +68,21 @@ def authenticate_user(username, password):
     )
     if not user:
         _log(username, 'Вход в систему', success=False, extra_info='Пользователь не найден')
+        audit.log_action(username, 'login_failed', 'Пользователь не найден')
         return False, None
 
     if user['is_active'] is False:
         _log(username, 'Вход в систему', success=False, extra_info='Пользователь не активен')
+        audit.log_action(username, 'login_failed', 'Пользователь не активен')
         return False, None
 
     if user['password_hash'] != hash_password(password):
         _log(username, 'Вход в систему', success=False, extra_info='Неверный пароль')
+        audit.log_action(username, 'login_failed', 'Неверный пароль')
         return False, None
 
     _log(username, 'Вход в систему', success=True)
+    audit.log_action(username, 'login', 'Успешный вход')
     return True, {'id': user['id'], 'username': user['username'], 'role': user['role']}
 
 

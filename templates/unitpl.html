@@ -20,6 +20,7 @@
             {% endfor %}
         </select>
         <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='unitpl') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </form>
 </div>
 

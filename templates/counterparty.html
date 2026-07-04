@@ -28,15 +28,18 @@
 </form>
 
 {% if data %}
-<div class="d-flex gap-3 mb-3">
-    <div class="card p-3 flex-fill">
-        <div class="text-secondary small">Выручка всего</div>
-        <div class="fs-4 val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
+<div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+    <div class="d-flex gap-3 flex-grow-1">
+        <div class="card p-3 flex-fill">
+            <div class="text-secondary small">Выручка всего</div>
+            <div class="fs-4 val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
+        </div>
+        <div class="card p-3 flex-fill">
+            <div class="text-secondary small">Затраты всего</div>
+            <div class="fs-4 val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
+        </div>
     </div>
-    <div class="card p-3 flex-fill">
-        <div class="text-secondary small">Затраты всего</div>
-        <div class="fs-4 val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
-    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='counterparty') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
 </div>
 
 <div class="row g-3">

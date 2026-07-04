@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Журнал действий — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Журнал действий</h4>
+<form class="mb-3" method="get">
+    <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по пользователю/действию/деталям" value="{{ search }}">
+</form>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead><tr><th>Когда</th><th>Пользователь</th><th>Действие</th><th>Детали</th><th>IP</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.created_at.strftime('%d.%m.%Y %H:%M:%S') if r.created_at else '—' }}</td>
+            <td>{{ r.username or '—' }}</td>
+            <td>{{ r.action }}</td>
+            <td>{{ r.details or '—' }}</td>
+            <td class="text-secondary small">{{ r.ip_address or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-secondary">Записей нет</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

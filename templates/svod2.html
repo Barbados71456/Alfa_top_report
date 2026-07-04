@@ -12,6 +12,7 @@
             <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
             <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
         </select>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='svod2') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </form>
 </div>
 

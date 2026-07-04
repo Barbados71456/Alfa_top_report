@@ -11,6 +11,7 @@
             <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
             <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
         </select>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='fot1') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </form>
 </div>
 

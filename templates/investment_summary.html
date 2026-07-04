@@ -6,7 +6,10 @@
         <h4 class="mb-0">Инвестиционный анализ портфелей DP — свод</h4>
         <p class="text-secondary small mb-0">Окупаемость и денежный поток посчитаны дважды: без учёта и с учётом распределения общих расходов.</p>
     </div>
-    {% if session.get('role') == 'admin' %}<a href="{{ url_for('investment_admin') }}" class="btn btn-sm btn-outline-dark">Справочник портфелей</a>{% endif %}
+    <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment') }}">Скачать Excel</a>
+        {% if session.get('role') == 'admin' %}<a href="{{ url_for('investment_admin') }}" class="btn btn-sm btn-outline-dark">Справочник портфелей</a>{% endif %}
+    </div>
 </div>
 
 <div class="row g-3 mb-3">

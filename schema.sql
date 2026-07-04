@@ -139,3 +139,16 @@ CREATE TABLE IF NOT EXISTS reporting.dp_portfolio_aliases (
     dp_portfolio_id INTEGER NOT NULL REFERENCES reporting.dp_portfolios(id) ON DELETE CASCADE,
     project_name TEXT UNIQUE NOT NULL
 );
+
+-- Аудит-лог: вход, правки классификаторов/справочников, экспорт в Excel, вопросы в чат.
+-- Пишется через audit.log_action(), просматривается на /admin/log.
+CREATE TABLE IF NOT EXISTS reporting.audit_log (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    username TEXT,
+    action TEXT NOT NULL,
+    details TEXT,
+    ip_address TEXT
+);
+CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON reporting.audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_log_username_idx ON reporting.audit_log (username);

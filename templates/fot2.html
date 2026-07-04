@@ -13,6 +13,7 @@
             <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
         </form>
         <button class="btn btn-sm btn-outline-dark" type="button" data-bs-toggle="collapse" data-bs-target="#compareEditor">Настроить сравнение</button>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='fot2') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </div>
 </div>
 

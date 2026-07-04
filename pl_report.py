@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import date
 
 from db import query
+import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 
@@ -781,3 +782,50 @@ def overview_data(year, pf='факт'):
         'total_variable': abs(sum(variable_cur)), 'total_fixed': abs(sum(fixed_cur)),
         'top_projects': [{'project': p, 'revenue': v} for p, v in top_projects],
     }
+
+
+def export_svod1(data):
+    headers = ['Статья'] + data['months']
+    return [('Свод1', headers, export.flatten_rows(data['rows'], ('vals',)))]
+
+
+def export_svod2(data):
+    headers = ['Портфель'] + data['months']
+    return [('Свод2', headers, export.flatten_rows(data['rows'], ('vals',)))]
+
+
+def export_unitpl(data):
+    headers = ['Статья'] + data['periods'] + [f"Δ ({data['endpoint_a']['label']}-{data['endpoint_b']['label']})"]
+    return [('UNIT+PL', headers, export.flatten_rows(data['rows'], ('vals', 'endpoint_delta')))]
+
+
+def _dashboard_headers(data):
+    series_headers = [f'{pf} {y}' for pf, y in data['series']]
+    delta_headers = [f'Δ ({data["series"][i][0]}{data["series"][i][1]}-{data["series"][j][0]}{data["series"][j][1]})'
+                      for i, j in data['deltas']]
+    return ['Статья'] + series_headers + delta_headers
+
+
+def export_dashboard(data, sheet_prefix):
+    headers = _dashboard_headers(data)
+    month_rows = export.flatten_rows(data['rows'], ('series_month', 'delta_month'))
+    ytd_rows = export.flatten_rows(data['rows'], ('series_ytd', 'delta_ytd'))
+    return [(f'{sheet_prefix} Месяц', headers, month_rows), (f'{sheet_prefix} Накопительно', headers, ytd_rows)]
+
+
+def export_overview(data):
+    headers = ['Месяц', f'Выручка {data["year"]}', f'Выручка {data["prev_year"]}',
+               f'Прибыль {data["year"]}', f'Прибыль {data["prev_year"]}',
+               f'Чистая прибыль {data["year"]}', f'GM% {data["year"]}', f'GM% {data["prev_year"]}']
+    rows = [
+        [m, data['revenue_cur'][i], data['revenue_prev'][i], data['profit_cur'][i], data['profit_prev'][i],
+         data['net_profit_cur'][i], data['gm_pct_cur'][i], data['gm_pct_prev'][i]]
+        for i, m in enumerate(data['months'])
+    ]
+    return [('Обзор', headers, rows)]
+
+
+def export_counterparty(data):
+    headers = ['Месяц', 'Выручка', 'Затраты', 'Нетто']
+    rows = [[r['period'], r['revenue'], r['cost'], r['net']] for r in data['table']]
+    return [('По контрагенту', headers, rows)]

@@ -7,9 +7,12 @@
         <h4 class="mb-0">{{ name }}</h4>
         <p class="text-secondary small mb-0">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — карточка не привязана к данным' }}</p>
     </div>
-    <div class="btn-group btn-group-sm">
-        <a class="btn btn-outline-dark {% if not include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=0) }}">Без учёта распределения</a>
-        <a class="btn btn-outline-dark {% if include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=1) }}">С учётом распределения</a>
+    <div class="d-flex gap-2">
+        <div class="btn-group btn-group-sm">
+            <a class="btn btn-outline-dark {% if not include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=0) }}">Без учёта распределения</a>
+            <a class="btn btn-outline-dark {% if include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=1) }}">С учётом распределения</a>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment_detail') }}?name={{ name | urlencode }}&amp;allocation={{ 1 if include_allocation else 0 }}">Скачать Excel</a>
     </div>
 </div>
 

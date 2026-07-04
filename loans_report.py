@@ -11,6 +11,7 @@ import calendar
 from datetime import date
 
 from db import query
+import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 
@@ -95,3 +96,10 @@ def loans_balance_series(pf='факт'):
         (pf,)
     )
     return {'periods': [r['period'].strftime('%Y-%m') for r in rows], 'vals': [float(r['val'] or 0) for r in rows]}
+
+
+def export_loans(data):
+    headers = ['Кредитор', 'На начало', 'Привлечение', 'Возврат', 'На конец', 'Проценты', 'Ставка, %']
+    rows = [[r['lender'], r['opening'], r['draw'], r['repay'], r['closing'], r['interest'], r['rate_pct']]
+            for r in data['rows']]
+    return [('Займы', headers, rows)]
