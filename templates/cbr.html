@@ -4,59 +4,174 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
         <h4 class="mb-0">CBR (Cash Back Rate) — собираемость по месяцам</h4>
-        <p class="text-secondary small mb-0">CBR от ОСЗ = платежи за месяц / остаток общей задолженности на конец месяца; CBR от ОД — то же от основного долга.</p>
+        <p class="text-secondary small mb-0">CBR от ОСЗ = платежи за месяц / остаток общей задолженности на конец месяца; CBR от ОД — то же от основного долга. Структура вкладок и срезов — как в исходном BI-отчёте.</p>
     </div>
-    <form class="d-flex gap-2" method="get">
-        <select name="dim" class="form-select form-select-sm" onchange="this.form.submit()">
-            {% for key, label in dim_labels.items() %}<option value="{{ key }}" {% if dim==key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='cbr') }}">Скачать Excel</a>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-1" id="cbrFilterForm">
+    <div class="col-auto">
+        <label class="form-label small mb-0">Отдел</label>
+        <select multiple name="dept" class="form-select form-select-sm" style="min-width:150px" onchange="this.form.submit()">
+            {% for d in filter_options.departments %}<option value="{{ d }}" {% if d in dept %}selected{% endif %}>{{ d }}</option>{% endfor %}
         </select>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='cbr') }}">Скачать Excel</a>
+    </div>
+    <div class="col-auto">
+        <label class="form-label small mb-0">Регион (сотрудника)</label>
+        <select multiple name="emp_region" class="form-select form-select-sm" style="min-width:150px" onchange="this.form.submit()">
+            {% for r in filter_options.emp_regions %}<option value="{{ r }}" {% if r in emp_region %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label small mb-0">Сотрудник</label>
+        <select multiple name="employee" class="form-select form-select-sm" style="min-width:150px" onchange="this.form.submit()">
+            {% for e in filter_options.employees %}<option value="{{ e }}" {% if e in employee %}selected{% endif %}>{{ e }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label small mb-0">Сеть</label>
+        <select name="network" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="network" {% if network_param=='network' %}selected{% endif %}>Сеть</option>
+            <option value="non_network" {% if network_param=='non_network' %}selected{% endif %}>не Сеть</option>
+            <option value="all" {% if network_param=='all' %}selected{% endif %}>Все</option>
+        </select>
+    </div>
+</form>
+<p class="text-secondary small mb-3">Отдел / Регион (сотрудника) / Сотрудник влияют только на вкладки «ОСЗ/ОД Сбор» и «ОСЗ/ОД CBR». «Сеть» — если у записи заполнено поле «Сотрудник», иначе «не Сеть»; влияет на все вкладки, кроме «Таблица».</p>
+
+<ul class="nav nav-tabs mb-3" id="cbrTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-table" type="button">Таблица</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-collect" type="button">ОСЗ/ОД Сбор</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cbr" type="button">ОСЗ/ОД CBR</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-partners" type="button">Партнёры</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-regions" type="button">Регионы</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-extra" type="button">Дополнительно</button></li>
+</ul>
+
+<div class="tab-content">
+
+<div class="tab-pane fade show active" id="tab-table">
+    <div class="card p-3 table-responsive mb-3">
+        <table class="table report-table mb-0">
+            <thead><tr><th class="label-col">Показатель</th>{% for m in table_data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            <tr><td class="label-col">ОСЗ всего, тыс.руб</td>{% for v in table_data.total_debt %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">ОСЗ всего, шт</td>{% for v in table_data.do_count %}<td>{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Платежей за месяц, тыс.руб</td>{% for v in table_data.payment_amount %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Платежей за месяц, шт</td>{% for v in table_data.payment_count %}<td>{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Основной долг, тыс.руб</td>{% for v in table_data.principal_debt %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr class="row-bold"><td class="label-col">CBR от ОСЗ, %</td>{% for v in table_data.cbr_osz %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            <tr class="row-bold"><td class="label-col">CBR от ОД, %</td>{% for v in table_data.cbr_od %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="card p-3 table-responsive">
+        <h6 class="text-secondary">CBR от ОСЗ, % — по текущему кредитору</h6>
+        <table class="table report-table mb-0">
+            <thead><tr><th class="label-col">Кредитор</th>{% for m in creditor_pivot_all.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for c in creditor_pivot_all.creditors %}
+            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_all.matrix[c] %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="tab-collect">
+    <div class="row g-3">
+        <div class="col-lg-6"><div class="card p-2"><div class="small text-secondary ps-2 pt-1">ОСЗ всего, тыс.руб + Платежи за месяц, тыс.руб</div><canvas id="chartCollect1" height="200"></canvas></div></div>
+        <div class="col-lg-6"><div class="card p-2"><div class="small text-secondary ps-2 pt-1">Основной долг, тыс.руб + Платежи за месяц, тыс.руб</div><canvas id="chartCollect2" height="200"></canvas></div></div>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="tab-cbr">
+    <div class="row g-3">
+        <div class="col-lg-6"><div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR от ОСЗ, % + ОСЗ всего, тыс.руб</div><canvas id="chartCbr1" height="200"></canvas></div></div>
+        <div class="col-lg-6"><div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR от ОД, % + Основной долг, тыс.руб</div><canvas id="chartCbr2" height="200"></canvas></div></div>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="tab-partners">
+    <div class="card p-3 table-responsive">
+        <table class="table report-table mb-0">
+            <thead><tr><th class="label-col">Текущий кредитор</th>{% for m in creditor_pivot_partners.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for c in creditor_pivot_partners.creditors %}
+            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_partners.matrix[c] %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="tab-regions">
+    <div class="card p-3 table-responsive">
+        <table class="table report-table mb-0">
+            <thead><tr><th class="label-col">Регион / Отдел</th>{% for m in region_dept_pivot.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for r in region_dept_pivot.regions %}
+            <tr class="row-bold"><td class="label-col">{{ r.region }}</td>{% for m in region_dept_pivot.months %}<td></td>{% endfor %}</tr>
+            {% for d in r.departments %}
+            <tr><td class="label-col ps-4">{{ d.department }}</td>{% for v in d.cbr_osz %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            {% endfor %}
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="tab-extra">
+    <form class="d-flex gap-2 mb-3" method="get">
+        <input type="hidden" name="network" value="{{ network_param }}">
+        <select name="dim" class="form-select form-select-sm" style="max-width:220px" onchange="this.form.submit()">
+            {% for key, label in dim_labels.items() %}<option value="{{ key }}" {% if legacy_dim==key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
     </form>
-</div>
-
-<div class="card p-3 mb-3">
-    <h6 class="text-secondary">Анализ и рекомендации</h6>
-    <ul class="mb-0">
-        {% for b in recommendations %}<li>{{ b }}</li>{% endfor %}
-    </ul>
-</div>
-
-<div class="row g-3 mb-3">
-    <div class="col-lg-6">
-        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR по месяцам, всего по компании</div><canvas id="cbrOverall" height="150"></canvas></div>
+    <div class="card p-3 mb-3">
+        <h6 class="text-secondary">Анализ и рекомендации</h6>
+        <ul class="mb-0">
+            {% for b in legacy_recommendations %}<li>{{ b }}</li>{% endfor %}
+        </ul>
     </div>
-    <div class="col-lg-6">
-        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR от ОСЗ по месяцам — топ-8 по {{ dim_labels[dim] | lower }}</div><canvas id="cbrByDim" height="150"></canvas></div>
-    </div>
-</div>
-
-<div class="row g-3">
-    <div class="col-lg-6">
-        <div class="card p-3 table-responsive">
-            <h6 class="text-secondary">Топ по CBR — {{ overall.months[-1] if overall.months else '' }}</h6>
-            <table class="table table-sm mb-0">
-                <thead><tr><th>{{ dim_labels[dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
-                <tbody>
-                {% for r in perf.top %}
-                <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-pos">{{ '%.2f'|format(r.cbr) }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card p-3 table-responsive">
+                <h6 class="text-secondary">Топ по CBR — {{ table_data.months[-1] if table_data.months else '' }}</h6>
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>{{ dim_labels[legacy_dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
+                    <tbody>
+                    {% for r in legacy_perf.top %}
+                    <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-pos">{{ '%.2f'|format(r.cbr) }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card p-3 table-responsive">
+                <h6 class="text-secondary">Отстающие по CBR — {{ table_data.months[-1] if table_data.months else '' }}</h6>
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>{{ dim_labels[legacy_dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
+                    <tbody>
+                    {% for r in legacy_perf.bottom %}
+                    <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-neg">{{ '%.2f'|format(r.cbr) }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-    <div class="col-lg-6">
-        <div class="card p-3 table-responsive">
-            <h6 class="text-secondary">Отстающие по CBR — {{ overall.months[-1] if overall.months else '' }}</h6>
-            <table class="table table-sm mb-0">
-                <thead><tr><th>{{ dim_labels[dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
-                <tbody>
-                {% for r in perf.bottom %}
-                <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-neg">{{ '%.2f'|format(r.cbr) }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6">
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR по месяцам, всего по компании</div><canvas id="cbrOverall" height="150"></canvas></div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR от ОСЗ по месяцам — топ-8 по {{ dim_labels[legacy_dim] | lower }}</div><canvas id="cbrByDim" height="150"></canvas></div>
         </div>
     </div>
+</div>
+
 </div>
 
 <script>
@@ -67,28 +182,77 @@ const mk = (id, config) => {
     if (existing) existing.destroy();
     return new Chart(document.getElementById(id), config);
 };
+const dualAxis = (id, months, barLabel, barData, lineLabel, lineData) => mk(id, {
+    data: {
+        labels: months,
+        datasets: [
+            { type: 'bar', label: barLabel, data: barData, backgroundColor: '#0d6efd', yAxisID: 'y' },
+            { type: 'line', label: lineLabel, data: lineData, borderColor: '#c0362c', yAxisID: 'y1', tension: 0.15 }
+        ]
+    },
+    options: {
+        plugins: { legend: { display: true } },
+        scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } }
+    }
+});
+
+const cf = {{ chart_filtered | tojson }};
+const cfMonths = cf.months;
+const toK = arr => arr.map(v => v / 1000);
+dualAxis('chartCollect1', cfMonths, 'ОСЗ, тыс.руб', toK(cf.total_debt), 'Платежи, тыс.руб', toK(cf.payment_amount));
+dualAxis('chartCollect2', cfMonths, 'Основной долг, тыс.руб', toK(cf.principal_debt), 'Платежи, тыс.руб', toK(cf.payment_amount));
+
+mk('chartCbr1', {
+    data: {
+        labels: cfMonths,
+        datasets: [
+            { type: 'line', label: 'CBR от ОСЗ, %', data: cf.cbr_osz, borderColor: '#1a7f37', yAxisID: 'y1', tension: 0.15 },
+            { type: 'bar', label: 'ОСЗ, тыс.руб', data: toK(cf.total_debt), backgroundColor: '#0d6efd', yAxisID: 'y' }
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } }
+});
+mk('chartCbr2', {
+    data: {
+        labels: cfMonths,
+        datasets: [
+            { type: 'line', label: 'CBR от ОД, %', data: cf.cbr_od, borderColor: '#1a7f37', yAxisID: 'y1', tension: 0.15 },
+            { type: 'bar', label: 'Основной долг, тыс.руб', data: toK(cf.principal_debt), backgroundColor: '#0d6efd', yAxisID: 'y' }
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } }
+});
 
 mk('cbrOverall', {
     type: 'line',
     data: {
-        labels: {{ overall.months | tojson }},
+        labels: {{ table_data.months | tojson }},
         datasets: [
-            {label: 'CBR от ОСЗ, %', data: {{ overall.cbr_osz | tojson }}, borderColor: '#1a7f37', tension: 0.15},
-            {label: 'CBR от ОД, %', data: {{ overall.cbr_od | tojson }}, borderColor: '#0d6efd', tension: 0.15}
+            {label: 'CBR от ОСЗ, %', data: {{ table_data.cbr_osz | tojson }}, borderColor: '#1a7f37', tension: 0.15},
+            {label: 'CBR от ОД, %', data: {{ table_data.cbr_od | tojson }}, borderColor: '#0d6efd', tension: 0.15}
         ]
     },
     options: { plugins: { legend: { display: true } } }
 });
 
-const byDimItems = {{ by_dim.rows | tojson }};
+const byDimItems = {{ legacy_by_dim.rows | tojson }};
 const palette = ['#000','#1a7f37','#c0362c','#0d6efd','#86868b','#e0a800','#6f42c1','#20c997'];
 mk('cbrByDim', {
     type: 'line',
     data: {
-        labels: {{ by_dim.months | tojson }},
+        labels: {{ legacy_by_dim.months | tojson }},
         datasets: byDimItems.map((it, i) => ({ label: it.key, data: it.cbr_osz, borderColor: palette[i % palette.length], tension: 0.15 }))
     },
     options: { plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } }
+});
+
+document.querySelectorAll('#cbrTabs button[data-bs-toggle="tab"]').forEach(btn => {
+    btn.addEventListener('shown.bs.tab', () => {
+        ['chartCollect1','chartCollect2','chartCbr1','chartCbr2','cbrOverall','cbrByDim'].forEach(id => {
+            const c = Chart.getChart(id);
+            if (c) c.resize();
+        });
+    });
 });
 } catch (e) { console.error('cbr script failed:', e); }
 })();

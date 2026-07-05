@@ -32,18 +32,24 @@ def _cbr(payment, base):
 
 
 def overall_by_month():
+    """Свод по месяцам — 1:1 со страницей "Таблица" в BI (7 строк: ОСЗ тыс.руб/шт,
+    Платежи тыс.руб/шт, Основной долг тыс.руб, CBR от ОСЗ/ОД %)."""
     rows = query('''SELECT month, SUM(total_debt) AS total_debt, SUM(principal_debt) AS principal_debt,
-                            SUM(payment_amount) AS payment_amount
+                            SUM(payment_amount) AS payment_amount, SUM(do_count) AS do_count,
+                            SUM(payment_count) AS payment_count
                      FROM cbr.monthly GROUP BY 1 ORDER BY 1''')
     months = [r['month'] for r in rows]
     total_debt = [float(r['total_debt'] or 0) for r in rows]
     principal_debt = [float(r['principal_debt'] or 0) for r in rows]
     payment_amount = [float(r['payment_amount'] or 0) for r in rows]
+    do_count = [int(r['do_count'] or 0) for r in rows]
+    payment_count = [int(r['payment_count'] or 0) for r in rows]
     cbr_osz = [_cbr(payment_amount[i], total_debt[i]) for i in range(len(months))]
     cbr_od = [_cbr(payment_amount[i], principal_debt[i]) for i in range(len(months))]
     return {
         'months_raw': months, 'months': [m.strftime('%m.%Y') for m in months],
         'total_debt': total_debt, 'principal_debt': principal_debt, 'payment_amount': payment_amount,
+        'do_count': do_count, 'payment_count': payment_count,
         'cbr_osz': cbr_osz, 'cbr_od': cbr_od,
     }
 
@@ -143,6 +149,102 @@ def analysis_and_recommendations(dim='department'):
     return bullets
 
 
+# "Сеть" — если в строке заполнено поле "Сотрудник", иначе "не Сеть" (правило
+# подтверждено пользователем; в исходном BI это срез "Пользовательский", по
+# умолчанию выбрано значение 'Сеть').
+_IS_NETWORK_SQL = "(m.employee IS NOT NULL AND trim(m.employee) <> '')"
+
+
+def _cbr_filters_where(dept=None, emp_region=None, employee=None, is_network=None):
+    where, params = ['1=1'], []
+    if dept:
+        where.append('e.department = ANY(%s)'); params.append(dept)
+    if emp_region:
+        where.append('e.region = ANY(%s)'); params.append(emp_region)
+    if employee:
+        where.append('m.employee = ANY(%s)'); params.append(employee)
+    if is_network is not None:
+        where.append(f'{_IS_NETWORK_SQL} = %s'); params.append(is_network)
+    return ' AND '.join(where), params
+
+
+def creditor_pivot(dept=None, emp_region=None, employee=None, is_network=None):
+    """Rows=Текущий кредитор, columns=месяц, values=CBR от ОСЗ % (страница
+    "Таблица"/"Партнёры" в BI). Без фильтров — свод по всей компании."""
+    where, params = _cbr_filters_where(dept, emp_region, employee, is_network)
+    sql = f'''SELECT m.month, COALESCE(m.creditor, 'Не указано') AS creditor,
+                     SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
+              FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
+              WHERE {where} GROUP BY 1, 2 ORDER BY 1'''
+    rows = query(sql, params)
+    months = sorted({r['month'] for r in rows})
+    creditors = sorted({r['creditor'] for r in rows})
+    matrix = defaultdict(dict)
+    for r in rows:
+        matrix[r['creditor']][r['month']] = _cbr(float(r['payment_amount'] or 0), float(r['total_debt'] or 0))
+    return {
+        'months': [m.strftime('%m.%Y') for m in months],
+        'creditors': creditors,
+        'matrix': {c: [matrix[c].get(m, 0.0) for m in months] for c in creditors},
+    }
+
+
+def filtered_monthly(dept=None, emp_region=None, employee=None, is_network=None):
+    """То же, что overall_by_month(), но с фильтрами по Отделу/Региону сотрудника/
+    Сотруднику/Сеть (страницы "ОСЗ/ОД Сбор" и "ОСЗ/ОД CBR" в BI)."""
+    where, params = _cbr_filters_where(dept, emp_region, employee, is_network)
+    sql = f'''SELECT m.month, SUM(m.total_debt) AS total_debt, SUM(m.principal_debt) AS principal_debt,
+                     SUM(m.payment_amount) AS payment_amount
+              FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
+              WHERE {where} GROUP BY 1 ORDER BY 1'''
+    rows = query(sql, params)
+    months = [r['month'] for r in rows]
+    total_debt = [float(r['total_debt'] or 0) for r in rows]
+    principal_debt = [float(r['principal_debt'] or 0) for r in rows]
+    payment_amount = [float(r['payment_amount'] or 0) for r in rows]
+    return {
+        'months': [m.strftime('%m.%Y') for m in months],
+        'total_debt': total_debt, 'principal_debt': principal_debt, 'payment_amount': payment_amount,
+        'cbr_osz': [_cbr(payment_amount[i], total_debt[i]) for i in range(len(months))],
+        'cbr_od': [_cbr(payment_amount[i], principal_debt[i]) for i in range(len(months))],
+    }
+
+
+def region_department_pivot(is_network=None):
+    """Rows = Регион(сотрудника) -> Отдел (2-уровневая иерархия), columns=месяц,
+    values=CBR от ОСЗ % (страница "Регионы" в BI)."""
+    where, params = _cbr_filters_where(is_network=is_network)
+    sql = f'''SELECT m.month, COALESCE(e.region, 'Не указано') AS region,
+                     COALESCE(e.department, 'Без отдела') AS department,
+                     SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
+              FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
+              WHERE {where} GROUP BY 1, 2, 3 ORDER BY 1'''
+    rows = query(sql, params)
+    months = sorted({r['month'] for r in rows})
+    tree = defaultdict(lambda: defaultdict(dict))
+    for r in rows:
+        tree[r['region']][r['department']][r['month']] = _cbr(float(r['payment_amount'] or 0), float(r['total_debt'] or 0))
+    out = []
+    for region in sorted(tree):
+        depts = []
+        for dept in sorted(tree[region]):
+            depts.append({'department': dept, 'cbr_osz': [tree[region][dept].get(m, 0.0) for m in months]})
+        out.append({'region': region, 'departments': depts})
+    return {'months': [m.strftime('%m.%Y') for m in months], 'regions': out}
+
+
+def get_filter_options():
+    """Списки значений для срезов Отдел/Регион(сотрудника)/Сотрудник."""
+    depts = query("SELECT DISTINCT department FROM cbr.employee_mapping WHERE department IS NOT NULL ORDER BY 1")
+    regions = query("SELECT DISTINCT region FROM cbr.employee_mapping WHERE region IS NOT NULL ORDER BY 1")
+    employees = query("SELECT DISTINCT employee FROM cbr.employee_mapping WHERE employee IS NOT NULL ORDER BY 1")
+    return {
+        'departments': [r['department'] for r in depts],
+        'emp_regions': [r['region'] for r in regions],
+        'employees': [r['employee'] for r in employees],
+    }
+
+
 def get_employee_mapping():
     return query('SELECT * FROM cbr.employee_mapping ORDER BY department NULLS LAST, employee')
 
@@ -157,10 +259,11 @@ def update_employee_mapping(employee, department, region, is_fired, employment_t
 
 
 def export_rows(overall):
-    headers = ['Месяц', 'ОСЗ всего', 'Основной долг', 'Платежи за месяц', 'CBR от ОСЗ %', 'CBR от ОД %']
+    headers = ['Месяц', 'ОСЗ всего', 'ОСЗ всего, шт', 'Основной долг', 'Платежи за месяц',
+               'Платежей за месяц, шт', 'CBR от ОСЗ %', 'CBR от ОД %']
     rows = [
-        [overall['months'][i], overall['total_debt'][i], overall['principal_debt'][i],
-         overall['payment_amount'][i], overall['cbr_osz'][i], overall['cbr_od'][i]]
+        [overall['months'][i], overall['total_debt'][i], overall['do_count'][i], overall['principal_debt'][i],
+         overall['payment_amount'][i], overall['payment_count'][i], overall['cbr_osz'][i], overall['cbr_od'][i]]
         for i in range(len(overall['months']))
     ]
     return [('CBR', headers, rows)]

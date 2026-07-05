@@ -72,6 +72,7 @@
 <div class="card p-3">
     <h6 class="text-secondary">Непривязанные "Проект" в данных ({{ unmatched | length }})</h6>
     {% if unmatched %}
+    <div class="table-responsive">
     <table class="table table-sm mb-0">
         <thead><tr><th>Проект</th><th>Привязать к портфелю</th><th></th></tr></thead>
         <tbody>
@@ -91,6 +92,7 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p class="text-secondary small mb-0">Все "Проект" из данных привязаны к портфелям.</p>
     {% endif %}

@@ -7,9 +7,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 
 from config import Config
-from auth import admin_required, report_required, classifier_required, authenticate_user, set_password
+from auth import admin_required, report_required, classifier_required, login_required, authenticate_user, set_password
 from auth import hash_password as auth_hash_password
-from db import query, execute, close_connection
+from db import query, query_one, execute, close_connection
 from reporting_refresh import refresh_all
 import pl_report as pr
 import fot_report as fr
@@ -313,18 +313,36 @@ def counterparty():
 @app.route('/cbr')
 @report_required
 def cbr():
-    dim = request.args.get('dim', 'department')
-    if dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
-        dim = 'department'
-    overall = cr.overall_by_month()
-    by_dim_data = cr.by_dim(dim)
-    months_raw = overall['months_raw']
+    dept = request.args.getlist('dept') or None
+    emp_region = request.args.getlist('emp_region') or None
+    employee = request.args.getlist('employee') or None
+    network_param = request.args.get('network', 'network')
+    is_network = {'network': True, 'non_network': False}.get(network_param)  # None => 'all'
+
+    table_data = cr.overall_by_month()
+    creditor_pivot_all = cr.creditor_pivot()
+    chart_filtered = cr.filtered_monthly(dept, emp_region, employee, is_network)
+    creditor_pivot_partners = cr.creditor_pivot(is_network=is_network)
+    region_dept_pivot = cr.region_department_pivot(is_network=is_network)
+    filter_options = cr.get_filter_options()
+
+    legacy_dim = request.args.get('dim', 'department')
+    if legacy_dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
+        legacy_dim = 'department'
+    legacy_by_dim = cr.by_dim(legacy_dim)
+    months_raw = table_data['months_raw']
     latest_month = months_raw[-1] if months_raw else None
-    perf = cr.top_bottom_performers(latest_month, dim) if latest_month else {'top': [], 'bottom': []}
-    recommendations = cr.analysis_and_recommendations(dim)
+    legacy_perf = cr.top_bottom_performers(latest_month, legacy_dim) if latest_month else {'top': [], 'bottom': []}
+    legacy_recommendations = cr.analysis_and_recommendations(legacy_dim)
+
     return render_template(
-        'cbr.html', overall=overall, by_dim=by_dim_data, dim=dim, dim_labels=cr.DIM_LABELS,
-        perf=perf, recommendations=recommendations,
+        'cbr.html',
+        table_data=table_data, creditor_pivot_all=creditor_pivot_all,
+        chart_filtered=chart_filtered, creditor_pivot_partners=creditor_pivot_partners,
+        region_dept_pivot=region_dept_pivot, filter_options=filter_options,
+        dept=dept or [], emp_region=emp_region or [], employee=employee or [], network_param=network_param,
+        legacy_dim=legacy_dim, legacy_by_dim=legacy_by_dim, legacy_perf=legacy_perf,
+        legacy_recommendations=legacy_recommendations, dim_labels=cr.DIM_LABELS,
     )
 
 
@@ -649,6 +667,56 @@ def admin_users_password(user_id):
         audit.log_action(session.get('username'), 'reset_password', f'user_id={user_id}')
         flash(f'Пароль для «{user[0]["username"]}» обновлён', 'success')
     return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@admin_required
+def admin_users_delete(user_id):
+    if user_id == session.get('user_id'):
+        flash('Нельзя удалить свою же учётную запись', 'danger')
+        return redirect(url_for('admin_users'))
+    user = query('SELECT username FROM users WHERE id = %s', (user_id,))
+    if user:
+        execute('DELETE FROM users WHERE id = %s', (user_id,))
+        audit.log_action(session.get('username'), 'delete_user', f'user_id={user_id} username={user[0]["username"]}')
+        flash(f'Пользователь «{user[0]["username"]}» удалён', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/my/profile')
+@login_required
+def my_profile():
+    user = query_one('SELECT id, username, email, full_name, role, created_at FROM users WHERE id = %s', (session['user_id'],))
+    return render_template('my_profile.html', user=user)
+
+
+@app.route('/my/profile', methods=['POST'])
+@login_required
+def my_profile_update():
+    email = request.form.get('email', '').strip() or None
+    full_name = request.form.get('full_name', '').strip() or None
+    execute('UPDATE users SET email = %s, full_name = %s WHERE id = %s', (email, full_name, session['user_id']))
+    audit.log_action(session.get('username'), 'update_own_profile', f'email={email} full_name={full_name}')
+    flash('Профиль обновлён', 'success')
+    return redirect(url_for('my_profile'))
+
+
+@app.route('/my/password', methods=['POST'])
+@login_required
+def my_password_update():
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+    ok, _ = authenticate_user(session['username'], current_password)
+    if not ok:
+        flash('Текущий пароль неверен', 'danger')
+    elif not new_password or new_password != confirm_password:
+        flash('Новый пароль и подтверждение не совпадают', 'danger')
+    else:
+        set_password(session['username'], new_password)
+        audit.log_action(session.get('username'), 'change_own_password', '')
+        flash('Пароль изменён', 'success')
+    return redirect(url_for('my_profile'))
 
 
 @app.route('/export/<kind>')

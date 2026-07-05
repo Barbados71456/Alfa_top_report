@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Мой профиль — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Мой профиль</h4>
+
+<div class="card p-3 mb-4">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Логин</dt><dd class="col-sm-9">{{ user.username }}</dd>
+        <dt class="col-sm-3">Роль</dt><dd class="col-sm-9">{{ user.role }}</dd>
+        <dt class="col-sm-3">Создан</dt><dd class="col-sm-9 mb-0">{{ user.created_at.strftime('%d.%m.%Y') if user.created_at else '—' }}</dd>
+    </dl>
+</div>
+
+<div class="card p-3 mb-4">
+    <h6 class="text-secondary">Данные профиля</h6>
+    <form method="post" action="{{ url_for('my_profile_update') }}" class="row g-2 align-items-end">
+        <div class="col-auto"><label class="form-label small mb-0">ФИО</label><input type="text" class="form-control form-control-sm" name="full_name" value="{{ user.full_name or '' }}"></div>
+        <div class="col-auto"><label class="form-label small mb-0">Email</label><input type="email" class="form-control form-control-sm" name="email" value="{{ user.email or '' }}"></div>
+        <div class="col-auto"><button type="submit" class="btn btn-sm btn-dark">Сохранить</button></div>
+    </form>
+</div>
+
+<div class="card p-3">
+    <h6 class="text-secondary">Смена пароля</h6>
+    <form method="post" action="{{ url_for('my_password_update') }}" class="row g-2 align-items-end">
+        <div class="col-auto"><label class="form-label small mb-0">Текущий пароль</label><input type="password" class="form-control form-control-sm" name="current_password" required></div>
+        <div class="col-auto"><label class="form-label small mb-0">Новый пароль</label><input type="password" class="form-control form-control-sm" name="new_password" required></div>
+        <div class="col-auto"><label class="form-label small mb-0">Повтор пароля</label><input type="password" class="form-control form-control-sm" name="confirm_password" required></div>
+        <div class="col-auto"><button type="submit" class="btn btn-sm btn-outline-dark">Сменить пароль</button></div>
+    </form>
+</div>
+{% endblock %}

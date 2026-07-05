@@ -664,7 +664,9 @@ def _raw_group(lines, year, month, pf, projects=None):
 
 def deviation_detail(lines, series_a, series_b, projects=None, top_n=20):
     """Акт-анализ отклонения между двумя срезами (series_a, series_b — каждый
-    (pf, year, month)): топ-N (проект, СтатьяУровень3, Контрагент) по |разница|."""
+    (pf, year, month)): топ-N (проект, СтатьяУровень3, Контрагент) по |разница|.
+    Сортировка — сначала строки того же знака, что и общее отклонение (по
+    убыванию модуля), затем строки противоположного знака (тоже по модулю)."""
     a = _raw_group(lines, series_a[1], series_a[2], series_a[0], projects)
     b = _raw_group(lines, series_b[1], series_b[2], series_b[0], projects)
     drivers = []
@@ -675,8 +677,9 @@ def deviation_detail(lines, series_a, series_b, projects=None, top_n=20):
             continue
         drivers.append({'project': key[0], 'stat3': key[1], 'contragent': key[2],
                          'a': va, 'b': vb, 'delta': delta})
-    drivers.sort(key=lambda d: -abs(d['delta']))
-    return {'total_delta': sum(d['delta'] for d in drivers), 'drivers': drivers[:top_n]}
+    total_delta = sum(d['delta'] for d in drivers)
+    drivers.sort(key=lambda d: (0 if (d['delta'] >= 0) == (total_delta >= 0) else 1, -abs(d['delta'])))
+    return {'total_delta': total_delta, 'drivers': drivers[:top_n]}
 
 
 def get_counterparties():

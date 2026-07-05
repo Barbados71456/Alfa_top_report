@@ -272,3 +272,6 @@ CREATE TABLE IF NOT EXISTS reporting.wallet_balances (
     created_at TIMESTAMP DEFAULT now(),
     UNIQUE (wallet_id, period)
 );
+
+-- Личный кабинет: доп. поле профиля пользователя (email уже был), см. /my/profile.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT;

@@ -49,6 +49,12 @@
         td.amount-cell:hover { background-color: rgba(0,0,0,0.04); }
         #detailModal .accordion-button { font-size: 0.9rem; }
         #detailModal table td, #detailModal table th { font-size: 0.85rem; }
+        @media (max-width: 768px) {
+            table.report-table { font-size: 0.75rem; }
+            table.report-table th, table.report-table td { padding: 0.35rem 0.5rem; }
+            table.report-table td.label-col, table.report-table th.label-col { min-width: 140px; }
+            .container-fluid { padding-left: 0.75rem; padding-right: 0.75rem; }
+        }
     </style>
 </head>
 <body>
@@ -56,13 +62,16 @@
     <div class="container-fluid">
         <a class="navbar-brand" href="{{ url_for('svod1') }}">Alfa Top Report</a>
         {% if session.get('user_id') %}
-        <div class="collapse navbar-collapse">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNavbar">
             <ul class="navbar-nav me-auto flex-wrap">
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='overview' %}active{% endif %}" href="{{ url_for('overview') }}">Обзор</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint in ('wallets','wallets_detail') %}active{% endif %}" href="{{ url_for('wallets') }}">Сверка счетов</a></li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">П&amp;Л</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Бизнес отчеты</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='svod1' %}active{% endif %}" href="{{ url_for('svod1') }}">Свод1</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='svod2' %}active{% endif %}" href="{{ url_for('svod2') }}">Свод2</a></li>
@@ -82,12 +91,18 @@
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('counterparty','investment','investment_detail','cbr','chat_advisor') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Портфели</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('counterparty','investment','investment_detail','chat_advisor') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Портфели</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='counterparty' %}active{% endif %}" href="{{ url_for('counterparty') }}">По контрагенту</a></li>
                         <li><a class="dropdown-item {% if request.endpoint in ('investment','investment_detail') %}active{% endif %}" href="{{ url_for('investment') }}">Инвестанализ</a></li>
-                        <li><a class="dropdown-item {% if request.endpoint=='cbr' %}active{% endif %}" href="{{ url_for('cbr') }}">CBR</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='chat_advisor' %}active{% endif %}" href="{{ url_for('chat_advisor') }}">Советник по покупке</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint=='cbr' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Коммерческие отчеты</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='cbr' %}active{% endif %}" href="{{ url_for('cbr') }}">CBR</a></li>
                     </ul>
                 </li>
 
@@ -117,6 +132,7 @@
                 {% endif %}
             </ul>
             <span class="navbar-text me-3">{{ session.get('username') }}</span>
+            <a class="btn btn-sm btn-outline-secondary me-2 {% if request.endpoint=='my_profile' %}active{% endif %}" href="{{ url_for('my_profile') }}">Мой профиль</a>
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('logout') }}">Выйти</a>
         </div>
         {% endif %}
