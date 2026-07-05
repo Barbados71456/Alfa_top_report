@@ -220,3 +220,55 @@ CREATE TABLE IF NOT EXISTS cbr.employee_mapping (
     employment_type TEXT,
     updated_at TIMESTAMP DEFAULT now()
 );
+
+-- Сверка остатков по кошелькам: пользователь периодически вводит проверенный
+-- (сверенный с банком/кассой) остаток по кошельку, обороты между точками сверки
+-- считаются автоматически из FinancialData."Кошелек". Группировка кошельков (Счета/
+-- Касса/Спецсчета/Учредители/Прочее) — по листу "Карманы" эталонного Excel
+-- (01_Сверка_счета.xlsx), см. wallet_report.py.
+DROP MATERIALIZED VIEW IF EXISTS reporting.wallet_monthly;
+CREATE MATERIALIZED VIEW reporting.wallet_monthly AS
+SELECT "Период" AS period,
+       "Кошелек" AS wallet_raw,
+       SUM("Сумма") AS amount
+FROM public."FinancialData"
+WHERE "Кошелек" IS NOT NULL AND TRIM("Кошелек") <> ''
+  -- 'распределение' — служебные проводки распределения косвенных расходов по
+  -- проектам, а не движение денег по кошелькам (197к строк с одним и тем же
+  -- "Кошелек"='распределение') — не реальный кошелёк, исключаем.
+  AND lower(trim("Кошелек")) <> 'распределение'
+  AND "п_ф" = 'факт'
+GROUP BY 1, 2;
+
+CREATE UNIQUE INDEX wallet_monthly_uq ON reporting.wallet_monthly (period, wallet_raw);
+CREATE INDEX wallet_monthly_wallet_idx ON reporting.wallet_monthly (wallet_raw);
+
+CREATE TABLE IF NOT EXISTS reporting.wallets (
+    id SERIAL PRIMARY KEY,
+    canonical_name TEXT UNIQUE NOT NULL,
+    group_name TEXT NOT NULL DEFAULT 'Прочее',
+    notes TEXT,
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+-- Соответствие "сырое имя Кошелек в FinancialData" -> канонический кошелёк, тот же
+-- паттерн, что reporting.dp_portfolio_aliases (см. wallet_report.sync_aliases()).
+CREATE TABLE IF NOT EXISTS reporting.wallet_aliases (
+    id SERIAL PRIMARY KEY,
+    wallet_id INTEGER NOT NULL REFERENCES reporting.wallets(id) ON DELETE CASCADE,
+    raw_name TEXT UNIQUE NOT NULL
+);
+
+-- Ручные точки сверки: введённый пользователем факт-остаток на дату. Между точками
+-- расчётный остаток = последняя точка + обороты по reporting.wallet_monthly с этой
+-- даты; расхождение на новой точке = введено - расчёт (см. wallet_report.py).
+CREATE TABLE IF NOT EXISTS reporting.wallet_balances (
+    id SERIAL PRIMARY KEY,
+    wallet_id INTEGER NOT NULL REFERENCES reporting.wallets(id) ON DELETE CASCADE,
+    period DATE NOT NULL,
+    balance NUMERIC NOT NULL,
+    notes TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    UNIQUE (wallet_id, period)
+);

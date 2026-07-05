@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Сверка счетов — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">Сверка счетов — остатки по кошелькам</h4>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets') }}">Скачать Excel</a>
+</div>
+<p class="text-secondary small">
+    Расчётный остаток = последняя введённая точка сверки + автоматически посчитанные
+    обороты по кошельку с этой даты. Расхождение — введённое минус расчётное значение
+    на момент последней сверки.
+</p>
+
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Группа / кошелёк</th>
+            <th>Текущий расчётный остаток</th>
+            <th>Дата последней сверки</th>
+            <th>Введено при сверке</th>
+            <th>Расхождение</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+        {% if row.kind == 'wallet' %}
+        <tr class="wallet-row" data-parent-id="{{ row.parent_id }}" style="display:none">
+            <td class="label-col ps-4"><a href="{{ url_for('wallets_detail', name=row.name) }}">{{ row.name }}</a></td>
+            <td class="{% if row.current_balance > 0 %}val-pos{% elif row.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
+            <td>{{ row.last_checkpoint_period.strftime('%d.%m.%Y') if row.last_checkpoint_period else '—' }}</td>
+            <td>{{ '{:,.2f}'.format(row.last_checkpoint_entered).replace(',', ' ') if row.last_checkpoint_entered is not none else '—' }}</td>
+            <td class="{% if row.last_checkpoint_discrepancy and row.last_checkpoint_discrepancy > 0 %}val-pos{% elif row.last_checkpoint_discrepancy and row.last_checkpoint_discrepancy < 0 %}val-neg{% endif %}">
+                {{ '{:,.2f}'.format(row.last_checkpoint_discrepancy).replace(',', ' ') if row.last_checkpoint_discrepancy is not none else '—' }}
+            </td>
+        </tr>
+        {% elif row.kind == 'total' %}
+        <tr class="row-bold">
+            <td class="label-col">{{ row.label }}</td>
+            <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
+            <td></td><td></td><td></td>
+        </tr>
+        {% else %}
+        <tr class="row-bold">
+            <td class="label-col">
+                <button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>
+                {{ row.label }}
+            </td>
+            <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
+            <td></td><td></td><td></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+(function() {
+try {
+document.querySelectorAll('.tree-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.dataset.target;
+        const expanding = btn.textContent.trim() === '▶';
+        btn.textContent = expanding ? '▼' : '▶';
+        document.querySelectorAll(`tr[data-parent-id="${id}"]`).forEach(tr => { tr.style.display = expanding ? '' : 'none'; });
+    });
+});
+} catch (e) { console.error('wallets_summary script failed:', e); }
+})();
+</script>
+{% endblock %}

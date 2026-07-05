@@ -59,6 +59,7 @@
         <div class="collapse navbar-collapse">
             <ul class="navbar-nav me-auto flex-wrap">
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='overview' %}active{% endif %}" href="{{ url_for('overview') }}">Обзор</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint in ('wallets','wallets_detail') %}active{% endif %}" href="{{ url_for('wallets') }}">Сверка счетов</a></li>
 
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">П&amp;Л</a>
@@ -94,12 +95,13 @@
 
                 {% if session.get('role') in ('admin', 'accountant') %}
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('classifier','employees','investment_admin','cbr_admin') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Справочники</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('classifier','employees','investment_admin','cbr_admin','wallets_admin') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Справочники</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='employees' %}active{% endif %}" href="{{ url_for('employees') }}">Сотрудники</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='investment_admin' %}active{% endif %}" href="{{ url_for('investment_admin') }}">Портфели DP</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='cbr_admin' %}active{% endif %}" href="{{ url_for('cbr_admin') }}">Взыскатели CBR</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='wallets_admin' %}active{% endif %}" href="{{ url_for('wallets_admin') }}">Кошельки</a></li>
                     </ul>
                 </li>
                 {% endif %}

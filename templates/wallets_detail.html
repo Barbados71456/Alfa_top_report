@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} — Alfa Top Report{% endblock %}
+{% block content %}
+{% set w = data.wallet %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">{{ name }} <span class="text-secondary small">({{ w.group_name }})</span></h4>
+        <p class="text-secondary small mb-0">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — обороты по этому кошельку не считаются' }}</p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_detail') }}?name={{ name | urlencode }}">Скачать Excel</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Текущий расчётный остаток</div><div class="fs-5 {% if data.current_balance and data.current_balance > 0 %}val-pos{% elif data.current_balance and data.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.current_balance).replace(',', ' ') if data.current_balance is not none else '—' }}</div></div></div>
+    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Дата последней сверки</div><div class="fs-5">{{ data.last_checkpoint.period.strftime('%d.%m.%Y') if data.last_checkpoint else '—' }}</div></div></div>
+    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Расхождение на дату сверки</div><div class="fs-5 {% if data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy > 0 %}val-pos{% elif data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.last_checkpoint.discrepancy).replace(',', ' ') if data.last_checkpoint and data.last_checkpoint.discrepancy is not none else '—' }}</div></div></div>
+</div>
+
+{% if session.get('role') in ('admin', 'accountant') %}
+<div class="card p-3 mb-3">
+    <h6 class="text-secondary">Добавить точку сверки</h6>
+    <form method="post" action="{{ url_for('wallets_add_balance', name=name) }}" class="row g-2 align-items-end">
+        <div class="col-auto"><label class="form-label small mb-0">Дата (на начало месяца)</label><input type="date" class="form-control form-control-sm" name="period" required></div>
+        <div class="col-auto"><label class="form-label small mb-0">Фактический остаток</label><input type="number" step="0.01" class="form-control form-control-sm" style="width:160px" name="balance" required></div>
+        <div class="col-auto"><label class="form-label small mb-0">Заметки</label><input type="text" class="form-control form-control-sm" name="notes"></div>
+        <div class="col-auto"><button type="submit" class="btn btn-sm btn-dark">Сохранить</button></div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card p-3 table-responsive" style="max-height:70vh;">
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Период</th><th>Оборот</th><th>Расчётный остаток</th><th>Введено при сверке</th><th>Расхождение</th></tr></thead>
+        <tbody>
+        {% for r in data.rows %}
+        <tr class="{% if r.entered is not none %}row-bold{% endif %}">
+            <td class="label-col">{{ r.label }}</td>
+            <td class="{% if r.turnover > 0 %}val-pos{% elif r.turnover < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.turnover).replace(',', ' ') if r.turnover else '—' }}</td>
+            <td class="{% if r.balance > 0 %}val-pos{% elif r.balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.balance).replace(',', ' ') }}</td>
+            <td>{{ '{:,.2f}'.format(r.entered).replace(',', ' ') if r.entered is not none else '—' }}</td>
+            <td class="{% if r.discrepancy and r.discrepancy > 0 %}val-pos{% elif r.discrepancy and r.discrepancy < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.discrepancy).replace(',', ' ') if r.discrepancy is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

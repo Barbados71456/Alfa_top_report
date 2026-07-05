@@ -16,6 +16,7 @@ import fot_report as fr
 import loans_report as lr
 import investment_report as ir
 import cbr_report as cr
+import wallet_report as wr
 import audit
 import chat_assistant
 import portfolio_advisor
@@ -439,6 +440,97 @@ def investment_admin_remove_alias():
     return redirect(url_for('investment_admin'))
 
 
+@app.route('/wallets')
+@report_required
+def wallets():
+    rows = wr.all_wallets_summary()
+    return render_template('wallets_summary.html', rows=rows)
+
+
+@app.route('/wallets/<path:name>')
+@report_required
+def wallets_detail(name):
+    data = wr.wallet_detail(name)
+    if data is None:
+        flash(f'Кошелёк «{name}» не найден', 'danger')
+        return redirect(url_for('wallets'))
+    return render_template('wallets_detail.html', data=data, name=name)
+
+
+@app.route('/wallets/<path:name>/balance', methods=['POST'])
+@classifier_required
+def wallets_add_balance(name):
+    wallet = query('SELECT id FROM reporting.wallets WHERE canonical_name = %s', (name,))
+    if not wallet:
+        flash(f'Кошелёк «{name}» не найден', 'danger')
+        return redirect(url_for('wallets'))
+    period = request.form.get('period')
+    balance = request.form.get('balance')
+    if period and balance:
+        wr.add_balance_entry(wallet[0]['id'], period, balance, request.form.get('notes', '').strip(), session.get('username'))
+        audit.log_action(session.get('username'), 'add_wallet_balance', f'{name} @ {period} = {balance}')
+        flash('Точка сверки сохранена', 'success')
+    return redirect(url_for('wallets_detail', name=name))
+
+
+@app.route('/wallets/admin')
+@classifier_required
+def wallets_admin():
+    wallets_list = wr.get_wallets()
+    for w in wallets_list:
+        w['aliases'] = wr.get_wallet_aliases(w['id'])
+    unmatched = wr.get_unmatched_wallets()
+    return render_template('wallets_admin.html', wallets=wallets_list, unmatched=unmatched, group_order=wr.GROUP_ORDER)
+
+
+@app.route('/wallets/admin/<int:wallet_id>', methods=['POST'])
+@classifier_required
+def wallets_admin_update(wallet_id):
+    wr.update_wallet(wallet_id, request.form.get('group_name', '').strip(), request.form.get('notes', '').strip())
+    audit.log_action(session.get('username'), 'edit_wallet', f'wallet_id={wallet_id}')
+    flash('Карточка кошелька обновлена', 'success')
+    return redirect(url_for('wallets_admin'))
+
+
+@app.route('/wallets/admin/new', methods=['POST'])
+@classifier_required
+def wallets_admin_new():
+    name = request.form.get('canonical_name', '').strip()
+    if name:
+        wr.create_wallet(name, request.form.get('group_name', '').strip(), request.form.get('notes', '').strip())
+        alias_for = request.form.get('alias_for_raw', '').strip()
+        if alias_for:
+            wallet = query('SELECT id FROM reporting.wallets WHERE canonical_name = %s', (name,))
+            if wallet:
+                wr.add_alias(wallet[0]['id'], alias_for)
+        audit.log_action(session.get('username'), 'create_wallet', name)
+        flash(f'Кошелёк «{name}» создан', 'success')
+    return redirect(url_for('wallets_admin'))
+
+
+@app.route('/wallets/admin/alias', methods=['POST'])
+@classifier_required
+def wallets_admin_add_alias():
+    wallet_id = request.form.get('wallet_id', type=int)
+    raw_name = request.form.get('raw_name', '').strip()
+    if wallet_id and raw_name:
+        wr.add_alias(wallet_id, raw_name)
+        audit.log_action(session.get('username'), 'add_wallet_alias', f'{raw_name} -> wallet_id={wallet_id}')
+        flash(f'«{raw_name}» привязан к кошельку', 'success')
+    return redirect(url_for('wallets_admin'))
+
+
+@app.route('/wallets/admin/alias/remove', methods=['POST'])
+@classifier_required
+def wallets_admin_remove_alias():
+    raw_name = request.form.get('raw_name', '').strip()
+    if raw_name:
+        wr.remove_alias(raw_name)
+        audit.log_action(session.get('username'), 'remove_wallet_alias', raw_name)
+        flash(f'«{raw_name}» отвязан', 'success')
+    return redirect(url_for('wallets_admin'))
+
+
 @app.route('/employees')
 @classifier_required
 def employees():
@@ -637,6 +729,14 @@ def export_report(kind):
             sheets = ir.export_detail(data)
         elif kind == 'cbr':
             sheets = cr.export_rows(cr.overall_by_month())
+        elif kind == 'wallets':
+            sheets = wr.export_summary(wr.all_wallets_summary())
+        elif kind == 'wallets_detail':
+            name = request.args.get('name', '')
+            data = wr.wallet_detail(name)
+            if data is None:
+                return {'error': 'Кошелёк не найден'}, 404
+            sheets = wr.export_detail(data)
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
     except Exception:
