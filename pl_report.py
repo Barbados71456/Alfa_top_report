@@ -568,6 +568,12 @@ def dashboard1(month, series, deltas, projects=None, top_n=12):
             if _is_all_zero(row['series_month']) and _is_all_zero(row['series_ytd']):
                 continue
             rows.append(row)
+
+        if lines is VARIABLE_LINES:
+            gm_lines = REVENUE_LINES + VARIABLE_LINES
+            mm_gm = {(pf, yr): agg(month_map, pf, yr, gm_lines) for pf, yr in series}
+            ym_gm = {(pf, yr): agg(ytd_map, pf, yr, gm_lines) for pf, yr in series}
+            rows.append(_series_row('GM (Валовая прибыль)', series, deltas, mm_gm, ym_gm, bold=True, lines=gm_lines, project=projects))
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 
@@ -693,18 +699,21 @@ def default_counterparty_range(pf='факт'):
     return date(y, m, 1), latest
 
 
-def counterparty_series(contragent, pf='факт', project=None, date_from=None, date_to=None):
-    """Динамика выручки/затрат по одному контрагенту (индекс по "Контрагент"
-    уже есть — idx_financial_data_contragent, запрос быстрый), опционально
-    отфильтрованная по проекту и диапазону дат."""
+def counterparty_series(contragents, pf='факт', projects=None, date_from=None, date_to=None):
+    """Динамика выручки/затрат по одному или нескольким контрагентам (индекс по
+    "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый), опционально
+    отфильтрованная по проекту(ам) и диапазону дат. Несколько контрагентов/проектов
+    суммируются в один ряд (не сравниваются по отдельности)."""
+    if isinstance(contragents, str):
+        contragents = [contragents]
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
     sql = '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
              FROM public."FinancialData"
-             WHERE "Контрагент" = %s AND "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
-    params = [contragent, pf, all_lines]
-    if project:
-        sql += ' AND "Проект" = %s'
-        params.append(project)
+             WHERE "Контрагент" = ANY(%s) AND "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
+    params = [contragents, pf, all_lines]
+    if projects:
+        sql += ' AND "Проект" = ANY(%s)'
+        params.append(projects)
     if date_from:
         sql += ' AND "Период" >= %s'
         params.append(date_from)

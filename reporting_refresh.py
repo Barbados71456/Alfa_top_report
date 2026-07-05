@@ -38,6 +38,15 @@ def refresh_all():
             logger.exception('Не удалось обновить %s', view)
 
     try:
+        # Без CONCURRENTLY: cbr.monthly агрегирует уже готовые статичные-за-месяц
+        # таблицы выгрузки (cbr_report_1/2), уникальный индекс под CONCURRENTLY не
+        # нужен — обычный REFRESH проще и надёжнее для этого источника.
+        execute_autocommit('REFRESH MATERIALIZED VIEW cbr.monthly')
+        logger.info('Обновлено: cbr.monthly')
+    except Exception:
+        logger.exception('Не удалось обновить cbr.monthly')
+
+    try:
         _sync_employees()
         logger.info('Обновлён справочник reporting.employees')
     except Exception:

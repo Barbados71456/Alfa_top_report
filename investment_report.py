@@ -71,9 +71,11 @@ def seed_portfolios():
 
 def sync_aliases():
     """Автопривязка новых "Проект" из reporting.dp_monthly к каноническим портфелям по
-    точному совпадению имени без учёта пробелов/регистра/NBSP. Расхождения (другое
-    написание, отсутствие карточки) остаются непривязанными — донастраиваются на
-    /investment/admin."""
+    точному совпадению имени без учёта пробелов/регистра/NBSP. Для всего, что не
+    совпало (другое написание, ещё не заведено), заводим новую карточку портфеля под
+    этим же именем (без данных о покупке — донастраивается на /investment/admin) —
+    каждый DP-проект из данных обязан иметь карточку, "без карточки" не остаётся
+    ничего."""
     execute('''
         INSERT INTO reporting.dp_portfolio_aliases (dp_portfolio_id, project_name)
         SELECT DISTINCT dp.id, m.project
@@ -82,10 +84,25 @@ def sync_aliases():
           ON lower(trim(replace(m.project, chr(160), ' '))) = lower(trim(dp.canonical_name))
         ON CONFLICT (project_name) DO NOTHING
     ''')
+    execute('''
+        INSERT INTO reporting.dp_portfolios (canonical_name)
+        SELECT DISTINCT m.project
+        FROM reporting.dp_monthly m
+        WHERE NOT EXISTS (SELECT 1 FROM reporting.dp_portfolio_aliases a WHERE a.project_name = m.project)
+        ON CONFLICT (canonical_name) DO NOTHING
+    ''')
+    execute('''
+        INSERT INTO reporting.dp_portfolio_aliases (dp_portfolio_id, project_name)
+        SELECT dp.id, m.project
+        FROM reporting.dp_monthly m
+        JOIN reporting.dp_portfolios dp ON dp.canonical_name = m.project
+        WHERE NOT EXISTS (SELECT 1 FROM reporting.dp_portfolio_aliases a WHERE a.project_name = m.project)
+        ON CONFLICT (project_name) DO NOTHING
+    ''')
 
 
 def get_dp_portfolios():
-    return query('SELECT * FROM reporting.dp_portfolios ORDER BY purchase_date NULLS LAST, canonical_name')
+    return query('SELECT * FROM reporting.dp_portfolios ORDER BY canonical_name')
 
 
 def get_portfolio_aliases(portfolio_id):
@@ -159,22 +176,6 @@ def _all_portfolios_monthly(include_allocation):
     return by_portfolio
 
 
-def _unmatched_monthly(include_allocation):
-    cost_case = _cost_case(include_allocation)
-    rows = query(f'''
-        SELECT period, pf,
-               SUM(CASE WHEN statya_svod = %s THEN amount ELSE 0 END) AS revenue,
-               SUM({cost_case}) AS cost,
-               SUM(CASE WHEN statya_svod = %s THEN amount ELSE 0 END) AS investment
-        FROM reporting.dp_monthly
-        WHERE NOT EXISTS (SELECT 1 FROM reporting.dp_portfolio_aliases a WHERE a.project_name = dp_monthly.project)
-        GROUP BY 1, 2
-    ''', (REVENUE_STATYA, INVESTMENT_STATYA))
-    by_period = defaultdict(dict)
-    for r in rows:
-        by_period[r['period']][r['pf']] = {'revenue': float(r['revenue'] or 0), 'cost': float(r['cost'] or 0),
-                                            'investment': float(r['investment'] or 0)}
-    return by_period
 
 
 def _build_rows(monthly, purchase_date, price, face_value=None):
@@ -273,9 +274,10 @@ def portfolio_detail(canonical_name, include_allocation=True):
 
 
 def all_dp_summary():
-    """Свод по всем DP-портфелям + строка "Без карточки" для непривязанных "Проект" имён.
-    Собираемость/остаток не зависят от распределения затрат — считаются один раз; денежный
-    поток и окупаемость — дважды (без и с учётом распределения) для прямого сравнения."""
+    """Свод по всем DP-портфелям (у каждого DP-проекта в данных обязательно есть карточка
+    — см. sync_aliases()). Собираемость/остаток не зависят от распределения затрат —
+    считаются один раз; денежный поток и окупаемость — дважды (без и с учётом
+    распределения) для прямого сравнения. Отсортировано по алфавиту (get_dp_portfolios)."""
     portfolios = get_dp_portfolios()
     monthly_no_alloc = _all_portfolios_monthly(include_allocation=False)
     monthly_with_alloc = _all_portfolios_monthly(include_allocation=True)
@@ -298,20 +300,6 @@ def all_dp_summary():
             'cf_to_date_no_alloc': cf_no, 'cf_to_date_with_alloc': cf_with,
             'payback_no_alloc': payback_months(rows_no), 'payback_with_alloc': payback_months(rows_with),
         })
-
-    unmatched_no = _unmatched_monthly(include_allocation=False)
-    unmatched_with = _unmatched_monthly(include_allocation=True)
-    if unmatched_no or unmatched_with:
-        rows_no, cum_rev, cf_no = _build_rows(unmatched_no, None, 0.0)
-        rows_with, _, cf_with = _build_rows(unmatched_with, None, 0.0)
-        rows.append({
-            'name': 'Без карточки', 'has_card': False,
-            'purchase_date': None, 'units': None, 'face_value_rub': None, 'price_rub': None,
-            'collected_revenue': cum_rev, 'remaining_balance': None, 'collection_pct': None,
-            'cf_to_date_no_alloc': cf_no, 'cf_to_date_with_alloc': cf_with,
-            'payback_no_alloc': None, 'payback_with_alloc': None,
-        })
-
     return rows
 
 

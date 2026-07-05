@@ -59,25 +59,59 @@
         <div class="collapse navbar-collapse">
             <ul class="navbar-nav me-auto flex-wrap">
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='overview' %}active{% endif %}" href="{{ url_for('overview') }}">Обзор</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='svod1' %}active{% endif %}" href="{{ url_for('svod1') }}">Свод1</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='svod2' %}active{% endif %}" href="{{ url_for('svod2') }}">Свод2</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='dashboard1' %}active{% endif %}" href="{{ url_for('dashboard1') }}">Dashboard1</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='dashboard2' %}active{% endif %}" href="{{ url_for('dashboard2') }}">Dashboard2</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='unitpl' %}active{% endif %}" href="{{ url_for('unitpl') }}">UNIT+PL</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='fot1' %}active{% endif %}" href="{{ url_for('fot1') }}">ФОТ v1</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='fot2' %}active{% endif %}" href="{{ url_for('fot2') }}">ФОТ v2</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='loans' %}active{% endif %}" href="{{ url_for('loans') }}">Займы</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='counterparty' %}active{% endif %}" href="{{ url_for('counterparty') }}">По контрагенту</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint in ('investment','investment_detail') %}active{% endif %}" href="{{ url_for('investment') }}">Инвестанализ</a></li>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">П&amp;Л</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='svod1' %}active{% endif %}" href="{{ url_for('svod1') }}">Свод1</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='svod2' %}active{% endif %}" href="{{ url_for('svod2') }}">Свод2</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='dashboard1' %}active{% endif %}" href="{{ url_for('dashboard1') }}">Dashboard1</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='dashboard2' %}active{% endif %}" href="{{ url_for('dashboard2') }}">Dashboard2</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='unitpl' %}active{% endif %}" href="{{ url_for('unitpl') }}">UNIT+PL</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('fot1','fot2','loans') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">ФОТ и займы</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='fot1' %}active{% endif %}" href="{{ url_for('fot1') }}">ФОТ v1</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='fot2' %}active{% endif %}" href="{{ url_for('fot2') }}">ФОТ v2</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='loans' %}active{% endif %}" href="{{ url_for('loans') }}">Займы</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('counterparty','investment','investment_detail','cbr','chat_advisor') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Портфели</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='counterparty' %}active{% endif %}" href="{{ url_for('counterparty') }}">По контрагенту</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint in ('investment','investment_detail') %}active{% endif %}" href="{{ url_for('investment') }}">Инвестанализ</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='cbr' %}active{% endif %}" href="{{ url_for('cbr') }}">CBR</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='chat_advisor' %}active{% endif %}" href="{{ url_for('chat_advisor') }}">Советник по покупке</a></li>
+                    </ul>
+                </li>
+
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='chat' %}active{% endif %}" href="{{ url_for('chat') }}">Чат</a></li>
+
                 {% if session.get('role') in ('admin', 'accountant') %}
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='employees' %}active{% endif %}" href="{{ url_for('employees') }}">Сотрудники</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='investment_admin' %}active{% endif %}" href="{{ url_for('investment_admin') }}">Портфели DP</a></li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('classifier','employees','investment_admin','cbr_admin') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Справочники</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='employees' %}active{% endif %}" href="{{ url_for('employees') }}">Сотрудники</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='investment_admin' %}active{% endif %}" href="{{ url_for('investment_admin') }}">Портфели DP</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='cbr_admin' %}active{% endif %}" href="{{ url_for('cbr_admin') }}">Взыскатели CBR</a></li>
+                    </ul>
+                </li>
                 {% endif %}
+
                 {% if session.get('role') == 'admin' %}
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='admin_users' %}active{% endif %}" href="{{ url_for('admin_users') }}">Пользователи</a></li>
-                <li class="nav-item"><a class="nav-link {% if request.endpoint=='admin_log' %}active{% endif %}" href="{{ url_for('admin_log') }}">Журнал</a></li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('admin_users','admin_log') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Администрирование</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.endpoint=='admin_users' %}active{% endif %}" href="{{ url_for('admin_users') }}">Пользователи</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='admin_log' %}active{% endif %}" href="{{ url_for('admin_log') }}">Журнал</a></li>
+                    </ul>
+                </li>
                 {% endif %}
             </ul>
             <span class="navbar-text me-3">{{ session.get('username') }}</span>

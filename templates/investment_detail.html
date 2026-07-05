@@ -19,72 +19,67 @@
 <div class="row g-3 mb-3">
     <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Дата покупки</div><div class="fs-5">{{ p.purchase_date.strftime('%d.%m.%Y') if p.purchase_date else '—' }}</div></div></div>
     <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">ОСЗ / Цена, тыс</div><div class="fs-5">{{ '%.1f'|format(p.face_value_rub/1000) if p.face_value_rub else '—' }} / {{ '%.1f'|format(p.price_rub/1000) if p.price_rub else '—' }}</div></div></div>
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Собираемость</div><div class="fs-5">{{ '%.1f'|format(data.collection_pct) + '%' if data.collection_pct is not none else '—' }}</div></div></div>
+    <div class="col-md-3">
+        <div class="card p-3" style="cursor:pointer" onclick="showMilestones()" title="Клик — собираемость по контрольным точкам (1, 2, 3... мес)">
+            <div class="text-secondary small">Собираемость (клик — по месяцам)</div>
+            <div class="fs-5">{{ '%.1f'|format(data.collection_pct) + '%' if data.collection_pct is not none else '—' }}</div>
+        </div>
+    </div>
     <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Остаток портфеля, тыс</div><div class="fs-5 {% if data.remaining_balance and data.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.remaining_balance/1000) if data.remaining_balance is not none else '—' }}</div></div></div>
     <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Денежный поток на сегодня, тыс</div><div class="fs-5 {% if data.cf_to_date > 0 %}val-pos{% elif data.cf_to_date < 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.cf_to_date/1000) }}</div></div></div>
     <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Окупаемость, мес</div><div class="fs-5">{{ '%.1f'|format(data.payback_months) if data.payback_months is not none else 'не окупился' }}</div></div></div>
 </div>
 
-<div class="row g-3">
-    <div class="col-lg-8">
-        <div class="card p-3 table-responsive" style="max-height:70vh;">
-            <table class="table report-table mb-0">
-                <thead><tr><th class="label-col">Период</th><th>Возраст, мес</th><th>Выручка, тыс</th><th>Расходы, тыс</th><th>Инвестиция, тыс</th><th>ДП, тыс</th><th>Накопленный ДП, тыс</th><th>Остаток, тыс</th></tr></thead>
-                <tbody>
-                {% for r in data.rows %}
-                <tr class="{% if r.pf == 'план' %}fst-italic text-secondary{% endif %}">
-                    <td class="label-col">{{ r.label }}</td>
-                    <td>{{ r.age }}</td>
-                    <td class="{% if r.revenue > 0 %}val-pos{% endif %}">{{ '%.1f'|format(r.revenue/1000) if r.revenue else '—' }}</td>
-                    <td class="{% if r.cost < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cost/1000) if r.cost else '—' }}</td>
-                    <td class="{% if r.investment < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.investment/1000) if r.investment else '—' }}</td>
-                    <td class="{% if r.cf > 0 %}val-pos{% elif r.cf < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cf/1000) }}</td>
-                    <td class="{% if r.pv > 0 %}val-pos{% elif r.pv < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.pv/1000) }}</td>
-                    <td class="{% if r.remaining_balance and r.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.remaining_balance/1000) if r.remaining_balance is not none else '—' }}</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="d-flex flex-column gap-3">
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Накопленный денежный поток по возрасту портфеля</div><canvas id="invPv" height="150"></canvas></div>
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Остаток портфеля по месяцам</div><canvas id="invBalance" height="150"></canvas></div>
-        </div>
-    </div>
+<div class="card p-3 table-responsive" style="max-height:75vh;">
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Период</th><th>Возраст, мес</th><th>Выручка, тыс</th><th>Расходы, тыс</th><th>Инвестиция, тыс</th><th>ДП, тыс</th><th>Накопленный ДП, тыс</th><th>Остаток, тыс</th><th>Собираемость, %</th></tr></thead>
+        <tbody>
+        {% for r in data.rows %}
+        <tr class="{% if r.pf == 'план' %}fst-italic text-secondary{% endif %}">
+            <td class="label-col">{{ r.label }}</td>
+            <td>{{ r.age }}</td>
+            <td class="{% if r.revenue > 0 %}val-pos{% endif %}">{{ '%.1f'|format(r.revenue/1000) if r.revenue else '—' }}</td>
+            <td class="{% if r.cost < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cost/1000) if r.cost else '—' }}</td>
+            <td class="{% if r.investment < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.investment/1000) if r.investment else '—' }}</td>
+            <td class="{% if r.cf > 0 %}val-pos{% elif r.cf < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.cf/1000) }}</td>
+            <td class="{% if r.pv > 0 %}val-pos{% elif r.pv < 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.pv/1000) }}</td>
+            <td class="{% if r.remaining_balance and r.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(r.remaining_balance/1000) if r.remaining_balance is not none else '—' }}</td>
+            <td style="cursor:pointer" onclick="showMilestones()" title="Собираемость по контрольным точкам">{{ '%.1f'|format(r.collection_pct) if r.collection_pct is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <script>
 (function() {
 try {
 const rows = {{ data.rows | tojson }};
-const mk = (id, config) => {
-    const existing = Chart.getChart(id);
-    if (existing) existing.destroy();
-    return new Chart(document.getElementById(id), config);
+const MILESTONES = [1, 2, 3, 4, 5, 6, 12, 18, 24];
+
+window.showMilestones = function() {
+    const modalEl = document.getElementById('detailModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('detailModalTitle').textContent = 'Собираемость по контрольным точкам — {{ name }}';
+    document.getElementById('detailModalSummary').textContent = '';
+    document.getElementById('detailModalSummary').className = 'mb-2 fw-bold';
+    document.getElementById('detailModalTabs').style.display = 'none';
+
+    const byAge = {};
+    rows.forEach(r => { if (!(r.age in byAge)) byAge[r.age] = r; });
+    const body = MILESTONES.map(m => {
+        const r = byAge[m];
+        const pct = r && r.collection_pct !== null ? r.collection_pct.toFixed(1) + '%' : '—';
+        const bal = r && r.remaining_balance !== null ? (r.remaining_balance / 1000).toFixed(1) : '—';
+        return `<tr><td>${m} мес.</td><td class="text-end">${pct}</td><td class="text-end">${bal}</td></tr>`;
+    }).join('');
+    document.getElementById('detailModalBody').innerHTML = `
+        <table class="table table-sm">
+            <thead><tr><th>Возраст портфеля</th><th class="text-end">Собираемость накопительно</th><th class="text-end">Остаток, тыс</th></tr></thead>
+            <tbody>${body}</tbody>
+        </table>`;
+    modal.show();
 };
-
-mk('invPv', {
-    type: 'line',
-    data: {
-        labels: rows.map(r => r.age),
-        datasets: [
-            { label: 'Накопленный ДП', data: rows.map(r => r.pv / 1000), borderColor: '#000', tension: 0.15 },
-            { label: '0', data: rows.map(() => 0), borderColor: '#c0362c', borderDash: [4,4], pointRadius: 0 }
-        ]
-    },
-    options: { plugins: { legend: { display: false } }, elements: { point: { radius: 0 } } }
-});
-
-mk('invBalance', {
-    type: 'line',
-    data: {
-        labels: rows.map(r => r.label),
-        datasets: [{ label: 'Остаток портфеля', data: rows.map(r => r.remaining_balance !== null ? r.remaining_balance / 1000 : null), borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15 }]
-    },
-    options: { plugins: { legend: { display: false } }, elements: { point: { radius: 0 } } }
-});
 } catch (e) { console.error('investment detail script failed:', e); }
 })();
 </script>

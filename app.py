@@ -15,8 +15,10 @@ import pl_report as pr
 import fot_report as fr
 import loans_report as lr
 import investment_report as ir
+import cbr_report as cr
 import audit
 import chat_assistant
+import portfolio_advisor
 import export
 
 logging.basicConfig(level=logging.INFO)
@@ -292,19 +294,59 @@ def loans():
 @app.route('/counterparty')
 @report_required
 def counterparty():
-    contragent = request.args.get('name', '').strip()
+    contragents = request.args.getlist('name')
     pf = request.args.get('pf', 'факт')
-    project = request.args.get('project', '').strip() or None
+    projects = request.args.getlist('project') or None
     default_from, default_to = pr.default_counterparty_range(pf)
     date_from = request.args.get('date_from') or default_from.isoformat()
     date_to = request.args.get('date_to') or default_to.isoformat()
-    data = pr.counterparty_series(contragent, pf, project, date_from, date_to) if contragent else None
+    data = pr.counterparty_series(contragents, pf, projects, date_from, date_to) if contragents else None
     return render_template(
-        'counterparty.html', data=data, contragent=contragent, pf=pf, project=project,
+        'counterparty.html', data=data, contragents=contragents, pf=pf, projects=projects,
         date_from=date_from, date_to=date_to,
         counterparties=pr.get_counterparties(),
         all_projects=pr.get_projects_with_type(),
     )
+
+
+@app.route('/cbr')
+@report_required
+def cbr():
+    dim = request.args.get('dim', 'department')
+    if dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
+        dim = 'department'
+    overall = cr.overall_by_month()
+    by_dim_data = cr.by_dim(dim)
+    months_raw = overall['months_raw']
+    latest_month = months_raw[-1] if months_raw else None
+    perf = cr.top_bottom_performers(latest_month, dim) if latest_month else {'top': [], 'bottom': []}
+    recommendations = cr.analysis_and_recommendations(dim)
+    return render_template(
+        'cbr.html', overall=overall, by_dim=by_dim_data, dim=dim, dim_labels=cr.DIM_LABELS,
+        perf=perf, recommendations=recommendations,
+    )
+
+
+@app.route('/cbr/admin')
+@classifier_required
+def cbr_admin():
+    rows = cr.get_employee_mapping()
+    return render_template('cbr_admin.html', rows=rows)
+
+
+@app.route('/cbr/admin/<path:employee>', methods=['POST'])
+@classifier_required
+def cbr_admin_update(employee):
+    cr.update_employee_mapping(
+        employee,
+        request.form.get('department', '').strip(),
+        request.form.get('region', '').strip(),
+        request.form.get('is_fired') == 'on',
+        request.form.get('employment_type', '').strip(),
+    )
+    audit.log_action(session.get('username'), 'edit_cbr_employee', employee)
+    flash(f'Данные «{employee}» обновлены', 'success')
+    return redirect(url_for('cbr_admin'))
 
 
 @app.route('/investment')
@@ -570,15 +612,15 @@ def export_report(kind):
             pf = request.args.get('pf', 'факт')
             sheets = lr.export_loans(lr.loans(year, month, pf))
         elif kind == 'counterparty':
-            contragent = request.args.get('name', '').strip()
-            if not contragent:
+            contragents = request.args.getlist('name')
+            if not contragents:
                 return {'error': 'name обязателен'}, 400
             pf = request.args.get('pf', 'факт')
-            project = request.args.get('project', '').strip() or None
+            projects = request.args.getlist('project') or None
             default_from, default_to = pr.default_counterparty_range(pf)
             date_from = request.args.get('date_from') or default_from.isoformat()
             date_to = request.args.get('date_to') or default_to.isoformat()
-            sheets = pr.export_counterparty(pr.counterparty_series(contragent, pf, project, date_from, date_to))
+            sheets = pr.export_counterparty(pr.counterparty_series(contragents, pf, projects, date_from, date_to))
         elif kind == 'overview':
             years = pr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -593,6 +635,8 @@ def export_report(kind):
             if data is None:
                 return {'error': 'Портфель не найден'}, 404
             sheets = ir.export_detail(data)
+        elif kind == 'cbr':
+            sheets = cr.export_rows(cr.overall_by_month())
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
     except Exception:
@@ -623,6 +667,27 @@ def api_chat():
         return jsonify({'error': 'Пустой вопрос'}), 400
     result = chat_assistant.ask(question, history)
     audit.log_action(session.get('username'), 'chat', question[:500])
+    if 'error' in result:
+        return jsonify(result), 200
+    return jsonify(result)
+
+
+@app.route('/chat/advisor')
+@report_required
+def chat_advisor():
+    return render_template('chat_advisor.html', configured=bool(Config.ANTHROPIC_API_KEY))
+
+
+@app.route('/api/chat/advisor', methods=['POST'])
+@report_required
+def api_chat_advisor():
+    payload = request.get_json(silent=True) or {}
+    question = (payload.get('question') or '').strip()
+    history = payload.get('history') or []
+    if not question:
+        return jsonify({'error': 'Пустой вопрос'}), 400
+    result = portfolio_advisor.ask(question, history)
+    audit.log_action(session.get('username'), 'chat_advisor', question[:500])
     if 'error' in result:
         return jsonify(result), 200
     return jsonify(result)

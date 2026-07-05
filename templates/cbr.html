@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}CBR — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">CBR (Cash Back Rate) — собираемость по месяцам</h4>
+        <p class="text-secondary small mb-0">CBR от ОСЗ = платежи за месяц / остаток общей задолженности на конец месяца; CBR от ОД — то же от основного долга.</p>
+    </div>
+    <form class="d-flex gap-2" method="get">
+        <select name="dim" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for key, label in dim_labels.items() %}<option value="{{ key }}" {% if dim==key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='cbr') }}">Скачать Excel</a>
+    </form>
+</div>
+
+<div class="card p-3 mb-3">
+    <h6 class="text-secondary">Анализ и рекомендации</h6>
+    <ul class="mb-0">
+        {% for b in recommendations %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR по месяцам, всего по компании</div><canvas id="cbrOverall" height="150"></canvas></div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">CBR от ОСЗ по месяцам — топ-8 по {{ dim_labels[dim] | lower }}</div><canvas id="cbrByDim" height="150"></canvas></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card p-3 table-responsive">
+            <h6 class="text-secondary">Топ по CBR — {{ overall.months[-1] if overall.months else '' }}</h6>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>{{ dim_labels[dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
+                <tbody>
+                {% for r in perf.top %}
+                <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-pos">{{ '%.2f'|format(r.cbr) }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card p-3 table-responsive">
+            <h6 class="text-secondary">Отстающие по CBR — {{ overall.months[-1] if overall.months else '' }}</h6>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>{{ dim_labels[dim] }}</th><th class="text-end">Остаток</th><th class="text-end">CBR, %</th></tr></thead>
+                <tbody>
+                {% for r in perf.bottom %}
+                <tr><td>{{ r.key }}</td><td class="text-end">{{ '{:,.0f}'.format(r.total_debt).replace(',', ' ') }}</td><td class="text-end val-neg">{{ '%.2f'|format(r.cbr) }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+try {
+const mk = (id, config) => {
+    const existing = Chart.getChart(id);
+    if (existing) existing.destroy();
+    return new Chart(document.getElementById(id), config);
+};
+
+mk('cbrOverall', {
+    type: 'line',
+    data: {
+        labels: {{ overall.months | tojson }},
+        datasets: [
+            {label: 'CBR от ОСЗ, %', data: {{ overall.cbr_osz | tojson }}, borderColor: '#1a7f37', tension: 0.15},
+            {label: 'CBR от ОД, %', data: {{ overall.cbr_od | tojson }}, borderColor: '#0d6efd', tension: 0.15}
+        ]
+    },
+    options: { plugins: { legend: { display: true } } }
+});
+
+const byDimItems = {{ by_dim.rows | tojson }};
+const palette = ['#000','#1a7f37','#c0362c','#0d6efd','#86868b','#e0a800','#6f42c1','#20c997'];
+mk('cbrByDim', {
+    type: 'line',
+    data: {
+        labels: {{ by_dim.months | tojson }},
+        datasets: byDimItems.map((it, i) => ({ label: it.key, data: it.cbr_osz, borderColor: palette[i % palette.length], tension: 0.15 }))
+    },
+    options: { plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } }
+});
+} catch (e) { console.error('cbr script failed:', e); }
+})();
+</script>
+{% endblock %}

@@ -152,3 +152,71 @@ CREATE TABLE IF NOT EXISTS reporting.audit_log (
 );
 CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON reporting.audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_log_username_idx ON reporting.audit_log (username);
+
+-- CBR (cash back rate) — собираемость помесячно по сотрудникам-взыскателям, регионам,
+-- текущим кредиторам и типам долга. Источник — уже готовые агрегаты выгрузки из БИТ:
+-- public.cbr_report_1 (остаток задолженности на конец месяца) и public.cbr_report_2
+-- (платежи за месяц), см. cbr_report.py. Отдельная схема — по просьбе пользователя.
+CREATE SCHEMA IF NOT EXISTS cbr;
+
+DROP MATERIALIZED VIEW IF EXISTS cbr.monthly;
+CREATE MATERIALIZED VIEW cbr.monthly AS
+WITH last_snapshot AS (
+    -- cbr_report_1 хранит ЕЖЕДНЕВНЫЕ срезы остатка (extracted_date) внутри каждого
+    -- месяца — остаток это точка на конец периода, а не поток, поэтому суммировать
+    -- строки за все дни месяца нельзя (даст ~20-кратное завышение); берём только
+    -- последний срез месяца (одним проходом, без коррелированного подзапроса на
+    -- 3.9М строк).
+    SELECT month, MAX(extracted_date) AS last_date FROM public.cbr_report_1 GROUP BY 1
+)
+SELECT
+    COALESCE(b.month, p.month) AS month,
+    COALESCE(b.employee, p.employee) AS employee,
+    COALESCE(b.region, p.region) AS region,
+    COALESCE(b.creditor, p.creditor) AS creditor,
+    COALESCE(b.debt_type, p.debt_type) AS debt_type,
+    COALESCE(b.work_type, p.work_type) AS work_type,
+    COALESCE(b.total_debt, 0) AS total_debt,
+    COALESCE(b.principal_debt, 0) AS principal_debt,
+    COALESCE(p.payment_amount, 0) AS payment_amount,
+    COALESCE(p.do_count, 0) AS do_count,
+    COALESCE(p.payment_count, 0) AS payment_count
+FROM (
+    SELECT r.month, r."Сотрудник" AS employee, r."Регион по прописке" AS region,
+           r."Текущий кредитор" AS creditor, r."Тип долга" AS debt_type, r."Тип работы" AS work_type,
+           SUM(r."Общая сумма задолженности") AS total_debt, SUM(r."Основной долг") AS principal_debt
+    FROM public.cbr_report_1 r
+    JOIN last_snapshot s ON s.month = r.month AND s.last_date = r.extracted_date
+    GROUP BY 1, 2, 3, 4, 5, 6
+) b
+FULL JOIN (
+    SELECT month, "Сотрудник" AS employee, "Регион по прописке" AS region,
+           "Текущий кредитор" AS creditor, "Тип долга" AS debt_type, "Тип работы" AS work_type,
+           SUM("Сумма платежа") AS payment_amount, SUM("Число ДО") AS do_count,
+           SUM("Число платежей") AS payment_count
+    FROM public.cbr_report_2
+    GROUP BY 1, 2, 3, 4, 5, 6
+) p
+ON b.month = p.month
+   AND b.employee IS NOT DISTINCT FROM p.employee
+   AND b.region IS NOT DISTINCT FROM p.region
+   AND b.creditor IS NOT DISTINCT FROM p.creditor
+   AND b.debt_type IS NOT DISTINCT FROM p.debt_type
+   AND b.work_type IS NOT DISTINCT FROM p.work_type;
+
+CREATE INDEX IF NOT EXISTS cbr_monthly_month_idx ON cbr.monthly (month);
+CREATE INDEX IF NOT EXISTS cbr_monthly_employee_idx ON cbr.monthly (employee);
+CREATE INDEX IF NOT EXISTS cbr_monthly_region_idx ON cbr.monthly (region);
+CREATE INDEX IF NOT EXISTS cbr_monthly_creditor_idx ON cbr.monthly (creditor);
+
+-- Справочник сотрудников-взыскателей (отдел/регион/статус/тип занятости) — разово
+-- заполняется из листа "Mapping" эталонного Excel (CBR_v4.xlsx), правится вручную
+-- на /cbr/admin. Тот же паттерн, что reporting.employees для ФОТ.
+CREATE TABLE IF NOT EXISTS cbr.employee_mapping (
+    employee TEXT PRIMARY KEY,
+    department TEXT,
+    region TEXT,
+    is_fired BOOLEAN,
+    employment_type TEXT,
+    updated_at TIMESTAMP DEFAULT now()
+);

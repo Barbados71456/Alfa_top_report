@@ -42,10 +42,6 @@
     </div>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="dash1Chart" height="80"></canvas>
-</div>
-
 {% macro block(rows, is_month, title) %}
 <div class="card p-3 table-responsive mb-4">
     <h6 class="text-secondary">{{ title }}</h6>
@@ -96,23 +92,6 @@
 <script>
 (function() {
 try {
-const rows = {{ data.rows | tojson }};
-const top = rows.filter(r => r.kind === 'line').sort((a,b) => Math.abs(b.series_month.at(-1)) - Math.abs(a.series_month.at(-1))).slice(0, 10);
-const existingChart = Chart.getChart('dash1Chart');
-if (existingChart) existingChart.destroy();
-new Chart(document.getElementById('dash1Chart'), {
-    type: 'bar',
-    data: {
-        labels: top.map(r => r.label),
-        datasets: [{
-            label: 'Последняя колонка сравнения, тыс. руб.',
-            data: top.map(r => r.series_month.at(-1)),
-            backgroundColor: top.map(r => r.series_month.at(-1) >= 0 ? '#1a7f37' : '#c0362c')
-        }]
-    },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
-});
-
 const PF_OPTIONS = ['факт', 'план', 'прогноз'];
 const YEARS = {{ years | tojson }};
 let seriesState = {{ series_str.split(',') | tojson }}.map(s => { const [pf, y] = s.split(':'); return { pf, year: parseInt(y) }; });

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Советник по покупке — Alfa Top Report{% endblock %}
+{% block content %}
+<h4 class="mb-3">Советник по покупке портфеля</h4>
+{% if not configured %}
+<div class="alert alert-warning">
+    Советник не настроен: администратор ещё не добавил ANTHROPIC_API_KEY в переменные окружения.
+    Как только ключ появится, эта страница заработает без каких-либо изменений.
+</div>
+{% else %}
+<p class="text-secondary small">
+    Опишите портфель, который рассматриваете к покупке — советник задаст уточняющие
+    вопросы (цена, ОСЗ, к-во договоров, тип долга, кредитор, регионы) и сравнит со
+    статистикой уже купленных портфелей и CBR. Только чтение данных — ничего не меняет
+    и не удаляет в базе. История переписки хранится только в этой вкладке браузера.
+</p>
+<div class="card p-3 mb-3" style="height:55vh; overflow-y:auto;" id="chatMessages"></div>
+<form class="d-flex gap-2" id="chatForm">
+    <input type="text" class="form-control" id="chatInput" placeholder="Например: рассматриваем портфель цессии, цена 3 млн, ОСЗ 100 млн, 500 ДО" autocomplete="off">
+    <button type="submit" class="btn btn-dark" id="chatSend">Спросить</button>
+    <button type="button" class="btn btn-outline-secondary" id="chatClear">Очистить</button>
+</form>
+
+<script>
+(function() {
+try {
+const STORAGE_KEY = 'alfa_chat_advisor_history';
+const messagesEl = document.getElementById('chatMessages');
+const form = document.getElementById('chatForm');
+const input = document.getElementById('chatInput');
+const sendBtn = document.getElementById('chatSend');
+
+function loadHistory() {
+    try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveHistory(h) { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
+
+function renderMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = 'mb-3 d-flex ' + (role === 'user' ? 'justify-content-end' : 'justify-content-start');
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user' ? 'bg-dark text-white rounded p-2' : 'bg-light border rounded p-2';
+    bubble.style.maxWidth = '75%';
+    bubble.style.whiteSpace = 'pre-wrap';
+    bubble.textContent = text;
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function renderAll() {
+    messagesEl.innerHTML = '';
+    loadHistory().forEach(m => renderMessage(m.role, m.content));
+}
+
+renderAll();
+
+form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const question = input.value.trim();
+    if (!question) return;
+    const history = loadHistory();
+    renderMessage('user', question);
+    input.value = '';
+    sendBtn.disabled = true;
+    fetch('/api/chat/advisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, history })
+    })
+        .then(r => r.json())
+        .then(data => {
+            const answer = data.answer || data.error || 'Не удалось получить ответ.';
+            renderMessage('assistant', answer);
+            history.push({ role: 'user', content: question });
+            history.push({ role: 'assistant', content: answer });
+            saveHistory(history);
+        })
+        .catch(() => renderMessage('assistant', 'Ошибка сети. Попробуйте ещё раз.'))
+        .finally(() => { sendBtn.disabled = false; });
+});
+
+document.getElementById('chatClear').addEventListener('click', () => {
+    sessionStorage.removeItem(STORAGE_KEY);
+    renderAll();
+});
+} catch (e) { console.error('chat advisor script failed:', e); }
+})();
+</script>
+{% endif %}
+{% endblock %}

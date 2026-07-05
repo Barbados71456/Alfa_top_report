@@ -2,17 +2,15 @@
 {% block title %}По контрагенту — Alfa Top Report{% endblock %}
 {% block content %}
 <h4 class="mb-3">Динамика по контрагенту</h4>
+<p class="text-secondary small">Можно выбрать несколько контрагентов и/или проектов — суммы считаются вместе, одним рядом (зажмите Ctrl/Cmd для множественного выбора).</p>
 <form class="d-flex gap-2 mb-4 flex-wrap align-items-center" method="get">
-    <input type="text" name="name" class="form-control" list="contragentList" style="max-width:320px"
-           placeholder="Начните вводить название…" value="{{ contragent }}">
-    <datalist id="contragentList">
-        {% for c in counterparties %}<option value="{{ c }}">{% endfor %}
-    </datalist>
-    <select name="project" class="form-select" style="max-width:220px">
-        <option value="">Все проекты</option>
+    <select name="name" class="form-select" multiple size="6" style="max-width:320px">
+        {% for c in counterparties %}<option value="{{ c }}" {% if c in contragents %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+    <select name="project" class="form-select" multiple size="6" style="max-width:220px">
         {% for tip, names in all_projects %}
         <optgroup label="{{ tip }}">
-            {% for n in names %}<option value="{{ n }}" {% if project == n %}selected{% endif %}>{{ n }}</option>{% endfor %}
+            {% for n in names %}<option value="{{ n }}" {% if projects and n in projects %}selected{% endif %}>{{ n }}</option>{% endfor %}
         </optgroup>
         {% endfor %}
     </select>
@@ -84,7 +82,7 @@ new Chart(document.getElementById('cpChart'), {
 } catch (e) { console.error('counterparty script failed:', e); }
 })();
 </script>
-{% elif contragent %}
-<p class="text-secondary">Нет данных по этому контрагенту.</p>
+{% elif contragents %}
+<p class="text-secondary">Нет данных по выбранным контрагентам.</p>
 {% endif %}
 {% endblock %}
