@@ -10,12 +10,13 @@ SELECT "Период" AS period,
        "Строка отчета" AS line,
        COALESCE(NULLIF(TRIM("Проект"), ''), '(без проекта)') AS project,
        "п_ф" AS pf,
+       "Распределение" AS allocation,
        SUM("Сумма") AS amount
 FROM public."FinancialData"
 WHERE "Строка отчета" IS NOT NULL AND TRIM("Строка отчета") <> ''
-GROUP BY 1, 2, 3, 4;
+GROUP BY 1, 2, 3, 4, 5;
 
-CREATE UNIQUE INDEX pl_monthly_uq ON reporting.pl_monthly (period, line, project, pf);
+CREATE UNIQUE INDEX pl_monthly_uq ON reporting.pl_monthly (period, line, project, pf, allocation);
 CREATE INDEX pl_monthly_period_idx ON reporting.pl_monthly (period);
 CREATE INDEX pl_monthly_line_idx ON reporting.pl_monthly (line);
 CREATE INDEX pl_monthly_project_idx ON reporting.pl_monthly (project);
@@ -29,12 +30,13 @@ SELECT "Период" AS period,
        "Строка отчета" AS line,
        COALESCE(NULLIF(TRIM("СтатьяУровень3"), ''), '(без статьи)') AS stat3,
        "п_ф" AS pf,
+       "Распределение" AS allocation,
        SUM("Сумма") AS amount
 FROM public."FinancialData"
 WHERE "Строка отчета" IS NOT NULL AND TRIM("Строка отчета") <> ''
-GROUP BY 1, 2, 3, 4;
+GROUP BY 1, 2, 3, 4, 5;
 
-CREATE UNIQUE INDEX pl_monthly_stat3_uq ON reporting.pl_monthly_stat3 (period, line, stat3, pf);
+CREATE UNIQUE INDEX pl_monthly_stat3_uq ON reporting.pl_monthly_stat3 (period, line, stat3, pf, allocation);
 CREATE INDEX pl_monthly_stat3_period_idx ON reporting.pl_monthly_stat3 (period);
 
 DROP MATERIALIZED VIEW IF EXISTS reporting.fot_monthly;
@@ -82,6 +84,11 @@ CREATE UNIQUE INDEX counterparty_list_uq ON reporting.counterparty_list (name);
 -- поиск по (Строка отчета, Период, п_ф) с опциональным фильтром по Проекту.
 CREATE INDEX IF NOT EXISTS idx_financialdata_line_period_pf
     ON public."FinancialData" ("Строка отчета", "Период", "п_ф");
+
+-- Под "живой" (не через materialized view) отчёт "Проводки по кошельку" —
+-- SELECT ... WHERE "Кошелек" = ANY(...) по сырой таблице без индекса был бы seq scan.
+CREATE INDEX IF NOT EXISTS idx_financialdata_koshelek
+    ON public."FinancialData" ("Кошелек");
 
 -- Справочник сотрудников для ФОТ (подразделение/должность/статус) — заполняется
 -- автоматически новыми именами из reporting.fot_monthly (см. reporting_refresh.py),

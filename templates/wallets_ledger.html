@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Проводки — {{ name }} — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">Проводки — {{ name }}</h4>
+        <p class="text-secondary small mb-0">Сырые строки из FinancialData по кошельку (алиасы: {{ data.aliases | join(', ') if data.aliases else 'нет' }}).</p>
+    </div>
+    <div class="d-flex gap-2">
+        <form method="get" class="d-flex">
+            <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for y in year_options %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+        </form>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_detail', name=name, year=year) }}">Назад к сверке</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_ledger') }}?name={{ name | urlencode }}&amp;year={{ year }}">Скачать Excel</a>
+    </div>
+</div>
+
+<div class="card p-3 table-responsive" style="max-height:75vh;">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Дата</th><th>Кошелек</th><th>Тип Кошелька</th><th class="label-col">Статья</th>
+            <th class="label-col">Проект</th><th class="label-col">Контрагент</th><th>Сумма</th><th>п_ф</th><th class="label-col">Комментарии</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in data.rows %}
+        <tr>
+            <td class="label-col">{{ r.date.strftime('%d.%m.%Y') if r.date else '—' }}</td>
+            <td>{{ r.wallet_raw }}</td>
+            <td>{{ r.wallet_type or '—' }}</td>
+            <td class="label-col">{{ r.statya3 or r.statya or '—' }}</td>
+            <td class="label-col">{{ r.project or '—' }}</td>
+            <td class="label-col">{{ r.contragent or '—' }}</td>
+            <td class="{% if r.amount and r.amount > 0 %}val-pos{% elif r.amount and r.amount < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.amount).replace(',', ' ') if r.amount is not none else '—' }}</td>
+            <td>{{ r.pf }}</td>
+            <td class="label-col">{{ r.comment or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-secondary">Нет проводок за выбранный период.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

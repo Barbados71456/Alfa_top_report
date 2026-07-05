@@ -12,6 +12,10 @@
             <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
             <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
         </select>
+        <select name="allocation" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
+            <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
+        </select>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='svod2') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </form>
 </div>

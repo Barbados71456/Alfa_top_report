@@ -21,6 +21,13 @@ DIM_LABELS = {
     'debt_type': 'Тип долга', 'department': 'Отдел',
 }
 
+# Эталонный BI-отчёт (CBR_v4.xlsx) жёстко зафиксирован на срезе "Тип долга" =
+# "Агентский" (проверено в xl/slicerCaches/slicerCache1.xml файла — единственное
+# выбранное значение среза). "Цессия" почти не имеет платежей (за 01.2026: 67 руб.
+# при остатке 2.16 млрд), поэтому её включение искажает общий CBR — исключаем
+# везде, не переключаемо.
+_AGENCY_FILTER = "debt_type = 'Агентский'"
+
 
 def get_available_months():
     rows = query('SELECT DISTINCT month FROM cbr.monthly ORDER BY 1')
@@ -34,10 +41,10 @@ def _cbr(payment, base):
 def overall_by_month():
     """Свод по месяцам — 1:1 со страницей "Таблица" в BI (7 строк: ОСЗ тыс.руб/шт,
     Платежи тыс.руб/шт, Основной долг тыс.руб, CBR от ОСЗ/ОД %)."""
-    rows = query('''SELECT month, SUM(total_debt) AS total_debt, SUM(principal_debt) AS principal_debt,
+    rows = query(f'''SELECT month, SUM(total_debt) AS total_debt, SUM(principal_debt) AS principal_debt,
                             SUM(payment_amount) AS payment_amount, SUM(do_count) AS do_count,
                             SUM(payment_count) AS payment_count
-                     FROM cbr.monthly GROUP BY 1 ORDER BY 1''')
+                     FROM cbr.monthly WHERE {_AGENCY_FILTER} GROUP BY 1 ORDER BY 1''')
     months = [r['month'] for r in rows]
     total_debt = [float(r['total_debt'] or 0) for r in rows]
     principal_debt = [float(r['principal_debt'] or 0) for r in rows]
@@ -56,14 +63,14 @@ def overall_by_month():
 
 def _dim_query(dim):
     if dim == 'department':
-        return '''SELECT m.month, COALESCE(e.department, 'Без отдела') AS key,
+        return f'''SELECT m.month, COALESCE(e.department, 'Без отдела') AS key,
                           SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
                    FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
-                   GROUP BY 1, 2 ORDER BY 1'''
+                   WHERE m.{_AGENCY_FILTER} GROUP BY 1, 2 ORDER BY 1'''
     col = DIM_COLUMNS[dim]
     return f'''SELECT month, COALESCE("{col}", 'Не указано') AS key,
                       SUM(total_debt) AS total_debt, SUM(payment_amount) AS payment_amount
-               FROM cbr.monthly GROUP BY 1, 2 ORDER BY 1'''
+               FROM cbr.monthly WHERE {_AGENCY_FILTER} GROUP BY 1, 2 ORDER BY 1'''
 
 
 def by_dim(dim, top_n=8):
@@ -90,15 +97,15 @@ def by_dim(dim, top_n=8):
 
 def top_bottom_performers(month, dim, n=5, min_debt=1_000_000):
     if dim == 'department':
-        rows = query('''SELECT COALESCE(e.department, 'Без отдела') AS key,
+        rows = query(f'''SELECT COALESCE(e.department, 'Без отдела') AS key,
                                 SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
                          FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
-                         WHERE m.month = %s GROUP BY 1''', (month,))
+                         WHERE m.month = %s AND m.{_AGENCY_FILTER} GROUP BY 1''', (month,))
     else:
         col = DIM_COLUMNS[dim]
         rows = query(f'''SELECT COALESCE("{col}", 'Не указано') AS key,
                                  SUM(total_debt) AS total_debt, SUM(payment_amount) AS payment_amount
-                          FROM cbr.monthly WHERE month = %s GROUP BY 1''', (month,))
+                          FROM cbr.monthly WHERE month = %s AND {_AGENCY_FILTER} GROUP BY 1''', (month,))
     items = []
     for r in rows:
         total_debt = float(r['total_debt'] or 0)
@@ -156,7 +163,7 @@ _IS_NETWORK_SQL = "(m.employee IS NOT NULL AND trim(m.employee) <> '')"
 
 
 def _cbr_filters_where(dept=None, emp_region=None, employee=None, is_network=None):
-    where, params = ['1=1'], []
+    where, params = [f'm.{_AGENCY_FILTER}'], []
     if dept:
         where.append('e.department = ANY(%s)'); params.append(dept)
     if emp_region:
@@ -180,12 +187,19 @@ def creditor_pivot(dept=None, emp_region=None, employee=None, is_network=None):
     months = sorted({r['month'] for r in rows})
     creditors = sorted({r['creditor'] for r in rows})
     matrix = defaultdict(dict)
+    matrix_debt = defaultdict(dict)
+    matrix_payment = defaultdict(dict)
     for r in rows:
-        matrix[r['creditor']][r['month']] = _cbr(float(r['payment_amount'] or 0), float(r['total_debt'] or 0))
+        debt, payment = float(r['total_debt'] or 0), float(r['payment_amount'] or 0)
+        matrix[r['creditor']][r['month']] = _cbr(payment, debt)
+        matrix_debt[r['creditor']][r['month']] = debt
+        matrix_payment[r['creditor']][r['month']] = payment
     return {
         'months': [m.strftime('%m.%Y') for m in months],
         'creditors': creditors,
         'matrix': {c: [matrix[c].get(m, 0.0) for m in months] for c in creditors},
+        'matrix_debt': {c: [matrix_debt[c].get(m, 0.0) for m in months] for c in creditors},
+        'matrix_payment': {c: [matrix_payment[c].get(m, 0.0) for m in months] for c in creditors},
     }
 
 
@@ -223,12 +237,21 @@ def region_department_pivot(is_network=None):
     months = sorted({r['month'] for r in rows})
     tree = defaultdict(lambda: defaultdict(dict))
     for r in rows:
-        tree[r['region']][r['department']][r['month']] = _cbr(float(r['payment_amount'] or 0), float(r['total_debt'] or 0))
+        debt, payment = float(r['total_debt'] or 0), float(r['payment_amount'] or 0)
+        tree[r['region']][r['department']][r['month']] = {
+            'cbr': _cbr(payment, debt), 'debt': debt, 'payment': payment,
+        }
     out = []
     for region in sorted(tree):
         depts = []
         for dept in sorted(tree[region]):
-            depts.append({'department': dept, 'cbr_osz': [tree[region][dept].get(m, 0.0) for m in months]})
+            cell = tree[region][dept]
+            depts.append({
+                'department': dept,
+                'cbr_osz': [cell.get(m, {}).get('cbr', 0.0) for m in months],
+                'debt': [cell.get(m, {}).get('debt', 0.0) for m in months],
+                'payment': [cell.get(m, {}).get('payment', 0.0) for m in months],
+            })
         out.append({'region': region, 'departments': depts})
     return {'months': [m.strftime('%m.%Y') for m in months], 'regions': out}
 

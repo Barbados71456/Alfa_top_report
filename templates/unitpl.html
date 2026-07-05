@@ -19,6 +19,10 @@
             <option value="{{ loop.index0 }}" {% if loop.index0 == data.end_idx %}selected{% endif %}>{{ p.label }}</option>
             {% endfor %}
         </select>
+        <select name="allocation" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
+            <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
+        </select>
         <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='unitpl') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
     </form>

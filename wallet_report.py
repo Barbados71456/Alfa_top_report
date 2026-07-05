@@ -233,7 +233,11 @@ def _build_wallet_rows(turnover, checkpoints):
     return rows
 
 
-def wallet_detail(canonical_name):
+def wallet_detail(canonical_name, year=None):
+    """Карточка кошелька за один год (пользователь листает года по одному, не
+    сплошной таблицей с 2021-го). "Текущий расчётный остаток" и "последняя точка
+    сверки" считаются от ПОЛНОЙ истории (не зависят от просматриваемого года —
+    это факты "на сейчас"). year='all' — вся история без нарезки (для экспорта)."""
     wallet, aliases = _wallet_by_name(canonical_name)
     if wallet is None:
         return None
@@ -243,8 +247,20 @@ def wallet_detail(canonical_name):
     )}
     rows = _build_wallet_rows(turnover, checkpoints)
     last_checkpoint_row = next((r for r in reversed(rows) if r['entered'] is not None), None)
+
+    available_years = sorted({r['period'].year for r in rows})
+    if year == 'all':
+        year_rows = rows
+    else:
+        if not available_years:
+            year = None
+        elif year not in available_years:
+            year = available_years[-1]
+        year_rows = [r for r in rows if r['period'].year == year]
+
     return {
-        'wallet': wallet, 'aliases': aliases, 'rows': rows,
+        'wallet': wallet, 'aliases': aliases, 'rows': year_rows,
+        'all_years': available_years, 'year': year,
         'current_balance': rows[-1]['balance'] if rows else None,
         'last_checkpoint': last_checkpoint_row,
     }
@@ -338,4 +354,44 @@ def export_summary(rows):
 def export_detail(data):
     headers = ['Период', 'Оборот', 'Расчётный остаток', 'Введено при сверке', 'Расхождение']
     rows = [[r['label'], r['turnover'], r['balance'], r['entered'], r['discrepancy']] for r in data['rows']]
+    return [(data['wallet']['canonical_name'][:31], headers, rows)]
+
+
+def wallet_ledger(canonical_name, date_from=None, date_to=None):
+    """Сырые проводки по кошельку из public.FinancialData (не агрегат) — для
+    отчёта "Проводки": какие конкретно строки формируют оборот. По умолчанию
+    диапазон дат не задан вызывающей стороной — роут сам ограничивает годом,
+    чтобы не тянуть разом всю историю кошелька."""
+    wallet, aliases = _wallet_by_name(canonical_name)
+    if wallet is None:
+        return None
+    if not aliases:
+        return {'wallet': wallet, 'aliases': aliases, 'rows': [], 'date_from': date_from, 'date_to': date_to}
+    sql = '''SELECT "Дата" AS date, "Период" AS period, "Кошелек" AS wallet_raw,
+                    "Тип Кошелька" AS wallet_type, "Статья" AS statya,
+                    "СтатьяУровень3" AS statya3, "Проект" AS project,
+                    "Контрагент" AS contragent, "Сумма" AS amount,
+                    "п_ф" AS pf, "Комментарии" AS comment
+             FROM public."FinancialData"
+             WHERE "Кошелек" = ANY(%s)'''
+    params = [aliases]
+    if date_from:
+        sql += ' AND "Дата" >= %s'
+        params.append(date_from)
+    if date_to:
+        sql += ' AND "Дата" <= %s'
+        params.append(date_to)
+    sql += ' ORDER BY "Дата"'
+    rows = query(sql, params)
+    return {'wallet': wallet, 'aliases': aliases, 'rows': rows, 'date_from': date_from, 'date_to': date_to}
+
+
+def export_ledger(data):
+    headers = ['Дата', 'Период', 'Кошелек', 'Тип Кошелька', 'Статья', 'СтатьяУровень3',
+               'Проект', 'Контрагент', 'Сумма', 'п_ф', 'Комментарии']
+    rows = [
+        [r['date'], r['period'], r['wallet_raw'], r['wallet_type'], r['statya'], r['statya3'],
+         r['project'], r['contragent'], r['amount'], r['pf'], r['comment']]
+        for r in data['rows']
+    ]
     return [(data['wallet']['canonical_name'][:31], headers, rows)]

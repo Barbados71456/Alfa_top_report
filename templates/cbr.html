@@ -71,7 +71,7 @@
             <thead><tr><th class="label-col">Кредитор</th>{% for m in creditor_pivot_all.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
             <tbody>
             {% for c in creditor_pivot_all.creditors %}
-            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_all.matrix[c] %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_all.matrix[c] %}<td data-bs-toggle="tooltip" title="Остаток: {{ '{:,.0f}'.format(creditor_pivot_all.matrix_debt[c][loop.index0]).replace(',', ' ') }} руб / Платежи: {{ '{:,.0f}'.format(creditor_pivot_all.matrix_payment[c][loop.index0]).replace(',', ' ') }} руб">{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
             {% endfor %}
             </tbody>
         </table>
@@ -98,7 +98,7 @@
             <thead><tr><th class="label-col">Текущий кредитор</th>{% for m in creditor_pivot_partners.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
             <tbody>
             {% for c in creditor_pivot_partners.creditors %}
-            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_partners.matrix[c] %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">{{ c }}</td>{% for v in creditor_pivot_partners.matrix[c] %}<td data-bs-toggle="tooltip" title="Остаток: {{ '{:,.0f}'.format(creditor_pivot_partners.matrix_debt[c][loop.index0]).replace(',', ' ') }} руб / Платежи: {{ '{:,.0f}'.format(creditor_pivot_partners.matrix_payment[c][loop.index0]).replace(',', ' ') }} руб">{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
             {% endfor %}
             </tbody>
         </table>
@@ -113,7 +113,7 @@
             {% for r in region_dept_pivot.regions %}
             <tr class="row-bold"><td class="label-col">{{ r.region }}</td>{% for m in region_dept_pivot.months %}<td></td>{% endfor %}</tr>
             {% for d in r.departments %}
-            <tr><td class="label-col ps-4">{{ d.department }}</td>{% for v in d.cbr_osz %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
+            <tr><td class="label-col ps-4">{{ d.department }}</td>{% for v in d.cbr_osz %}<td data-bs-toggle="tooltip" title="Остаток: {{ '{:,.0f}'.format(d.debt[loop.index0]).replace(',', ' ') }} руб / Платежи: {{ '{:,.0f}'.format(d.payment[loop.index0]).replace(',', ' ') }} руб">{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
             {% endfor %}
             {% endfor %}
             </tbody>
@@ -245,6 +245,8 @@ mk('cbrByDim', {
     },
     options: { plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } }
 });
+
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
 document.querySelectorAll('#cbrTabs button[data-bs-toggle="tab"]').forEach(btn => {
     btn.addEventListener('shown.bs.tab', () => {

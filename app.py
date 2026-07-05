@@ -139,13 +139,14 @@ def overview():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
     pf = request.args.get('pf', 'факт')
-    data = pr.overview_data(year, pf)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.overview_data(year, pf, allocation)
     fot_data = fr.fot1(year, pf)
     fot_total = next((r for r in fot_data['rows'] if r['label'] == 'ФОТ (всего)'), None)
     headcount = next((r for r in fot_data['rows'] if r['label'] == 'Численность (всего)'), None)
     loans_series = lr.loans_balance_series(pf)
     return render_template(
-        'overview.html', data=data, years=years, year=year, pf=pf,
+        'overview.html', data=data, years=years, year=year, pf=pf, allocation=allocation,
         fot_total=fot_total, headcount=headcount, loans_series=loans_series,
     )
 
@@ -156,8 +157,9 @@ def svod1():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
     pf = request.args.get('pf', 'факт')
-    data = pr.svod1(year, pf)
-    return render_template('svod1.html', data=data, years=years, year=year, pf=pf)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.svod1(year, pf, allocation)
+    return render_template('svod1.html', data=data, years=years, year=year, pf=pf, allocation=allocation)
 
 
 @app.route('/api/cell_detail')
@@ -168,10 +170,11 @@ def api_cell_detail():
     month = request.args.get('month', type=int)
     pf = request.args.get('pf', 'факт')
     projects = request.args.getlist('project') or None
+    allocation = request.args.get('allocation', 'all')
     if not (lines and year and month):
         return {'error': 'line, year, month обязательны'}, 400
     try:
-        data = pr.cell_detail(lines, year, month, pf, projects)
+        data = pr.cell_detail(lines, year, month, pf, projects, allocation)
     except Exception:
         app.logger.exception('cell_detail error')
         return {'error': 'Ошибка при получении детализации'}, 500
@@ -184,8 +187,9 @@ def svod2():
     years = pr.get_available_years()
     year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
     pf = request.args.get('pf', 'факт')
-    data = pr.svod2(year, pf)
-    return render_template('svod2.html', data=data, years=years, year=year, pf=pf)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.svod2(year, pf, allocation)
+    return render_template('svod2.html', data=data, years=years, year=year, pf=pf, allocation=allocation)
 
 
 @app.route('/unitpl')
@@ -193,8 +197,9 @@ def svod2():
 def unitpl():
     start = request.args.get('start', type=int)
     end = request.args.get('end', type=int)
-    data = pr.unit_pl(start=start, end=end)
-    return render_template('unitpl.html', data=data)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.unit_pl(start=start, end=end, allocation=allocation)
+    return render_template('unitpl.html', data=data, allocation=allocation)
 
 
 @app.route('/api/deviation_detail')
@@ -202,6 +207,7 @@ def unitpl():
 def api_deviation_detail():
     lines = request.args.getlist('line')
     projects = request.args.getlist('project') or None
+    allocation = request.args.get('allocation', 'all')
     a = request.args.get('a', '')
     b = request.args.get('b', '')
     try:
@@ -213,7 +219,7 @@ def api_deviation_detail():
         return {'error': 'line обязателен'}, 400
     try:
         data = pr.deviation_detail(
-            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)), projects
+            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)), projects, allocation=allocation
         )
     except Exception:
         app.logger.exception('deviation_detail error')
@@ -228,9 +234,10 @@ def dashboard1():
     month = request.args.get('month', type=int) or date.today().month
     series, deltas = _series_deltas_from_request(years)
     projects = request.args.getlist('project') or None
-    data = pr.dashboard1(month, series, deltas, projects)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.dashboard1(month, series, deltas, projects, allocation=allocation)
     return render_template(
-        'dashboard1.html', data=data, years=years, month=month, projects=projects,
+        'dashboard1.html', data=data, years=years, month=month, projects=projects, allocation=allocation,
         all_projects=pr.get_projects_with_type(),
         series_str=_format_series(series), deltas_str=_format_deltas(deltas),
     )
@@ -243,9 +250,10 @@ def dashboard2():
     month = request.args.get('month', type=int) or date.today().month
     series, deltas = _series_deltas_from_request(years)
     projects = request.args.getlist('project') or None
-    data = pr.dashboard2(month, series, deltas, projects)
+    allocation = request.args.get('allocation', 'all')
+    data = pr.dashboard2(month, series, deltas, projects, allocation=allocation)
     return render_template(
-        'dashboard2.html', data=data, years=years, month=month, projects=projects,
+        'dashboard2.html', data=data, years=years, month=month, projects=projects, allocation=allocation,
         all_projects=pr.get_projects_with_type(),
         series_str=_format_series(series), deltas_str=_format_deltas(deltas),
     )
@@ -468,7 +476,8 @@ def wallets():
 @app.route('/wallets/<path:name>')
 @report_required
 def wallets_detail(name):
-    data = wr.wallet_detail(name)
+    year = request.args.get('year', type=int)
+    data = wr.wallet_detail(name, year)
     if data is None:
         flash(f'Кошелёк «{name}» не найден', 'danger')
         return redirect(url_for('wallets'))
@@ -482,13 +491,29 @@ def wallets_add_balance(name):
     if not wallet:
         flash(f'Кошелёк «{name}» не найден', 'danger')
         return redirect(url_for('wallets'))
-    period = request.form.get('period')
+    period_month = request.form.get('period_month')
+    period = f'{period_month}-01' if period_month else None
     balance = request.form.get('balance')
+    year = request.form.get('year', type=int)
     if period and balance:
         wr.add_balance_entry(wallet[0]['id'], period, balance, request.form.get('notes', '').strip(), session.get('username'))
         audit.log_action(session.get('username'), 'add_wallet_balance', f'{name} @ {period} = {balance}')
         flash('Точка сверки сохранена', 'success')
-    return redirect(url_for('wallets_detail', name=name))
+    return redirect(url_for('wallets_detail', name=name, year=year))
+
+
+@app.route('/wallets/<path:name>/ledger')
+@report_required
+def wallets_ledger(name):
+    detail = wr.wallet_detail(name, year='all')
+    if detail is None:
+        flash(f'Кошелёк «{name}» не найден', 'danger')
+        return redirect(url_for('wallets'))
+    year = request.args.get('year', type=int) or (detail['all_years'][-1] if detail['all_years'] else None)
+    date_from = date(year, 1, 1) if year else None
+    date_to = date(year, 12, 31) if year else None
+    data = wr.wallet_ledger(name, date_from, date_to)
+    return render_template('wallets_ledger.html', data=data, name=name, year=year, year_options=detail['all_years'])
 
 
 @app.route('/wallets/admin')
@@ -727,28 +752,33 @@ def export_report(kind):
             years = pr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
             pf = request.args.get('pf', 'факт')
-            sheets = pr.export_svod1(pr.svod1(year, pf))
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_svod1(pr.svod1(year, pf, allocation))
         elif kind == 'svod2':
             years = pr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
             pf = request.args.get('pf', 'факт')
-            sheets = pr.export_svod2(pr.svod2(year, pf))
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_svod2(pr.svod2(year, pf, allocation))
         elif kind == 'dashboard1':
             years = pr.get_available_years()
             month = request.args.get('month', type=int) or date.today().month
             series, deltas = _series_deltas_from_request(years)
             projects = request.args.getlist('project') or None
-            sheets = pr.export_dashboard(pr.dashboard1(month, series, deltas, projects), 'Dashboard1')
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_dashboard(pr.dashboard1(month, series, deltas, projects, allocation=allocation), 'Dashboard1')
         elif kind == 'dashboard2':
             years = pr.get_available_years()
             month = request.args.get('month', type=int) or date.today().month
             series, deltas = _series_deltas_from_request(years)
             projects = request.args.getlist('project') or None
-            sheets = pr.export_dashboard(pr.dashboard2(month, series, deltas, projects), 'Dashboard2')
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_dashboard(pr.dashboard2(month, series, deltas, projects, allocation=allocation), 'Dashboard2')
         elif kind == 'unitpl':
             start = request.args.get('start', type=int)
             end = request.args.get('end', type=int)
-            sheets = pr.export_unitpl(pr.unit_pl(start=start, end=end))
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_unitpl(pr.unit_pl(start=start, end=end, allocation=allocation))
         elif kind == 'fot1':
             years = fr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
@@ -785,7 +815,8 @@ def export_report(kind):
             years = pr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
             pf = request.args.get('pf', 'факт')
-            sheets = pr.export_overview(pr.overview_data(year, pf))
+            allocation = request.args.get('allocation', 'all')
+            sheets = pr.export_overview(pr.overview_data(year, pf, allocation))
         elif kind == 'investment':
             sheets = ir.export_summary(ir.all_dp_summary())
         elif kind == 'investment_detail':
@@ -801,10 +832,19 @@ def export_report(kind):
             sheets = wr.export_summary(wr.all_wallets_summary())
         elif kind == 'wallets_detail':
             name = request.args.get('name', '')
-            data = wr.wallet_detail(name)
+            data = wr.wallet_detail(name, year='all')
             if data is None:
                 return {'error': 'Кошелёк не найден'}, 404
             sheets = wr.export_detail(data)
+        elif kind == 'wallets_ledger':
+            name = request.args.get('name', '')
+            year = request.args.get('year', type=int)
+            date_from = date(year, 1, 1) if year else None
+            date_to = date(year, 12, 31) if year else None
+            data = wr.wallet_ledger(name, date_from, date_to)
+            if data is None:
+                return {'error': 'Кошелёк не найден'}, 404
+            sheets = wr.export_ledger(data)
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
     except Exception:
