@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}По контрагенту — Alfa Top Report{% endblock %}
 {% block content %}
-<h4 class="mb-3">Динамика по контрагенту</h4>
-<p class="text-secondary small">Можно выбрать несколько контрагентов и/или проектов — суммы считаются вместе, одним рядом (зажмите Ctrl/Cmd для множественного выбора).</p>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Портфели</div>
+    <h1 class="page-title">Динамика по контрагенту</h1>
+    <p class="page-subtitle">Можно выбрать несколько контрагентов и/или проектов — суммы считаются вместе, одним рядом (зажмите Ctrl/Cmd для множественного выбора).</p>
+</div>
 <form class="d-flex gap-2 mb-4 flex-wrap align-items-center" method="get">
     <select name="name" class="form-select" multiple size="6" style="max-width:320px">
         {% for c in counterparties %}<option value="{{ c }}" {% if c in contragents %}selected{% endif %}>{{ c }}</option>{% endfor %}
@@ -28,16 +31,16 @@
 {% if data %}
 <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
     <div class="d-flex gap-3 flex-grow-1">
-        <div class="card p-3 flex-fill">
-            <div class="text-secondary small">Выручка всего</div>
-            <div class="fs-4 val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
+        <div class="card p-3 flex-fill kpi-card">
+            <div class="kpi-label">Выручка всего</div>
+            <div class="kpi-value val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
         </div>
-        <div class="card p-3 flex-fill">
-            <div class="text-secondary small">Затраты всего</div>
-            <div class="fs-4 val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
+        <div class="card p-3 flex-fill kpi-card">
+            <div class="kpi-label">Затраты всего</div>
+            <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
         </div>
     </div>
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='counterparty') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='counterparty') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
 </div>
 
 <div class="row g-3">

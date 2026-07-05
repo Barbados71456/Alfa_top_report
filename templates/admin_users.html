@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Пользователи — Alfa Top Report{% endblock %}
 {% block content %}
-<h4 class="mb-3">Пользователи</h4>
-<p class="text-secondary small">
-    Роли: <strong>admin</strong> — доступ ко всему; <strong>accountant</strong> (бухгалтер)
-    — вся отчётность + классификаторы; <strong>shareholder</strong> (акционер) — только
-    отчётность.
-</p>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Администрирование</div>
+    <h1 class="page-title">Пользователи</h1>
+    <p class="page-subtitle">
+        Роли: <strong>admin</strong> — доступ ко всему; <strong>accountant</strong> (бухгалтер)
+        — вся отчётность + классификаторы; <strong>shareholder</strong> (акционер) — только
+        отчётность.
+    </p>
+</div>
 
 <div class="card p-3 table-responsive mb-4">
     <table class="table report-table mb-0">

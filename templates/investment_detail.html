@@ -2,32 +2,33 @@
 {% block title %}{{ name }} — Alfa Top Report{% endblock %}
 {% block content %}
 {% set p = data.portfolio %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h4 class="mb-0">{{ name }}</h4>
-        <p class="text-secondary small mb-0">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — карточка не привязана к данным' }}</p>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Портфели</div>
+        <h1 class="page-title">{{ name }}</h1>
+        <p class="page-subtitle">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — карточка не привязана к данным' }}</p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="toolbar">
         <div class="btn-group btn-group-sm">
             <a class="btn btn-outline-dark {% if not include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=0) }}">Без учёта распределения</a>
             <a class="btn btn-outline-dark {% if include_allocation %}active{% endif %}" href="{{ url_for('investment_detail', name=name, allocation=1) }}">С учётом распределения</a>
         </div>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment_detail') }}?name={{ name | urlencode }}&amp;allocation={{ 1 if include_allocation else 0 }}">Скачать Excel</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment_detail') }}?name={{ name | urlencode }}&amp;allocation={{ 1 if include_allocation else 0 }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </div>
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Дата покупки</div><div class="fs-5">{{ p.purchase_date.strftime('%d.%m.%Y') if p.purchase_date else '—' }}</div></div></div>
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">ОСЗ / Цена, тыс</div><div class="fs-5">{{ '%.1f'|format(p.face_value_rub/1000) if p.face_value_rub else '—' }} / {{ '%.1f'|format(p.price_rub/1000) if p.price_rub else '—' }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3 kpi-card"><div class="kpi-label">Дата покупки</div><div class="kpi-value">{{ p.purchase_date.strftime('%d.%m.%Y') if p.purchase_date else '—' }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3 kpi-card"><div class="kpi-label">ОСЗ / Цена, тыс</div><div class="kpi-value">{{ '%.1f'|format(p.face_value_rub/1000) if p.face_value_rub else '—' }} / {{ '%.1f'|format(p.price_rub/1000) if p.price_rub else '—' }}</div></div></div>
     <div class="col-md-3">
-        <div class="card p-3" style="cursor:pointer" onclick="showMilestones()" title="Клик — собираемость по контрольным точкам (1, 2, 3... мес)">
-            <div class="text-secondary small">Собираемость (клик — по месяцам)</div>
-            <div class="fs-5">{{ '%.1f'|format(data.collection_pct) + '%' if data.collection_pct is not none else '—' }}</div>
+        <div class="card p-3 kpi-card card-hover" style="cursor:pointer" onclick="showMilestones()" title="Клик — собираемость по контрольным точкам (1, 2, 3... мес)">
+            <div class="kpi-label">Собираемость (клик — по месяцам)</div>
+            <div class="kpi-value">{{ '%.1f'|format(data.collection_pct) + '%' if data.collection_pct is not none else '—' }}</div>
         </div>
     </div>
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Остаток портфеля, тыс</div><div class="fs-5 {% if data.remaining_balance and data.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.remaining_balance/1000) if data.remaining_balance is not none else '—' }}</div></div></div>
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Денежный поток на сегодня, тыс</div><div class="fs-5 {% if data.cf_to_date > 0 %}val-pos{% elif data.cf_to_date < 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.cf_to_date/1000) }}</div></div></div>
-    <div class="col-md-3"><div class="card p-3"><div class="text-secondary small">Окупаемость, мес</div><div class="fs-5">{{ '%.1f'|format(data.payback_months) if data.payback_months is not none else 'не окупился' }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3 kpi-card"><div class="kpi-label">Остаток портфеля, тыс</div><div class="kpi-value {% if data.remaining_balance and data.remaining_balance > 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.remaining_balance/1000) if data.remaining_balance is not none else '—' }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3 kpi-card"><div class="kpi-label">Денежный поток на сегодня, тыс</div><div class="kpi-value {% if data.cf_to_date > 0 %}val-pos{% elif data.cf_to_date < 0 %}val-neg{% endif %}">{{ '%.1f'|format(data.cf_to_date/1000) }}</div></div></div>
+    <div class="col-md-3"><div class="card p-3 kpi-card"><div class="kpi-label">Окупаемость, мес</div><div class="kpi-value">{{ '%.1f'|format(data.payback_months) if data.payback_months is not none else 'не окупился' }}</div></div></div>
 </div>
 
 <div class="card p-3 table-responsive" style="max-height:75vh;">

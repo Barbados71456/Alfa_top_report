@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}UNIT+PL — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h4 class="mb-0">UNIT+PL — вся история и план вперёд одной строкой, тыс. руб.</h4>
-        <p class="text-secondary small mb-0">Факт там, где он есть за месяц; иначе — план (столбцы отмечены курсивом).</p>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Бизнес отчёты</div>
+        <h1 class="page-title">UNIT+PL — вся история и план вперёд одной строкой, тыс. руб.</h1>
+        <p class="page-subtitle">Факт там, где он есть за месяц; иначе — план (столбцы отмечены курсивом).</p>
     </div>
-    <form class="d-flex gap-2 align-items-center" method="get">
+    <form class="toolbar" method="get">
         <span class="small text-secondary">Диапазон:</span>
         <select name="start" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for p in data.full_periods_meta %}
@@ -24,7 +25,7 @@
             <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
         </select>
         <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='unitpl') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='unitpl') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </form>
 </div>
 

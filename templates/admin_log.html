@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Журнал действий — Alfa Top Report{% endblock %}
 {% block content %}
-<h4 class="mb-3">Журнал действий</h4>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Администрирование</div>
+    <h1 class="page-title">Журнал действий</h1>
+</div>
 <form class="mb-3" method="get">
     <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по пользователю/действию/деталям" value="{{ search }}">
 </form>

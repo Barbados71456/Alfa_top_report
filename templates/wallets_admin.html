@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Справочник кошельков — Alfa Top Report{% endblock %}
 {% block content %}
-<h4 class="mb-3">Справочник кошельков</h4>
-<p class="text-secondary small">
-    Группа (Счета/Касса/Спецсчета/Учредители/Прочее) — для группировки в своде.
-    «Привязанные "Кошелек"» — сырые имена в FinancialData, относящиеся к этому кошельку
-    (могут отличаться пробелами/регистром).
-</p>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Справочники</div>
+    <h1 class="page-title">Справочник кошельков</h1>
+    <p class="page-subtitle">
+        Группа (Счета/Касса/Спецсчета/Учредители/Прочее) — для группировки в своде.
+        «Привязанные "Кошелек"» — сырые имена в FinancialData, относящиеся к этому кошельку
+        (могут отличаться пробелами/регистром).
+    </p>
+</div>
 
 <div class="card p-3 table-responsive mb-4">
     <table class="table report-table mb-0">

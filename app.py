@@ -468,8 +468,19 @@ def investment_admin_remove_alias():
 @app.route('/wallets')
 @report_required
 def wallets():
-    rows = wr.all_wallets_summary()
-    return render_template('wallets_summary.html', rows=rows)
+    data = wr.all_wallets_reconciliation()
+    return render_template('wallets_summary.html', data=data)
+
+
+@app.route('/wallets/reconcile', methods=['POST'])
+@classifier_required
+def wallets_reconcile():
+    entries = {k[len('balance_'):]: v for k, v in request.form.items() if k.startswith('balance_')}
+    saved, period = wr.save_reconciliation(entries, session.get('username'))
+    if saved:
+        audit.log_action(session.get('username'), 'wallets_reconcile', f'{saved} кошельков на {period}')
+        flash(f'Сохранено точек сверки: {saved}', 'success')
+    return redirect(url_for('wallets'))
 
 
 @app.route('/wallets/<path:name>')
@@ -828,7 +839,7 @@ def export_report(kind):
         elif kind == 'cbr':
             sheets = cr.export_rows(cr.overall_by_month())
         elif kind == 'wallets':
-            sheets = wr.export_summary(wr.all_wallets_summary())
+            sheets = wr.export_summary(wr.all_wallets_reconciliation())
         elif kind == 'wallets_detail':
             name = request.args.get('name', '')
             data = wr.wallet_detail(name, year='all')

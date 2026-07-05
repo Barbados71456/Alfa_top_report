@@ -266,41 +266,80 @@ def wallet_detail(canonical_name, year=None):
     }
 
 
-def all_wallets_summary():
-    """Свод по группам кошельков: group-подытог (сумма расчётного остатка по группе) +
-    сворачиваемые строки кошельков (тот же паттерн row_id/parent_id + tree-toggle,
-    что fot_report.py)."""
+def all_wallets_reconciliation():
+    """Свод-сверка на текущий месяц: обороты помесячно за календарный год (для
+    контекста динамики) + расчётный остаток на сейчас + место для ручного ввода
+    факта за текущий месяц прямо в своде (без захода в карточку кошелька) —
+    расхождение (введено - расчёт до этой точки) сразу видно зелёной/красной
+    отметкой. Кошельки с нулевым текущим остатком скрываются (и группа целиком,
+    если после этого в ней не осталось строк), чтобы не захламлять таблицу."""
+    today = date.today()
+    year = today.year
+    period = today.replace(day=1)
+    months = [date(year, m, 1) for m in range(1, 13)]
+
     wallets = get_wallets()
     turnover_by_wallet = _all_wallets_turnover()
     checkpoints_by_wallet = _all_wallets_checkpoints()
 
     by_group = defaultdict(list)
     for w in wallets:
-        rows = _build_wallet_rows(turnover_by_wallet.get(w['id'], {}), checkpoints_by_wallet.get(w['id'], {}))
-        last_checkpoint_row = next((r for r in reversed(rows) if r['entered'] is not None), None)
+        turnover = turnover_by_wallet.get(w['id'], {})
+        checkpoints = checkpoints_by_wallet.get(w['id'], {})
+        rows = _build_wallet_rows(turnover, checkpoints)
+        current_balance = rows[-1]['balance'] if rows else 0.0
+        if abs(current_balance) < 0.005:
+            continue
+        cur_row = next((r for r in rows if r['period'] == period), None)
+        entered_now = cur_row['entered'] if cur_row else None
+        discrepancy_now = cur_row['discrepancy'] if cur_row else None
+        match_now = abs(discrepancy_now) < 0.01 if discrepancy_now is not None else None
         by_group[w['group_name']].append({
             'id': w['id'], 'name': w['canonical_name'],
-            'current_balance': rows[-1]['balance'] if rows else 0.0,
-            'last_checkpoint_period': last_checkpoint_row['period'] if last_checkpoint_row else None,
-            'last_checkpoint_entered': last_checkpoint_row['entered'] if last_checkpoint_row else None,
-            'last_checkpoint_discrepancy': last_checkpoint_row['discrepancy'] if last_checkpoint_row else None,
+            'months': [turnover.get(m, 0.0) for m in months],
+            'current_balance': current_balance,
+            'entered_now': entered_now, 'discrepancy_now': discrepancy_now, 'match_now': match_now,
         })
 
     ordered_groups = GROUP_ORDER + sorted(g for g in by_group if g not in GROUP_ORDER)
     out_rows = []
-    total = 0.0
+    totals_months = [0.0] * 12
+    total_balance = 0.0
     for group in ordered_groups:
         items = by_group.get(group)
         if not items:
             continue
-        group_total = sum(i['current_balance'] for i in items)
-        total += group_total
+        group_months = [sum(i['months'][idx] for i in items) for idx in range(12)]
+        group_balance = sum(i['current_balance'] for i in items)
+        for idx in range(12):
+            totals_months[idx] += group_months[idx]
+        total_balance += group_balance
         row_id = f'wgroup-{group}'
-        out_rows.append({'kind': 'group', 'row_id': row_id, 'label': group, 'current_balance': group_total})
+        out_rows.append({'kind': 'group', 'row_id': row_id, 'label': group, 'months': group_months, 'current_balance': group_balance})
         for i in items:
             out_rows.append({'kind': 'wallet', 'parent_id': row_id, **i})
-    out_rows.append({'kind': 'total', 'label': 'Итого', 'current_balance': total})
-    return out_rows
+    out_rows.append({'kind': 'total', 'label': 'Итого', 'months': totals_months, 'current_balance': total_balance})
+
+    return {
+        'rows': out_rows, 'months': months,
+        'month_labels': [MONTHS_RU[m.month - 1] for m in months],
+        'year': year, 'period': period,
+        'period_label': f'{MONTHS_RU[period.month - 1]} {year}',
+    }
+
+
+def save_reconciliation(entries, username):
+    """entries: {wallet_id: значение из формы (str)} — сохраняет точку сверки на
+    текущий месяц для каждого непустого значения. Возвращает число сохранённых."""
+    period = date.today().replace(day=1)
+    saved = 0
+    for wallet_id, raw_value in entries.items():
+        raw_value = (raw_value or '').strip()
+        if not raw_value:
+            continue
+        add_balance_entry(int(wallet_id), period, raw_value, None, username)
+        saved += 1
+    return saved, period
 
 
 def add_balance_entry(wallet_id, period, balance, notes, username):
@@ -338,16 +377,16 @@ def remove_alias(raw_name):
     execute('DELETE FROM reporting.wallet_aliases WHERE raw_name = %s', (raw_name,))
 
 
-def export_summary(rows):
-    headers = ['Группа / кошелёк', 'Текущий расчётный остаток', 'Дата последней сверки',
-               'Введено при сверке', 'Расхождение']
+def export_summary(data):
+    headers = (['Группа / кошелёк'] + [f'{lbl} {data["year"]}' for lbl in data['month_labels']]
+               + ['Остаток на сейчас', f'Введено ({data["period_label"]})', 'Расхождение'])
     out = []
-    for r in rows:
+    for r in data['rows']:
         if r['kind'] in ('group', 'total'):
-            out.append([r['label'], r['current_balance'], None, None, None])
+            out.append([r['label'], *r['months'], r['current_balance'], None, None])
         else:
-            out.append([f"  {r['name']}", r['current_balance'], r['last_checkpoint_period'],
-                        r['last_checkpoint_entered'], r['last_checkpoint_discrepancy']])
+            out.append([f"  {r['name']}", *r['months'], r['current_balance'],
+                        r.get('entered_now'), r.get('discrepancy_now')])
     return [('Сверка счетов - свод', headers, out)]
 
 

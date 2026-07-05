@@ -1,19 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Проводки — {{ name }} — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h4 class="mb-0">Проводки — {{ name }}</h4>
-        <p class="text-secondary small mb-0">Сырые строки из FinancialData по кошельку (алиасы: {{ data.aliases | join(', ') if data.aliases else 'нет' }}).</p>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Сверка счетов</div>
+        <h1 class="page-title">Проводки — {{ name }}</h1>
+        <p class="page-subtitle">Сырые строки из FinancialData по кошельку (алиасы: {{ data.aliases | join(', ') if data.aliases else 'нет' }}).</p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="toolbar">
         <form method="get" class="d-flex">
             <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
                 {% for y in year_options %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
             </select>
         </form>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_detail', name=name, year=year) }}">Назад к сверке</a>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_ledger') }}?name={{ name | urlencode }}&amp;year={{ year }}">Скачать Excel</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_ledger') }}?name={{ name | urlencode }}&amp;year={{ year }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </div>
 </div>
 

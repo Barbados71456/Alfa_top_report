@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Свод1 — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h4 class="mb-0">Свод1, тыс. руб.</h4>
-    <form class="d-flex gap-2" method="get">
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Бизнес отчёты</div>
+        <h1 class="page-title">Свод1, тыс. руб.</h1>
+    </div>
+    <form class="toolbar" method="get">
         <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
         </select>
@@ -16,7 +19,7 @@
             <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
             <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
         </select>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='svod1') }}?{{ request.query_string.decode() }}">Скачать Excel</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='svod1') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </form>
 </div>
 

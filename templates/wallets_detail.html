@@ -2,26 +2,27 @@
 {% block title %}{{ name }} — Alfa Top Report{% endblock %}
 {% block content %}
 {% set w = data.wallet %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h4 class="mb-0">{{ name }} <span class="text-secondary small">({{ w.group_name }})</span></h4>
-        <p class="text-secondary small mb-0">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — обороты по этому кошельку не считаются' }}</p>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Сверка счетов</div>
+        <h1 class="page-title">{{ name }} <span class="page-subtitle" style="display:inline">({{ w.group_name }})</span></h1>
+        <p class="page-subtitle">Алиасы в FinancialData: {{ data.aliases | join(', ') if data.aliases else 'нет — обороты по этому кошельку не считаются' }}</p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="toolbar">
         <form method="get" class="d-flex">
             <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
                 {% for y in data.all_years %}<option value="{{ y }}" {% if y==data.year %}selected{% endif %}>{{ y }}</option>{% endfor %}
             </select>
         </form>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_ledger', name=name, year=data.year) }}">Проводки</a>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_detail') }}?name={{ name | urlencode }}">Скачать Excel</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_detail') }}?name={{ name | urlencode }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </div>
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Текущий расчётный остаток</div><div class="fs-5 {% if data.current_balance and data.current_balance > 0 %}val-pos{% elif data.current_balance and data.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.current_balance).replace(',', ' ') if data.current_balance is not none else '—' }}</div></div></div>
-    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Дата последней сверки</div><div class="fs-5">{{ data.last_checkpoint.period.strftime('%d.%m.%Y') if data.last_checkpoint else '—' }}</div></div></div>
-    <div class="col-md-4"><div class="card p-3"><div class="text-secondary small">Расхождение на дату сверки</div><div class="fs-5 {% if data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy > 0 %}val-pos{% elif data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.last_checkpoint.discrepancy).replace(',', ' ') if data.last_checkpoint and data.last_checkpoint.discrepancy is not none else '—' }}</div></div></div>
+    <div class="col-md-4"><div class="card p-3 kpi-card"><div class="kpi-label">Текущий расчётный остаток</div><div class="kpi-value {% if data.current_balance and data.current_balance > 0 %}val-pos{% elif data.current_balance and data.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.current_balance).replace(',', ' ') if data.current_balance is not none else '—' }}</div></div></div>
+    <div class="col-md-4"><div class="card p-3 kpi-card"><div class="kpi-label">Дата последней сверки</div><div class="kpi-value">{{ data.last_checkpoint.period.strftime('%d.%m.%Y') if data.last_checkpoint else '—' }}</div></div></div>
+    <div class="col-md-4"><div class="card p-3 kpi-card"><div class="kpi-label">Расхождение на дату сверки</div><div class="kpi-value {% if data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy > 0 %}val-pos{% elif data.last_checkpoint and data.last_checkpoint.discrepancy and data.last_checkpoint.discrepancy < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(data.last_checkpoint.discrepancy).replace(',', ' ') if data.last_checkpoint and data.last_checkpoint.discrepancy is not none else '—' }}</div></div></div>
 </div>
 
 {% if session.get('role') in ('admin', 'accountant') %}

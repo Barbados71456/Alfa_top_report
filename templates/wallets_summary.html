@@ -1,44 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Сверка счетов — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h4 class="mb-0">Сверка счетов — остатки по кошелькам</h4>
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets') }}">Скачать Excel</a>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Сверка счетов</div>
+        <h1 class="page-title">Остатки по кошелькам, {{ data.year }}</h1>
+        <p class="page-subtitle">
+            Обороты помесячно за {{ data.year }} год + расчётный остаток на сейчас. В столбце
+            «Введено ({{ data.period_label }})» можно сразу внести факт за текущий месяц —
+            отметка «Сверено» загорится зелёным, если введённое совпало с расчётом, и красным,
+            если нет. Ввод доступен только роли admin и accountant.
+        </p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets') }}"><i class="bi bi-download"></i> Скачать Excel</a>
 </div>
-<p class="text-secondary small">
-    Расчётный остаток = последняя введённая точка сверки + автоматически посчитанные
-    обороты по кошельку с этой даты. Расхождение — введённое минус расчётное значение
-    на момент последней сверки.
-</p>
 
+{% set can_edit = session.get('role') in ('admin', 'accountant') %}
+<form method="post" action="{{ url_for('wallets_reconcile') }}">
 <div class="card p-3 table-responsive">
     <table class="table report-table mb-0">
         <thead>
         <tr>
             <th class="label-col">Группа / кошелёк</th>
-            <th>Текущий расчётный остаток</th>
-            <th>Дата последней сверки</th>
-            <th>Введено при сверке</th>
-            <th>Расхождение</th>
+            {% for lbl in data.month_labels %}<th>{{ lbl }}</th>{% endfor %}
+            <th>Остаток на сейчас</th>
+            <th>Введено ({{ data.period_label }})</th>
+            <th class="text-center">Сверено</th>
         </tr>
         </thead>
         <tbody>
-        {% for row in rows %}
+        {% for row in data.rows %}
         {% if row.kind == 'wallet' %}
         <tr class="wallet-row" data-parent-id="{{ row.parent_id }}" style="display:none">
             <td class="label-col ps-4"><a href="{{ url_for('wallets_detail', name=row.name) }}">{{ row.name }}</a></td>
+            {% for v in row.months %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td class="{% if row.current_balance > 0 %}val-pos{% elif row.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
-            <td>{{ row.last_checkpoint_period.strftime('%d.%m.%Y') if row.last_checkpoint_period else '—' }}</td>
-            <td>{{ '{:,.2f}'.format(row.last_checkpoint_entered).replace(',', ' ') if row.last_checkpoint_entered is not none else '—' }}</td>
-            <td class="{% if row.last_checkpoint_discrepancy and row.last_checkpoint_discrepancy > 0 %}val-pos{% elif row.last_checkpoint_discrepancy and row.last_checkpoint_discrepancy < 0 %}val-neg{% endif %}">
-                {{ '{:,.2f}'.format(row.last_checkpoint_discrepancy).replace(',', ' ') if row.last_checkpoint_discrepancy is not none else '—' }}
+            <td>
+                {% if can_edit %}
+                <input type="number" step="0.01" class="form-control form-control-sm text-end" name="balance_{{ row.id }}"
+                       value="{{ '%.2f'|format(row.entered_now) if row.entered_now is not none else '' }}" style="min-width:130px">
+                {% else %}
+                {{ '{:,.2f}'.format(row.entered_now).replace(',', ' ') if row.entered_now is not none else '—' }}
+                {% endif %}
+            </td>
+            <td class="text-center">
+                {% if row.match_now is none %}
+                <input type="checkbox" disabled class="form-check-input">
+                {% elif row.match_now %}
+                <input type="checkbox" checked disabled class="form-check-input" style="accent-color: var(--pos-color)">
+                {% else %}
+                <input type="checkbox" checked disabled class="form-check-input" style="accent-color: var(--neg-color)">
+                {% endif %}
             </td>
         </tr>
         {% elif row.kind == 'total' %}
         <tr class="row-bold">
             <td class="label-col">{{ row.label }}</td>
+            {% for v in row.months %}<td>{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
-            <td></td><td></td><td></td>
+            <td></td><td></td>
         </tr>
         {% else %}
         <tr class="row-bold">
@@ -46,14 +66,19 @@
                 <button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>
                 {{ row.label }}
             </td>
+            {% for v in row.months %}<td>{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
-            <td></td><td></td><td></td>
+            <td></td><td></td>
         </tr>
         {% endif %}
         {% endfor %}
         </tbody>
     </table>
 </div>
+{% if can_edit %}
+<button type="submit" class="btn btn-dark btn-sm mt-3">Сохранить введённые остатки</button>
+{% endif %}
+</form>
 
 <script>
 (function() {

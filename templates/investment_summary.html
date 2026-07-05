@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Инвестанализ — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h4 class="mb-0">Инвестиционный анализ портфелей DP — свод</h4>
-        <p class="text-secondary small mb-0">Окупаемость и денежный поток посчитаны дважды: без учёта и с учётом распределения общих расходов. Портфели по алфавиту.</p>
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Портфели</div>
+        <h1 class="page-title">Инвестиционный анализ портфелей DP — свод</h1>
+        <p class="page-subtitle">Окупаемость и денежный поток посчитаны дважды: без учёта и с учётом распределения общих расходов. Портфели по алфавиту.</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment') }}">Скачать Excel</a>
+    <div class="toolbar">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='investment') }}"><i class="bi bi-download"></i> Скачать Excel</a>
         {% if session.get('role') == 'admin' %}<a href="{{ url_for('investment_admin') }}" class="btn btn-sm btn-outline-dark">Справочник портфелей</a>{% endif %}
     </div>
 </div>
