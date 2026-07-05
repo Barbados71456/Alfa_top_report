@@ -14,7 +14,7 @@
                 {% for y in data.all_years %}<option value="{{ y }}" {% if y==data.year %}selected{% endif %}>{{ y }}</option>{% endfor %}
             </select>
         </form>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_ledger', name=name, year=data.year) }}">Проводки</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_ledger', name=name) }}">Проводки</a>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_detail') }}?name={{ name | urlencode }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </div>
 </div>

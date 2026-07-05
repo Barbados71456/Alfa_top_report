@@ -120,14 +120,47 @@
         .empty-state { text-align: center; padding: 3rem 1rem; color: var(--secondary-color); }
         .empty-state i { font-size: 1.6rem; color: var(--text-tertiary); display: block; margin-bottom: 0.5rem; }
 
+        .dropdown-menu { border-radius: 12px; border-color: var(--border-color); box-shadow: var(--shadow-md); }
+        .dropdown-item.active, .dropdown-item:active { background-color: var(--accent); }
+        .dropdown-item:hover, .dropdown-item:focus { background-color: var(--accent-soft); }
+
         #detailModal .accordion-button { font-size: 0.9rem; }
         #detailModal table td, #detailModal table th { font-size: 0.85rem; }
+
         @media (max-width: 768px) {
+            .container-fluid { padding-left: 0.75rem; padding-right: 0.75rem; padding-top: 1.25rem; }
+            .page-title { font-size: 1.25rem; }
+            .page-subtitle { font-size: 0.8rem; }
+            .page-eyebrow { margin-bottom: 0.1rem; }
+
+            /* Тулбар фильтров: плотнее по вертикали, крупнее тап-зоны. */
+            .toolbar { gap: 0.4rem; }
+            .toolbar > * { width: 100%; }
+            .toolbar form { width: 100%; display: flex; }
+            .toolbar form select, .toolbar form .ts-wrapper { flex: 1 1 auto; width: 100% !important; }
+            .form-select, .form-control, .btn { min-height: 40px; }
+            .btn-sm, .form-select-sm, .form-control-sm { min-height: 38px; font-size: 0.85rem; }
+            .ts-control { min-height: 38px !important; }
+
+            /* Табы (CBR и т.п.) — горизонтальная лента вместо переноса на 2 строки. */
+            .nav-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            .nav-tabs::-webkit-scrollbar { display: none; }
+            .nav-tabs .nav-item { flex: 0 0 auto; }
+            .nav-tabs .nav-link { white-space: nowrap; }
+
             table.report-table { font-size: 0.75rem; }
             table.report-table th, table.report-table td { padding: 0.35rem 0.5rem; }
-            table.report-table td.label-col, table.report-table th.label-col { min-width: 140px; }
-            .container-fluid { padding-left: 0.75rem; padding-right: 0.75rem; }
-            .page-title { font-size: 1.3rem; }
+            table.report-table td.label-col, table.report-table th.label-col { min-width: 120px; max-width: 150px; }
+
+            /* Подсказка, что таблицу можно прокрутить вбок пальцем. */
+            .table-responsive { position: relative; }
+            .table-responsive::before {
+                content: "← прокрутите таблицу вправо →";
+                display: block; text-align: center; font-size: 0.68rem;
+                color: var(--text-tertiary); margin-bottom: 0.4rem;
+            }
+
+            .kpi-card .kpi-value { font-size: 1.25rem; }
         }
     </style>
 </head>

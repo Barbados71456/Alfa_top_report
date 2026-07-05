@@ -512,18 +512,19 @@ def wallets_add_balance(name):
     return redirect(url_for('wallets_detail', name=name, year=year))
 
 
-@app.route('/wallets/<path:name>/ledger')
+@app.route('/wallets/ledger')
 @report_required
-def wallets_ledger(name):
-    detail = wr.wallet_detail(name, year='all')
-    if detail is None:
+def wallets_ledger():
+    today = date.today()
+    name = request.args.get('name', '')
+    date_from = request.args.get('date_from') or f'{today.year}-01-01'
+    date_to = request.args.get('date_to') or today.isoformat()
+    data = wr.wallet_ledger(name, date_from, date_to) if name else None
+    if name and data is None:
         flash(f'Кошелёк «{name}» не найден', 'danger')
-        return redirect(url_for('wallets'))
-    year = request.args.get('year', type=int) or (detail['all_years'][-1] if detail['all_years'] else None)
-    date_from = date(year, 1, 1) if year else None
-    date_to = date(year, 12, 31) if year else None
-    data = wr.wallet_ledger(name, date_from, date_to)
-    return render_template('wallets_ledger.html', data=data, name=name, year=year, year_options=detail['all_years'])
+        name = ''
+    wallets = wr.get_wallets()
+    return render_template('wallets_ledger.html', data=data, name=name, date_from=date_from, date_to=date_to, wallets=wallets)
 
 
 @app.route('/wallets/admin')
@@ -848,9 +849,8 @@ def export_report(kind):
             sheets = wr.export_detail(data)
         elif kind == 'wallets_ledger':
             name = request.args.get('name', '')
-            year = request.args.get('year', type=int)
-            date_from = date(year, 1, 1) if year else None
-            date_to = date(year, 12, 31) if year else None
+            date_from = request.args.get('date_from') or None
+            date_to = request.args.get('date_to') or None
             data = wr.wallet_ledger(name, date_from, date_to)
             if data is None:
                 return {'error': 'Кошелёк не найден'}, 404

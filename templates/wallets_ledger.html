@@ -1,23 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Проводки — {{ name }} — Alfa Top Report{% endblock %}
+{% block title %}Проводки{% if name %} — {{ name }}{% endif %} — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
-    <div class="page-header">
-        <div class="page-eyebrow">Сверка счетов</div>
-        <h1 class="page-title">Проводки — {{ name }}</h1>
-        <p class="page-subtitle">Сырые строки из FinancialData по кошельку (алиасы: {{ data.aliases | join(', ') if data.aliases else 'нет' }}).</p>
-    </div>
-    <div class="toolbar">
-        <form method="get" class="d-flex">
-            <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
-                {% for y in year_options %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
-            </select>
-        </form>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_detail', name=name, year=year) }}">Назад к сверке</a>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_ledger') }}?name={{ name | urlencode }}&amp;year={{ year }}"><i class="bi bi-download"></i> Скачать Excel</a>
-    </div>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Сверка счетов</div>
+    <h1 class="page-title">Проводки по кошельку</h1>
+    <p class="page-subtitle">Сырые строки из FinancialData за выбранный период, до распределения косвенных расходов.</p>
 </div>
 
+<form method="get" class="toolbar mb-3">
+    <div>
+        <label class="form-label small mb-0">Кошелёк</label>
+        <select name="name" class="form-select form-select-sm" style="min-width:220px" onchange="this.form.submit()">
+            <option value="">— выберите кошелёк —</option>
+            {% for w in wallets %}<option value="{{ w.canonical_name }}" {% if w.canonical_name==name %}selected{% endif %}>{{ w.canonical_name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div>
+        <label class="form-label small mb-0">С</label>
+        <input type="date" class="form-control form-control-sm" name="date_from" value="{{ date_from }}">
+    </div>
+    <div>
+        <label class="form-label small mb-0">По</label>
+        <input type="date" class="form-control form-control-sm" name="date_to" value="{{ date_to }}">
+    </div>
+    <div>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Показать</button>
+    </div>
+    {% if name %}
+    <div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_detail', name=name) }}">Назад к сверке</a>
+    </div>
+    <div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets_ledger') }}?name={{ name | urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"><i class="bi bi-download"></i> Скачать Excel</a>
+    </div>
+    {% endif %}
+</form>
+
+{% if not name %}
+<div class="card p-4 empty-state"><i class="bi bi-wallet2"></i>Выберите кошелёк, чтобы увидеть проводки за период.</div>
+{% else %}
 <div class="card p-3 table-responsive" style="max-height:75vh;">
     <table class="table report-table mb-0">
         <thead>
@@ -45,4 +66,5 @@
         </tbody>
     </table>
 </div>
+{% endif %}
 {% endblock %}

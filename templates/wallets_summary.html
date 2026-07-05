@@ -12,7 +12,10 @@
             если нет. Ввод доступен только роли admin и accountant.
         </p>
     </div>
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets') }}"><i class="bi bi-download"></i> Скачать Excel</a>
+    <div class="toolbar">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wallets_ledger') }}">Проводки</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='wallets') }}"><i class="bi bi-download"></i> Скачать Excel</a>
+    </div>
 </div>
 
 {% set can_edit = session.get('role') in ('admin', 'accountant') %}
