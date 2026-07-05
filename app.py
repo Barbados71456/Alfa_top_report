@@ -19,7 +19,6 @@ import cbr_report as cr
 import wallet_report as wr
 import audit
 import chat_assistant
-import portfolio_advisor
 import export
 
 logging.basicConfig(level=logging.INFO)
@@ -862,7 +861,7 @@ def export_report(kind):
 @app.route('/chat')
 @report_required
 def chat():
-    return render_template('chat.html', configured=bool(Config.ANTHROPIC_API_KEY))
+    return render_template('chat.html', configured=bool(Config.POLZA_AI_API_KEY))
 
 
 @app.route('/api/chat', methods=['POST'])
@@ -875,27 +874,6 @@ def api_chat():
         return jsonify({'error': 'Пустой вопрос'}), 400
     result = chat_assistant.ask(question, history)
     audit.log_action(session.get('username'), 'chat', question[:500])
-    if 'error' in result:
-        return jsonify(result), 200
-    return jsonify(result)
-
-
-@app.route('/chat/advisor')
-@report_required
-def chat_advisor():
-    return render_template('chat_advisor.html', configured=bool(Config.ANTHROPIC_API_KEY))
-
-
-@app.route('/api/chat/advisor', methods=['POST'])
-@report_required
-def api_chat_advisor():
-    payload = request.get_json(silent=True) or {}
-    question = (payload.get('question') or '').strip()
-    history = payload.get('history') or []
-    if not question:
-        return jsonify({'error': 'Пустой вопрос'}), 400
-    result = portfolio_advisor.ask(question, history)
-    audit.log_action(session.get('username'), 'chat_advisor', question[:500])
     if 'error' in result:
         return jsonify(result), 200
     return jsonify(result)

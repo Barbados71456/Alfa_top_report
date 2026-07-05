@@ -93,11 +93,10 @@
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('counterparty','investment','investment_detail','chat_advisor') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Портфели</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('counterparty','investment','investment_detail') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Портфели</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='counterparty' %}active{% endif %}" href="{{ url_for('counterparty') }}">По контрагенту</a></li>
                         <li><a class="dropdown-item {% if request.endpoint in ('investment','investment_detail') %}active{% endif %}" href="{{ url_for('investment') }}">Инвестанализ</a></li>
-                        <li><a class="dropdown-item {% if request.endpoint=='chat_advisor' %}active{% endif %}" href="{{ url_for('chat_advisor') }}">Советник по покупке</a></li>
                     </ul>
                 </li>
 

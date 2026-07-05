@@ -26,7 +26,9 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 
     # Необязательный — без него /chat показывает баннер "не настроено" вместо ошибки.
-    ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+    # Polza.ai — OpenAI-совместимый прокси к Claude, не зависит от статуса
+    # конкретной организации в Anthropic Console (в отличие от прямого API-ключа).
+    POLZA_AI_API_KEY = os.getenv('POLZA_AI_API_KEY')
 
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True

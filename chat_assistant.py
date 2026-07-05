@@ -1,8 +1,12 @@
-"""Чат с Claude по данным отчётности. Модель не видит и не пишет произвольный SQL — только
-вызывает фиксированный набор read-only функций-инструментов, каждая из которых — тонкая
-обёртка над уже существующими отчётными функциями (pl_report/fot_report/loans_report/
-investment_report). Без ANTHROPIC_API_KEY ask() возвращает понятную ошибку — включается
-само, как только ключ появится в окружении."""
+"""Чат с Claude по данным отчётности, через Polza.ai (OpenAI-совместимый прокси —
+не зависит от статуса конкретной организации в Anthropic Console, в отличие от
+прямого ANTHROPIC_API_KEY). Модель не видит и не пишет произвольный SQL — только
+вызывает фиксированный набор read-only функций-инструментов, каждая из которых —
+тонкая обёртка над уже существующими отчётными функциями (pl_report/fot_report/
+loans_report/investment_report). ТОЛЬКО ЧТЕНИЕ: здесь импортируется исключительно
+db.query (через report-модули) — db.execute нигде не используется и не может быть
+вызван моделью ни при каких условиях. Без POLZA_AI_API_KEY ask() возвращает понятную
+ошибку — включается само, как только ключ появится в окружении."""
 import json
 import logging
 from datetime import date, datetime
@@ -16,65 +20,85 @@ import investment_report as ir
 
 logger = logging.getLogger('chat_assistant')
 
-MODEL = 'claude-sonnet-5'
+BASE_URL = 'https://polza.ai/api/v1'
+MODEL = 'anthropic/claude-sonnet-5'
 MAX_TOOL_ROUNDS = 6
 
 SYSTEM_PROMPT = (
-    'Ты — финансовый ассистент компании Alfa Collection. Отвечай на вопросы по отчётности '
-    'кратко и по-русски, опираясь ТОЛЬКО на данные, полученные через вызов инструментов. '
-    'Суммы в П&Л-отчётах (Свод1, Обзор) — в тысячах рублей, в инвестанализе и ФОТ — в рублях, '
-    'если не указано иное. Если данных для ответа не хватает — прямо скажи об этом, не '
+    'Ты — финансовый ассистент компании Alfa Collection. У тебя нет и не может быть '
+    'доступа на запись или удаление данных — только чтение через вызов инструментов, '
+    'изменить БД ты физически не можешь. Отвечай на вопросы по отчётности кратко и '
+    'по-русски. Опирайся на данные, полученные через вызов инструментов, но не '
+    'ограничивайся только ими — если уместно, дополняй ответ общими наблюдениями, '
+    'разъяснениями или рекомендациями исходя из своих знаний. Суммы в П&Л-отчётах '
+    '(Свод1, Обзор) — в тысячах рублей, в инвестанализе и ФОТ — в рублях, если не '
+    'указано иное. Если данных для ответа не хватает — прямо скажи об этом, не '
     'придумывай цифры. Годы и месяцы уточняй у пользователя, если не указаны явно.'
 )
 
 TOOLS = [
     {
-        'name': 'get_pl_summary',
-        'description': 'П&Л по месяцам за год (Свод1): выручка, переменные/постоянные расходы, GM, прибыль, чистая прибыль, тыс. руб.',
-        'input_schema': {
-            'type': 'object',
-            'properties': {
-                'year': {'type': 'integer', 'description': 'Год, например 2026'},
-                'pf': {'type': 'string', 'enum': ['факт', 'план', 'прогноз'], 'description': 'По умолчанию факт'},
+        'type': 'function',
+        'function': {
+            'name': 'get_pl_summary',
+            'description': 'П&Л по месяцам за год (Свод1): выручка, переменные/постоянные расходы, GM, прибыль, чистая прибыль, тыс. руб.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'year': {'type': 'integer', 'description': 'Год, например 2026'},
+                    'pf': {'type': 'string', 'enum': ['факт', 'план', 'прогноз'], 'description': 'По умолчанию факт'},
+                },
+                'required': ['year'],
             },
-            'required': ['year'],
         },
     },
     {
-        'name': 'get_overview',
-        'description': 'Обзор ключевых показателей за год против прошлого года: выручка, прибыль, GM%, топ-5 портфелей по выручке.',
-        'input_schema': {
-            'type': 'object',
-            'properties': {
-                'year': {'type': 'integer'},
-                'pf': {'type': 'string', 'enum': ['факт', 'план', 'прогноз']},
+        'type': 'function',
+        'function': {
+            'name': 'get_overview',
+            'description': 'Обзор ключевых показателей за год против прошлого года: выручка, прибыль, GM%, топ-5 портфелей по выручке.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'year': {'type': 'integer'},
+                    'pf': {'type': 'string', 'enum': ['факт', 'план', 'прогноз']},
+                },
+                'required': ['year'],
             },
-            'required': ['year'],
         },
     },
     {
-        'name': 'get_investment_summary',
-        'description': 'Свод по всем DP-портфелям (купленным портфелям долгов): дата покупки, ОСЗ, собираемость, остаток, денежный поток и окупаемость с учётом и без учёта распределения общих расходов.',
-        'input_schema': {'type': 'object', 'properties': {}},
-    },
-    {
-        'name': 'get_fot_summary',
-        'description': 'ФОТ по подразделениям за год: суммы, СЗП, численность (без разбивки по отдельным сотрудникам).',
-        'input_schema': {
-            'type': 'object',
-            'properties': {
-                'year': {'type': 'integer'},
-                'pf': {'type': 'string', 'enum': ['факт', 'план']},
-            },
-            'required': ['year'],
+        'type': 'function',
+        'function': {
+            'name': 'get_investment_summary',
+            'description': 'Свод по всем DP-портфелям (купленным портфелям долгов): дата покупки, ОСЗ, собираемость, остаток, денежный поток и окупаемость с учётом и без учёта распределения общих расходов.',
+            'parameters': {'type': 'object', 'properties': {}},
         },
     },
     {
-        'name': 'get_loans_balance',
-        'description': 'Остаток долга по займам помесячно за всю историю.',
-        'input_schema': {
-            'type': 'object',
-            'properties': {'pf': {'type': 'string', 'enum': ['факт', 'план']}},
+        'type': 'function',
+        'function': {
+            'name': 'get_fot_summary',
+            'description': 'ФОТ по подразделениям за год: суммы, СЗП, численность (без разбивки по отдельным сотрудникам).',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'year': {'type': 'integer'},
+                    'pf': {'type': 'string', 'enum': ['факт', 'план']},
+                },
+                'required': ['year'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_loans_balance',
+            'description': 'Остаток долга по займам помесячно за всю историю.',
+            'parameters': {
+                'type': 'object',
+                'properties': {'pf': {'type': 'string', 'enum': ['факт', 'план']}},
+            },
         },
     },
 ]
@@ -119,39 +143,37 @@ def _call_tool(name, args):
 
 def ask(question, history=None):
     """history: [{"role": "user"/"assistant", "content": str}, ...] — только текстовые
-    реплики предыдущих ходов (без tool-use блоков, чтобы не хранить их на клиенте)."""
-    if not Config.ANTHROPIC_API_KEY:
-        return {'error': 'Чат не настроен: добавьте ANTHROPIC_API_KEY в переменные окружения.'}
+    реплики предыдущих ходов (без tool-call блоков, чтобы не хранить их на клиенте)."""
+    if not Config.POLZA_AI_API_KEY:
+        return {'error': 'Чат не настроен: добавьте POLZA_AI_API_KEY в переменные окружения.'}
 
-    import anthropic
-    client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    from openai import OpenAI
+    client = OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY)
 
-    messages = [{'role': m['role'], 'content': m['content']} for m in (history or [])]
+    messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+    messages.extend({'role': m['role'], 'content': m['content']} for m in (history or []))
     messages.append({'role': 'user', 'content': question})
 
     for _ in range(MAX_TOOL_ROUNDS):
         try:
-            resp = client.messages.create(
-                model=MODEL, max_tokens=1500, system=SYSTEM_PROMPT,
-                tools=TOOLS, messages=messages,
+            resp = client.chat.completions.create(
+                model=MODEL, max_tokens=1500, tools=TOOLS, messages=messages,
             )
         except Exception:
-            logger.exception('Ошибка обращения к Anthropic API')
-            return {'error': 'Не удалось связаться с Claude. Попробуйте позже.'}
+            logger.exception('Ошибка обращения к Polza.ai')
+            return {'error': 'Не удалось связаться с ассистентом. Попробуйте позже.'}
 
-        if resp.stop_reason != 'tool_use':
-            text = ''.join(block.text for block in resp.content if block.type == 'text')
-            return {'answer': text}
+        choice = resp.choices[0]
+        if choice.finish_reason != 'tool_calls' or not choice.message.tool_calls:
+            return {'answer': choice.message.content or ''}
 
-        messages.append({'role': 'assistant', 'content': resp.content})
-        tool_results = []
-        for block in resp.content:
-            if block.type == 'tool_use':
-                result = _call_tool(block.name, block.input)
-                tool_results.append({
-                    'type': 'tool_result', 'tool_use_id': block.id,
-                    'content': json.dumps(_json_safe(result), ensure_ascii=False),
-                })
-        messages.append({'role': 'user', 'content': tool_results})
+        messages.append(choice.message.model_dump(exclude_none=True))
+        for tool_call in choice.message.tool_calls:
+            args = json.loads(tool_call.function.arguments or '{}')
+            result = _call_tool(tool_call.function.name, args)
+            messages.append({
+                'role': 'tool', 'tool_call_id': tool_call.id,
+                'content': json.dumps(_json_safe(result), ensure_ascii=False),
+            })
 
     return {'error': 'Не удалось получить ответ — слишком много обращений к данным для этого вопроса.'}
