@@ -25,6 +25,7 @@
         <thead>
         <tr>
             <th class="label-col">Группа / кошелёк</th>
+            <th>Входящий остаток на 01.01.{{ data.year }}</th>
             {% for lbl in data.month_labels %}<th>{{ lbl }}</th>{% endfor %}
             <th>Остаток на сейчас</th>
             <th>Введено ({{ data.period_label }})</th>
@@ -36,6 +37,7 @@
         {% if row.kind == 'wallet' %}
         <tr class="wallet-row" data-parent-id="{{ row.parent_id }}" style="display:none">
             <td class="label-col ps-4"><a href="{{ url_for('wallets_detail', name=row.name) }}">{{ row.name }}</a></td>
+            <td class="{% if row.opening_year > 0 %}val-pos{% elif row.opening_year < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.opening_year).replace(',', ' ') if row.opening_year else '—' }}</td>
             {% for v in row.months %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td class="{% if row.current_balance > 0 %}val-pos{% elif row.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
             <td>
@@ -59,6 +61,7 @@
         {% elif row.kind == 'total' %}
         <tr class="row-bold">
             <td class="label-col">{{ row.label }}</td>
+            <td>{{ '{:,.2f}'.format(row.opening_year).replace(',', ' ') if row.opening_year else '—' }}</td>
             {% for v in row.months %}<td>{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
             <td></td><td></td>
@@ -69,6 +72,7 @@
                 <button type="button" class="btn btn-sm btn-link p-0 me-1 tree-toggle" data-target="{{ row.row_id }}" style="text-decoration:none">▶</button>
                 {{ row.label }}
             </td>
+            <td>{{ '{:,.2f}'.format(row.opening_year).replace(',', ' ') if row.opening_year else '—' }}</td>
             {% for v in row.months %}<td>{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td>{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
             <td></td><td></td>

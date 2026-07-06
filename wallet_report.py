@@ -282,6 +282,7 @@ def all_wallets_reconciliation():
     wallets = get_wallets()
     turnover_by_wallet = _all_wallets_turnover()
     checkpoints_by_wallet = _all_wallets_checkpoints()
+    jan_period = date(year, 1, 1)
 
     by_group = defaultdict(list)
     for w in wallets:
@@ -295,31 +296,42 @@ def all_wallets_reconciliation():
         entered_now = cur_row['entered'] if cur_row else None
         discrepancy_now = cur_row['discrepancy'] if cur_row else None
         match_now = abs(discrepancy_now) < 0.01 if discrepancy_now is not None else None
+        jan_row = next((r for r in rows if r['period'] == jan_period), None)
+        opening_year = jan_row['opening'] if jan_row else 0.0
         by_group[w['group_name']].append({
             'id': w['id'], 'name': w['canonical_name'],
             'months': [turnover.get(m, 0.0) for m in months],
-            'current_balance': current_balance,
+            'opening_year': opening_year, 'current_balance': current_balance,
             'entered_now': entered_now, 'discrepancy_now': discrepancy_now, 'match_now': match_now,
         })
 
     ordered_groups = GROUP_ORDER + sorted(g for g in by_group if g not in GROUP_ORDER)
     out_rows = []
     totals_months = [0.0] * 12
+    total_opening = 0.0
     total_balance = 0.0
     for group in ordered_groups:
         items = by_group.get(group)
         if not items:
             continue
         group_months = [sum(i['months'][idx] for i in items) for idx in range(12)]
+        group_opening = sum(i['opening_year'] for i in items)
         group_balance = sum(i['current_balance'] for i in items)
         for idx in range(12):
             totals_months[idx] += group_months[idx]
+        total_opening += group_opening
         total_balance += group_balance
         row_id = f'wgroup-{group}'
-        out_rows.append({'kind': 'group', 'row_id': row_id, 'label': group, 'months': group_months, 'current_balance': group_balance})
+        out_rows.append({
+            'kind': 'group', 'row_id': row_id, 'label': group, 'months': group_months,
+            'opening_year': group_opening, 'current_balance': group_balance,
+        })
         for i in items:
             out_rows.append({'kind': 'wallet', 'parent_id': row_id, **i})
-    out_rows.append({'kind': 'total', 'label': 'Итого', 'months': totals_months, 'current_balance': total_balance})
+    out_rows.append({
+        'kind': 'total', 'label': 'Итого', 'months': totals_months,
+        'opening_year': total_opening, 'current_balance': total_balance,
+    })
 
     return {
         'rows': out_rows, 'months': months,
@@ -379,15 +391,16 @@ def remove_alias(raw_name):
 
 
 def export_summary(data):
-    headers = (['Группа / кошелёк'] + [f'{lbl} {data["year"]}' for lbl in data['month_labels']]
-               + ['Остаток на сейчас', f'Введено ({data["period_label"]})', 'Расхождение'])
+    headers = (['Группа / кошелёк', f'Входящий остаток на 01.01.{data["year"]}']
+               + [f'{lbl} {data["year"]}' for lbl in data['month_labels']]
+               + ['Остаток на сейчас', f'Введено ({data["period_label"]})', 'Сверено'])
     out = []
     for r in data['rows']:
         if r['kind'] in ('group', 'total'):
-            out.append([r['label'], *r['months'], r['current_balance'], None, None])
+            out.append([r['label'], r['opening_year'], *r['months'], r['current_balance'], None, None])
         else:
-            out.append([f"  {r['name']}", *r['months'], r['current_balance'],
-                        r.get('entered_now'), r.get('discrepancy_now')])
+            out.append([f"  {r['name']}", r['opening_year'], *r['months'], r['current_balance'],
+                        r.get('entered_now'), r.get('match_now')])
     return [('Сверка счетов - свод', headers, out)]
 
 
