@@ -181,6 +181,35 @@ def api_cell_detail():
     return data
 
 
+@app.route('/api/cbr_cell_detail')
+@report_required
+def api_cbr_cell_detail():
+    month_str = request.args.get('month')
+    metric = request.args.get('metric')
+    if not (month_str and metric):
+        return {'error': 'month, metric обязательны'}, 400
+    try:
+        month = date.fromisoformat(month_str)
+    except ValueError:
+        return {'error': 'Некорректный month'}, 400
+    creditor = request.args.getlist('exclude_creditor')
+    if creditor:
+        all_creditors = cr.get_filter_options()['creditors']
+        creditor = [c for c in all_creditors if c not in creditor]
+    else:
+        creditor = None
+    debt_type = request.args.getlist('debt_type') or None
+    work_type = request.args.getlist('work_type') or None
+    try:
+        data = cr.cell_detail(month, metric, creditor, debt_type, work_type)
+    except ValueError as e:
+        return {'error': str(e)}, 400
+    except Exception:
+        app.logger.exception('cbr_cell_detail error')
+        return {'error': 'Ошибка при получении детализации'}, 500
+    return data
+
+
 @app.route('/svod2')
 @report_required
 def svod2():

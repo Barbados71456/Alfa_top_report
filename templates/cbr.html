@@ -74,11 +74,11 @@
         <table class="table report-table mb-0">
             <thead><tr><th class="label-col">Показатель</th>{% for m in table_data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
             <tbody>
-            <tr><td class="label-col">ОСЗ всего, тыс.руб</td>{% for v in table_data.total_debt %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
-            <tr><td class="label-col">ОСЗ всего, шт</td>{% for v in table_data.do_count %}<td>{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
-            <tr><td class="label-col">Платежей за месяц, тыс.руб</td>{% for v in table_data.payment_amount %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
-            <tr><td class="label-col">Платежей за месяц, шт</td>{% for v in table_data.payment_count %}<td>{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
-            <tr><td class="label-col">Основной долг, тыс.руб</td>{% for v in table_data.principal_debt %}<td>{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">ОСЗ всего, тыс.руб</td>{% for v in table_data.total_debt %}<td class="cbr-cell" data-metric="total_debt" data-month="{{ table_data.months_raw[loop.index0].isoformat() }}" data-month-label="{{ table_data.months[loop.index0] }}" data-label="ОСЗ всего">{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">ОСЗ всего, шт</td>{% for v in table_data.do_count %}<td class="cbr-cell" data-metric="do_count" data-month="{{ table_data.months_raw[loop.index0].isoformat() }}" data-month-label="{{ table_data.months[loop.index0] }}" data-label="ОСЗ всего, шт">{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Платежей за месяц, тыс.руб</td>{% for v in table_data.payment_amount %}<td class="cbr-cell" data-metric="payment_amount" data-month="{{ table_data.months_raw[loop.index0].isoformat() }}" data-month-label="{{ table_data.months[loop.index0] }}" data-label="Платежи за месяц">{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Платежей за месяц, шт</td>{% for v in table_data.payment_count %}<td class="cbr-cell" data-metric="payment_count" data-month="{{ table_data.months_raw[loop.index0].isoformat() }}" data-month-label="{{ table_data.months[loop.index0] }}" data-label="Платежей за месяц, шт">{{ '{:,}'.format(v).replace(',', ' ') }}</td>{% endfor %}</tr>
+            <tr><td class="label-col">Основной долг, тыс.руб</td>{% for v in table_data.principal_debt %}<td class="cbr-cell" data-metric="principal_debt" data-month="{{ table_data.months_raw[loop.index0].isoformat() }}" data-month-label="{{ table_data.months[loop.index0] }}" data-label="Основной долг">{{ '{:,.0f}'.format(v/1000).replace(',', ' ') }}</td>{% endfor %}</tr>
             <tr class="row-bold"><td class="label-col">CBR от ОСЗ, %</td>{% for v in table_data.cbr_osz %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
             <tr class="row-bold"><td class="label-col">CBR от ОД, %</td>{% for v in table_data.cbr_od %}<td>{{ '%.2f'|format(v) }}</td>{% endfor %}</tr>
             </tbody>
@@ -274,6 +274,75 @@ document.querySelectorAll('#cbrTabs button[data-bs-toggle="tab"]').forEach(btn =
             if (c) c.resize();
         });
     });
+});
+
+// Провал по ячейке Таблицы: разбивка по Кредитору/Типу долга/Типу работы/Отделу/
+// Сотруднику. Использует ту же модалку #detailModal, что и Свод1/ФОТ v3, но со
+// своим набором вкладок (перестраивается на каждый показ — конфликта нет, т.к.
+// на других страницах модалка приходит заново с сервера при полной перезагрузке).
+const CBR_DIMS = [
+    {key: 'by_creditor', label: 'Кредитор'},
+    {key: 'by_debt_type', label: 'Тип долга'},
+    {key: 'by_work_type', label: 'Тип работы'},
+    {key: 'by_department', label: 'Отдел'},
+    {key: 'by_employee', label: 'Сотрудник'},
+];
+const CBR_EXCLUDE_CREDITOR = {{ exclude_creditor | tojson }};
+const CBR_DEBT_TYPE = {{ debt_type | tojson }};
+const CBR_WORK_TYPE = {{ work_type | tojson }};
+
+function showCbrDetail(td) {
+    const modalEl = document.getElementById('detailModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('detailModalTitle').textContent = `${td.dataset.label} — ${td.dataset.monthLabel}`;
+    document.getElementById('detailModalSummary').textContent = '';
+    document.getElementById('detailModalSummary').className = 'mb-2 fw-bold';
+    const tabs = document.getElementById('detailModalTabs');
+    tabs.innerHTML = CBR_DIMS.map((d, i) => `<li class="nav-item"><button class="nav-link${i === 0 ? ' active' : ''}" data-tab="${d.key}">${d.label}</button></li>`).join('');
+    tabs.style.display = '';
+    document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
+    modal.show();
+
+    const params = new URLSearchParams({ month: td.dataset.month, metric: td.dataset.metric });
+    CBR_EXCLUDE_CREDITOR.forEach(c => params.append('exclude_creditor', c));
+    CBR_DEBT_TYPE.forEach(d => params.append('debt_type', d));
+    CBR_WORK_TYPE.forEach(w => params.append('work_type', w));
+
+    fetch('/api/cbr_cell_detail?' + params.toString())
+        .then(r => r.json())
+        .then(renderCbrDetail)
+        .catch(() => {
+            document.getElementById('detailModalBody').innerHTML = '<div class="text-danger">Не удалось загрузить детализацию.</div>';
+        });
+}
+
+function renderCbrDetail(data) {
+    if (data.error) {
+        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
+        return;
+    }
+    document.getElementById('detailModalSummary').textContent = `Итого: ${fmtAmount(data.total)} (${data.row_count} строк источника)`;
+    const pane = (items) => {
+        const base = items.reduce((s, it) => s + Math.abs(it.val), 0) || 1;
+        return `<table class="table table-sm"><thead><tr><th>Значение</th><th class="text-end">Сумма</th><th class="text-end">Доля</th></tr></thead><tbody>` +
+            items.slice(0, 30).map(it => `<tr><td>${it.label}</td><td class="text-end">${fmtAmount(it.val)}</td><td class="text-end text-secondary">${(Math.abs(it.val) / base * 100).toFixed(1)}%</td></tr>`).join('') +
+            `</tbody></table>`;
+    };
+    const body = document.getElementById('detailModalBody');
+    body.innerHTML = CBR_DIMS.map((d, i) => `<div data-pane="${d.key}" style="display:${i === 0 ? '' : 'none'}">${pane(data[d.key] || [])}</div>`).join('');
+
+    const tabs = document.getElementById('detailModalTabs');
+    tabs.querySelectorAll('.nav-link').forEach(btn => {
+        btn.onclick = () => {
+            tabs.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            body.querySelectorAll('[data-pane]').forEach(p => p.style.display = p.dataset.pane === btn.dataset.tab ? '' : 'none');
+        };
+    });
+}
+
+document.querySelectorAll('td.cbr-cell').forEach(td => {
+    td.addEventListener('click', () => showCbrDetail(td));
 });
 } catch (e) { console.error('cbr script failed:', e); }
 })();

@@ -307,6 +307,45 @@ def get_filter_options():
     }
 
 
+CELL_METRICS = {'total_debt', 'principal_debt', 'payment_amount', 'do_count', 'payment_count'}
+
+
+def cell_detail(month, metric, creditor=None, debt_type=None, work_type=None):
+    """Детализация ячейки Таблицы CBR (месяц + метрика) -> разбивка по Текущему
+    кредитору, Типу долга, Типу работы, Отделу и Сотруднику. metric — один из
+    CELL_METRICS (то, что суммируется в ячейке; проценты CBR не декомпозируются,
+    поэтому не кликабельны)."""
+    if metric not in CELL_METRICS:
+        raise ValueError(f'Неизвестная метрика: {metric}')
+    where, params = _core_where('m.', creditor, debt_type, work_type)
+    rows = query(
+        f'''SELECT m.creditor, m.debt_type, m.work_type,
+                   COALESCE(e.department, 'Без отдела') AS department, m.employee,
+                   SUM(m.{metric}) AS val
+            FROM cbr.monthly m
+            LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
+            WHERE m.month = %s AND {where}
+            GROUP BY 1, 2, 3, 4, 5''',
+        [month] + params
+    )
+
+    def agg_by(key_fn):
+        agg = defaultdict(float)
+        for r in rows:
+            agg[key_fn(r)] += float(r['val'] or 0)
+        return [{'label': k, 'val': v} for k, v in sorted(agg.items(), key=lambda kv: -abs(kv[1]))]
+
+    total = sum(float(r['val'] or 0) for r in rows)
+    return {
+        'total': total, 'row_count': len(rows),
+        'by_creditor': agg_by(lambda r: r['creditor'] or 'Не указано'),
+        'by_debt_type': agg_by(lambda r: r['debt_type'] or 'Не указано'),
+        'by_work_type': agg_by(lambda r: r['work_type'] or 'Не указано'),
+        'by_department': agg_by(lambda r: r['department']),
+        'by_employee': agg_by(lambda r: r['employee'] or 'Не указано'),
+    }
+
+
 def get_employee_mapping():
     return query('SELECT * FROM cbr.employee_mapping ORDER BY department NULLS LAST, employee')
 
