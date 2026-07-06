@@ -20,6 +20,19 @@ MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл
 
 GROUP_ORDER = ['Счета', 'Касса', 'Спецсчета', 'Учредители', 'Прочее']
 
+# Разовая коррекция знака: обороты по "ЗудинДЗ" за янв-апр 2026 в источнике
+# (FinancialData) записаны с обратным знаком — подтверждено бухгалтерией.
+_SIGN_FLIP_BY_NAME = {
+    'ЗудинДЗ': {date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1), date(2026, 4, 1)},
+}
+
+
+def _apply_sign_flip(canonical_name, turnover):
+    periods = _SIGN_FLIP_BY_NAME.get(canonical_name)
+    if not periods:
+        return turnover
+    return {p: (-v if p in periods else v) for p, v in turnover.items()}
+
 # Разово вытащено и сверено из листа "Карманы" эталонного Excel (01_Сверка_счета.xlsx):
 # контрольные точки на 01.01 каждого года — столбцы "ОСТАТОК" на границах год-блоков.
 # ВАЖНО: лист "Карманы" хранит суммы в ТЫСЯЧАХ РУБЛЕЙ (проверено: строка "АБ-АК", ячейка
@@ -201,13 +214,18 @@ def _month_range(start, end):
     return months
 
 
-def _build_wallet_rows(turnover, checkpoints):
+def _build_wallet_rows(turnover, checkpoints, until=None):
     """turnover: {period: amount}, checkpoints: {period: balance} — точка сверки
     считается остатком на НАЧАЛО этого месяца (до его оборота), как в исходном Excel
     (столбец "ОСТАТОК" на начало года -> обороты за год -> следующий "ОСТАТОК").
     Между точками остаток накапливается автоматически; на самой точке сверки
-    расхождение = введено - расчёт (то, что накопилось бы без сверки)."""
+    расхождение = введено - расчёт (то, что накопилось бы без сверки). until —
+    расширить диапазон минимум до этого периода, даже если у кошелька давно нет
+    оборотов/точек сверки (иначе остаток "застревает" на последней реальной записи
+    и не переносится вперёд на текущий год)."""
     periods = set(turnover.keys()) | set(checkpoints.keys())
+    if until is not None:
+        periods.add(until)
     if not periods:
         return []
     all_periods = _month_range(min(periods), max(periods))
@@ -242,7 +260,7 @@ def wallet_detail(canonical_name, year=None):
     wallet, aliases = _wallet_by_name(canonical_name)
     if wallet is None:
         return None
-    turnover = _turnover_for_raw_names(aliases)
+    turnover = _apply_sign_flip(canonical_name, _turnover_for_raw_names(aliases))
     checkpoints = {r['period']: float(r['balance']) for r in query(
         'SELECT period, balance FROM reporting.wallet_balances WHERE wallet_id = %s', (wallet['id'],)
     )}
@@ -272,12 +290,17 @@ def all_wallets_reconciliation():
     контекста динамики) + расчётный остаток на сейчас + место для ручного ввода
     факта за текущий месяц прямо в своде (без захода в карточку кошелька) —
     расхождение (введено - расчёт до этой точки) сразу видно зелёной/красной
-    отметкой. Кошельки с нулевым текущим остатком скрываются (и группа целиком,
-    если после этого в ней не осталось строк), чтобы не захламлять таблицу."""
+    отметкой. Кошельки без оборотов за этот год скрываются (и группа целиком,
+    если после этого в ней не осталось строк), чтобы не захламлять таблицу
+    "пустыми" строками (остаток есть, но весь год — прочерки).
+    "Остаток на сейчас" считается напрямую как входящий остаток + сумма 12
+    месяцев из этой же строки (а не отдельным накопительным расчётом), чтобы
+    правка входящего остатка сразу отражалась в этой колонке."""
     today = date.today()
     year = today.year
     period = today.replace(day=1)
     months = [date(year, m, 1) for m in range(1, 13)]
+    until = date(year, 12, 1)
 
     wallets = get_wallets()
     turnover_by_wallet = _all_wallets_turnover()
@@ -286,11 +309,13 @@ def all_wallets_reconciliation():
 
     by_group = defaultdict(list)
     for w in wallets:
-        turnover = turnover_by_wallet.get(w['id'], {})
+        turnover = _apply_sign_flip(w['canonical_name'], turnover_by_wallet.get(w['id'], {}))
         checkpoints = checkpoints_by_wallet.get(w['id'], {})
-        rows = _build_wallet_rows(turnover, checkpoints)
-        current_balance = rows[-1]['balance'] if rows else 0.0
-        if abs(current_balance) < 0.005:
+        # until гарантирует, что остаток "докатится" до текущего года даже для
+        # кошельков без активности много лет (иначе opening_year ниже был бы 0).
+        rows = _build_wallet_rows(turnover, checkpoints, until=until)
+        row_months = [turnover.get(m, 0.0) for m in months]
+        if all(abs(v) < 0.005 for v in row_months):
             continue
         cur_row = next((r for r in rows if r['period'] == period), None)
         entered_now = cur_row['entered'] if cur_row else None
@@ -298,9 +323,10 @@ def all_wallets_reconciliation():
         match_now = abs(discrepancy_now) < 0.01 if discrepancy_now is not None else None
         jan_row = next((r for r in rows if r['period'] == jan_period), None)
         opening_year = jan_row['opening'] if jan_row else 0.0
+        current_balance = opening_year + sum(row_months)
         by_group[w['group_name']].append({
             'id': w['id'], 'name': w['canonical_name'],
-            'months': [turnover.get(m, 0.0) for m in months],
+            'months': row_months,
             'opening_year': opening_year, 'current_balance': current_balance,
             'entered_now': entered_now, 'discrepancy_now': discrepancy_now, 'match_now': match_now,
         })
