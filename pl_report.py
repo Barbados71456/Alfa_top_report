@@ -220,8 +220,12 @@ def svod1(year, pf='факт', allocation='all'):
     for m in range(1, 13):
         gm[m] = section_totals['Итого выручка'][m] + section_totals['Итого переменные'][m]
 
+    for row in rows:
+        if 'vals' in row:
+            row['vals'] = row['vals'] + [sum(row['vals'])]
+
     return {
-        'rows': rows, 'months': MONTHS_RU, 'profit': _series(profit), 'net_profit': _series(net_profit),
+        'rows': rows, 'months': MONTHS_RU + ['Итого'], 'profit': _series(profit), 'net_profit': _series(net_profit),
         'revenue_series': _series(section_totals['Итого выручка']),
         'variable_series': _series(section_totals['Итого переменные']),
         'fixed_series': _series(section_totals['Итого постоянные']),
@@ -283,11 +287,10 @@ def _project_type_map():
     return _PROJECT_TYPE_CACHE
 
 
-def _project_hierarchy(year, pf, lines, section_id, allocation='all'):
-    """Свёрнутая по умолчанию 3-уровневая иерархия: tip_project_1 -> tip_project_2 ->
-    проект (справочник public.projects; проекты не из справочника — в "Прочие"). Полное
-    разбиение — сумма всех строк уровня 1 точно равна итогу секции."""
-    by_project = _fetch_year_by_project(year, pf, lines, allocation)
+def _project_hierarchy_from_dict(by_project, section_id):
+    """Общая сборка свёрнутой по умолчанию 3-уровневой иерархии tip_project_1 ->
+    tip_project_2 -> проект из уже посчитанного {project: {month: val}} — используется
+    и для секций-строк (выручка/переменные/постоянные), и для производных (GM)."""
     type_map = _project_type_map()
 
     tree = defaultdict(lambda: defaultdict(list))
@@ -323,6 +326,26 @@ def _project_hierarchy(year, pf, lines, section_id, allocation='all'):
     return rows
 
 
+def _project_hierarchy(year, pf, lines, section_id, allocation='all'):
+    """Свёрнутая по умолчанию 3-уровневая иерархия: tip_project_1 -> tip_project_2 ->
+    проект (справочник public.projects; проекты не из справочника — в "Прочие"). Полное
+    разбиение — сумма всех строк уровня 1 точно равна итогу секции."""
+    by_project = _fetch_year_by_project(year, pf, lines, allocation)
+    return _project_hierarchy_from_dict(by_project, section_id)
+
+
+def _project_hierarchy_gm(year, pf, section_id, allocation='all'):
+    """GM по портфелям = выручка + переменные по каждому проекту (переменные уже со
+    знаком минус — как и для итогового GM в svod2/overview, просто складываем)."""
+    revenue_by_project = _fetch_year_by_project(year, pf, REVENUE_LINES, allocation)
+    variable_by_project = _fetch_year_by_project(year, pf, VARIABLE_LINES, allocation)
+    gm_by_project = defaultdict(_empty_months)
+    for p in set(revenue_by_project) | set(variable_by_project):
+        for m in range(1, 13):
+            gm_by_project[p][m] = revenue_by_project[p][m] + variable_by_project[p][m]
+    return _project_hierarchy_from_dict(gm_by_project, section_id)
+
+
 def svod2(year, pf='факт', allocation='all'):
     """Свод2: Свод1, но ВЫРУЧКА/ПЕРЕМЕННЫЕ/ПОСТОЯННЫЕ разбиты по иерархии портфелей
     tip_project_1 -> tip_project_2 -> проект (public.projects), свёрнуто по умолчанию."""
@@ -345,6 +368,7 @@ def svod2(year, pf='факт', allocation='all'):
         gm_total[m] = revenue_total[m] + variable_total[m]
     rows.append({'kind': 'header', 'label': '  GM (Выручка + Переменные)'})
     rows.append({'kind': 'total', 'label': 'GM', 'vals': _series(gm_total)})
+    rows.extend(_project_hierarchy_gm(year, pf, 'gm', allocation))
 
     rows.append({'kind': 'header', 'label': '  РАСХОДЫ ПОСТОЯННЫЕ'})
     rows.append({'kind': 'total', 'label': 'Итого постоянные', 'vals': _series(fixed_total)})
@@ -355,7 +379,11 @@ def svod2(year, pf='факт', allocation='all'):
         profit[m] = revenue_total[m] + variable_total[m] + fixed_total[m]
     rows.append({'kind': 'total', 'label': 'ПРИБЫЛЬ', 'vals': _series(profit)})
 
-    return {'rows': rows, 'months': MONTHS_RU, 'profit': _series(profit)}
+    for row in rows:
+        if 'vals' in row:
+            row['vals'] = row['vals'] + [sum(row['vals'])]
+
+    return {'rows': rows, 'months': MONTHS_RU + ['Итого'], 'profit': _series(profit)}
 
 
 def unit_pl(pf_history='факт', pf_forecast='план', start=None, end=None, allocation='all'):

@@ -45,7 +45,7 @@
                 {{ row.label }}
             </td>
             {% for v in row.vals %}
-            <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
+            <td class="{% if loop.last %}fw-bold{% endif %} {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
             {% endfor %}
         </tr>
         {% else %}
