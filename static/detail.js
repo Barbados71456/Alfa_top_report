@@ -46,6 +46,7 @@ function initAmountCells(root) {
                 month: td.dataset.month,
                 pf: td.dataset.pf,
                 projects: td.dataset.projects ? JSON.parse(td.dataset.projects) : null,
+                employee: td.dataset.employee ? JSON.parse(td.dataset.employee) : null,
                 focus: td.dataset.focus || 'statya',
                 label: td.dataset.label,
             });
@@ -68,6 +69,7 @@ function showCellDetail(opts) {
     const params = new URLSearchParams({ year: opts.year, month: opts.month, pf: opts.pf });
     opts.lines.forEach(l => params.append('line', l));
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
+    if (opts.employee) opts.employee.forEach(e => params.append('employee', e));
 
     fetch('/api/cell_detail?' + params.toString())
         .then(r => r.json())

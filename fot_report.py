@@ -22,6 +22,48 @@ def get_available_years():
     return [r['y'] for r in rows]
 
 
+def get_employees():
+    """Все сотрудники — справочник для выбора на ФОТ v3 (~350 записей, безопасно
+    отдавать целиком одним select, в отличие от ~10 тыс. контрагентов)."""
+    rows = query('SELECT DISTINCT employee FROM reporting.fot_monthly ORDER BY 1')
+    return [r['employee'] for r in rows]
+
+
+def fot3(employee, year, pf='факт'):
+    """ФОТ v3: динамика начислений одному сотруднику по месяцам за год —
+    ФОТ переменный / ФОТ постоянный и итого. Ячейки итога кликабельны на
+    клиенте через тот же pr.cell_detail(contragent=[employee]), что и
+    Свод1/Обзор — статьи и комментарии по месяцу."""
+    rows = query(
+        '''SELECT extract(month FROM fm.period)::int AS m, fm.line,
+                  COALESCE(e.department, fm.dept) AS dept, SUM(fm.amount) AS val
+           FROM reporting.fot_monthly fm
+           LEFT JOIN reporting.employees e ON e.contragent = fm.employee
+           WHERE extract(year FROM fm.period) = %s AND fm.pf = %s AND fm.employee = %s
+           GROUP BY 1, 2, 3''',
+        (year, pf, employee)
+    )
+    variable = {m: 0.0 for m in range(1, 13)}
+    fixed = {m: 0.0 for m in range(1, 13)}
+    dept = None
+    for r in rows:
+        dept = r['dept'] or dept
+        if r['line'] == 'ФОТ переменный':
+            variable[r['m']] += float(r['val'] or 0)
+        elif r['line'] == 'ФОТ постоянный':
+            fixed[r['m']] += float(r['val'] or 0)
+    total = {m: variable[m] + fixed[m] for m in range(1, 13)}
+
+    def series(d):
+        return [d[m] for m in range(1, 13)]
+
+    return {
+        'employee': employee, 'dept': dept, 'months': MONTHS_RU,
+        'variable': series(variable), 'fixed': series(fixed), 'total': series(total),
+        'year_total': sum(total.values()),
+    }
+
+
 def fot1(year, pf='факт'):
     """ФОТ v1: помесячно за один год, по подразделениям и сотрудникам (все,
     ~350 на всю компанию — можно смело показывать целиком, без топ-N).

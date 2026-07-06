@@ -169,11 +169,12 @@ def api_cell_detail():
     month = request.args.get('month', type=int)
     pf = request.args.get('pf', 'факт')
     projects = request.args.getlist('project') or None
+    employee = request.args.getlist('employee') or None
     allocation = request.args.get('allocation', 'all')
     if not (lines and year and month):
         return {'error': 'line, year, month обязательны'}, 400
     try:
-        data = pr.cell_detail(lines, year, month, pf, projects, allocation)
+        data = pr.cell_detail(lines, year, month, pf, projects, allocation, contragent=employee)
     except Exception:
         app.logger.exception('cell_detail error')
         return {'error': 'Ошибка при получении детализации'}, 500
@@ -283,6 +284,20 @@ def fot2():
     return render_template(
         'fot2.html', data=data, years=years, month=month,
         series_str=_format_series(series), deltas_str=_format_deltas(deltas),
+    )
+
+
+@app.route('/fot3')
+@report_required
+def fot3():
+    years = fr.get_available_years()
+    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
+    pf = request.args.get('pf', 'факт')
+    employee = request.args.get('employee', '')
+    data = fr.fot3(employee, year, pf) if employee else None
+    return render_template(
+        'fot3.html', data=data, years=years, year=year, pf=pf,
+        employee=employee, employees=fr.get_employees(),
     )
 
 

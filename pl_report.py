@@ -650,13 +650,14 @@ def portfolio_pl_summary(project, year=None, pf='факт', allocation='all'):
     return out
 
 
-def cell_detail(lines, year, month, pf, projects=None, allocation='all'):
+def cell_detail(lines, year, month, pf, projects=None, allocation='all', contragent=None):
     """Детализация ячейки Свод1/Dashboard2 (lines — список "Строка отчета", обычно
     одна строка, для итоговых строк — весь список секции): дерево
     СтатьяУровень3 -> Контрагент -> [{comment, amount, project}], плюс отдельно
     разбивка по проектам. Живой запрос к FinancialData — узкий фильтр
     (Строка отчета + Период + п_ф), под индекс idx_financialdata_line_period_pf,
-    выполняется за единицы миллисекунд."""
+    выполняется за единицы миллисекунд. contragent — доп. фильтр по "Контрагент"
+    (используется ФОТ v3 для детализации начисления одному сотруднику)."""
     if isinstance(lines, str):
         lines = [lines]
     period = date(year, month, 1)
@@ -668,6 +669,9 @@ def cell_detail(lines, year, month, pf, projects=None, allocation='all'):
     if projects:
         sql += ' AND "Проект" = ANY(%s)'
         params.append(projects)
+    if contragent:
+        sql += ' AND "Контрагент" = ANY(%s)'
+        params.append(contragent)
     if allocation == 'no_alloc':
         sql += " AND \"Распределение\" = 'до распределения'"
     rows = query(sql, params)

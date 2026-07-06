@@ -206,10 +206,11 @@
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('fot1','fot2','loans') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">ФОТ и займы</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('fot1','fot2','fot3','loans') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">ФОТ и займы</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='fot1' %}active{% endif %}" href="{{ url_for('fot1') }}">ФОТ v1</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='fot2' %}active{% endif %}" href="{{ url_for('fot2') }}">ФОТ v2</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='fot3' %}active{% endif %}" href="{{ url_for('fot3') }}">ФОТ v3 — по сотруднику</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='loans' %}active{% endif %}" href="{{ url_for('loans') }}">Займы</a></li>
                     </ul>
                 </li>

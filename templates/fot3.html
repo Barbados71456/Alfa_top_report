@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}ФОТ v3 — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="page-header mb-3">
+    <div class="page-eyebrow">ФОТ и займы</div>
+    <h1 class="page-title">ФОТ v3 — динамика по сотруднику, руб.</h1>
+    <p class="page-subtitle">Выберите сотрудника — покажем динамику начислений по месяцам. Клик по ячейке «Итого» открывает статьи и комментарии за месяц.</p>
+</div>
+
+<form class="toolbar mb-3" method="get" id="fot3Form">
+    <select name="employee" id="employeeSelect" class="form-select form-select-sm" style="min-width:280px" onchange="this.form.submit()">
+        <option value="">— выберите сотрудника —</option>
+        {% for e in employees %}<option value="{{ e }}" {% if e==employee %}selected{% endif %}>{{ e }}</option>{% endfor %}
+    </select>
+    <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <select name="pf" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="факт" {% if pf=='факт' %}selected{% endif %}>Факт</option>
+        <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
+    </select>
+</form>
+
+{% if data %}
+<div class="d-flex gap-3 mb-3">
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Подразделение</div>
+        <div class="kpi-value" style="font-size:1.1rem">{{ data.dept or '—' }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">ФОТ за {{ year }}</div>
+        <div class="kpi-value">{{ '{:,.0f}'.format(data.year_total).replace(',', ' ') }}</div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card p-3 table-responsive">
+            <table class="table report-table mb-0">
+                <thead><tr><th class="label-col">Показатель</th>{% for m in data.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                <tr>
+                    <td class="label-col">ФОТ переменный</td>
+                    {% for v in data.variable %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+                </tr>
+                <tr>
+                    <td class="label-col">ФОТ постоянный</td>
+                    {% for v in data.fixed %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+                </tr>
+                <tr class="row-bold">
+                    <td class="label-col">Итого</td>
+                    {% for v in data.total %}
+                    {% if v %}
+                    <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
+                        data-lines='["ФОТ переменный","ФОТ постоянный"]' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
+                        data-employee='{{ [employee] | tojson }}' data-label="ФОТ" data-focus="statya">{{ '{:,.0f}'.format(v).replace(',', ' ') }}</td>
+                    {% else %}
+                    <td>—</td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">ФОТ по месяцам — {{ data.employee }}</div><canvas id="fot3Chart" height="220"></canvas></div>
+    </div>
+</div>
+
+<script>
+(function() {
+try {
+const existing = Chart.getChart('fot3Chart');
+if (existing) existing.destroy();
+new Chart(document.getElementById('fot3Chart'), {
+    type: 'bar',
+    data: {
+        labels: {{ data.months | tojson }},
+        datasets: [
+            {label: 'Переменный', data: {{ data.variable | tojson }}.map(v => Math.abs(v)), backgroundColor: '#0d6efd'},
+            {label: 'Постоянный', data: {{ data.fixed | tojson }}.map(v => Math.abs(v)), backgroundColor: '#86868b'}
+        ]
+    },
+    options: { plugins: { legend: { display: true } }, scales: { x: { stacked: true }, y: { stacked: true } } }
+});
+} catch (e) { console.error('fot3 chart failed:', e); }
+})();
+</script>
+{% elif employee %}
+<p class="text-secondary">Нет данных за {{ year }} ({{ pf }}) для этого сотрудника.</p>
+{% endif %}
+{% endblock %}
