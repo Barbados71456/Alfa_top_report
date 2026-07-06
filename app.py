@@ -545,6 +545,8 @@ def wallets_add_balance(name):
         wr.add_balance_entry(wallet[0]['id'], period, balance, request.form.get('notes', '').strip(), session.get('username'))
         audit.log_action(session.get('username'), 'add_wallet_balance', f'{name} @ {period} = {balance}')
         flash('Точка сверки сохранена', 'success')
+    if request.form.get('return_to') == 'summary':
+        return redirect(url_for('wallets'))
     return redirect(url_for('wallets_detail', name=name, year=year))
 
 

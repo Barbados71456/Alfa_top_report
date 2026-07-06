@@ -37,7 +37,21 @@
         {% if row.kind == 'wallet' %}
         <tr class="wallet-row" data-parent-id="{{ row.parent_id }}" style="display:none">
             <td class="label-col ps-4"><a href="{{ url_for('wallets_detail', name=row.name) }}">{{ row.name }}</a></td>
-            <td class="{% if row.opening_year > 0 %}val-pos{% elif row.opening_year < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.opening_year).replace(',', ' ') if row.opening_year else '—' }}</td>
+            <td>
+                {% if can_edit %}
+                <form id="opening-{{ row.id }}" method="post" action="{{ url_for('wallets_add_balance', name=row.name) }}"></form>
+                <div class="d-flex gap-1 align-items-center">
+                    <input form="opening-{{ row.id }}" type="hidden" name="period_month" value="{{ data.year }}-01">
+                    <input form="opening-{{ row.id }}" type="hidden" name="year" value="{{ data.year }}">
+                    <input form="opening-{{ row.id }}" type="hidden" name="return_to" value="summary">
+                    <input form="opening-{{ row.id }}" type="number" step="0.01" name="balance"
+                           value="{{ '%.2f'|format(row.opening_year) }}" class="form-control form-control-sm text-end" style="min-width:110px">
+                    <button form="opening-{{ row.id }}" type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Сохранить входящий остаток"><i class="bi bi-check-lg"></i></button>
+                </div>
+                {% else %}
+                <span class="{% if row.opening_year > 0 %}val-pos{% elif row.opening_year < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.opening_year).replace(',', ' ') if row.opening_year else '—' }}</span>
+                {% endif %}
+            </td>
             {% for v in row.months %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
             <td class="{% if row.current_balance > 0 %}val-pos{% elif row.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(row.current_balance).replace(',', ' ') }}</td>
             <td>
