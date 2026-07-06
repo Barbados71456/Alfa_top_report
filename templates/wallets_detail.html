@@ -40,12 +40,27 @@
 
 <div class="card p-3 table-responsive" style="max-height:70vh;">
     <table class="table report-table mb-0">
-        <thead><tr><th class="label-col">Период</th><th>Входящий остаток</th><th>Оборот</th><th>Расчётный остаток</th><th>Введено при сверке</th><th>Расхождение</th></tr></thead>
+        <thead><tr><th>Остаток на начало года</th><th class="label-col">Период</th><th>Оборот</th><th>Расчётный остаток</th><th>Введено при сверке</th><th>Расхождение</th></tr></thead>
         <tbody>
         {% for r in data.rows %}
         <tr class="{% if r.entered is not none %}row-bold{% endif %}">
+            <td>
+                {% if loop.first %}
+                    {% if session.get('role') in ('admin', 'accountant') %}
+                    <form method="post" action="{{ url_for('wallets_add_balance', name=name) }}" class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="period_month" value="{{ r.period.strftime('%Y-%m') }}">
+                        <input type="hidden" name="year" value="{{ data.year }}">
+                        <input type="number" step="0.01" name="balance" value="{{ '%.2f'|format(r.opening) }}" class="form-control form-control-sm" style="width:130px">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Сохранить остаток на начало года"><i class="bi bi-check-lg"></i></button>
+                    </form>
+                    {% else %}
+                    <span class="{% if r.opening > 0 %}val-pos{% elif r.opening < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.opening).replace(',', ' ') if r.opening else '—' }}</span>
+                    {% endif %}
+                {% else %}
+                —
+                {% endif %}
+            </td>
             <td class="label-col">{{ r.label }}</td>
-            <td class="{% if r.opening > 0 %}val-pos{% elif r.opening < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.opening).replace(',', ' ') if r.opening else '—' }}</td>
             <td class="{% if r.turnover > 0 %}val-pos{% elif r.turnover < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.turnover).replace(',', ' ') if r.turnover else '—' }}</td>
             <td class="{% if r.balance > 0 %}val-pos{% elif r.balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(r.balance).replace(',', ' ') }}</td>
             <td>{{ '{:,.2f}'.format(r.entered).replace(',', ' ') if r.entered is not none else '—' }}</td>

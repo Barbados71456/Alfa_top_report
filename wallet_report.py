@@ -392,8 +392,11 @@ def export_summary(data):
 
 
 def export_detail(data):
-    headers = ['Период', 'Входящий остаток', 'Оборот', 'Расчётный остаток', 'Введено при сверке', 'Расхождение']
-    rows = [[r['label'], r['opening'], r['turnover'], r['balance'], r['entered'], r['discrepancy']] for r in data['rows']]
+    headers = ['Остаток на начало года', 'Период', 'Оборот', 'Расчётный остаток', 'Введено при сверке', 'Расхождение']
+    rows = [
+        [r['opening'] if i == 0 else None, r['label'], r['turnover'], r['balance'], r['entered'], r['discrepancy']]
+        for i, r in enumerate(data['rows'])
+    ]
     return [(data['wallet']['canonical_name'][:31], headers, rows)]
 
 
