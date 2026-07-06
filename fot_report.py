@@ -22,8 +22,9 @@ def get_available_years():
     return [r['y'] for r in rows]
 
 
-def fot1(year, pf='факт', top_n_per_dept=15):
-    """ФОТ v1: помесячно за один год, по подразделениям и (топ) сотрудникам.
+def fot1(year, pf='факт'):
+    """ФОТ v1: помесячно за один год, по подразделениям и сотрудникам (все,
+    ~350 на всю компанию — можно смело показывать целиком, без топ-N).
     Подразделение — из reporting.employees (справочник, редактируется на
     /employees), если сотрудник ещё не докатегоризирован — берётся исходная
     группировка из FinancialData."Контрагент_report" (fm.dept). Сотрудники
@@ -65,8 +66,8 @@ def fot1(year, pf='факт', top_n_per_dept=15):
         dept_rows.append({'kind': 'subtotal', 'label': dept, 'row_id': row_id, 'vals': series(dept_total)})
         dept_rows.append({'kind': 'metric', 'label': 'СЗП', 'unit': 'руб', 'vals': series(dept_szp)})
         dept_rows.append({'kind': 'metric', 'label': 'Численность', 'unit': 'чел', 'vals': series(dept_headcount)})
-        top_employees = sorted(employees.items(), key=lambda kv: -sum(abs(v) for v in kv[1].values()))[:top_n_per_dept]
-        for emp, vals in top_employees:
+        all_employees = sorted(employees.items(), key=lambda kv: -sum(abs(v) for v in kv[1].values()))
+        for emp, vals in all_employees:
             dept_rows.append({'kind': 'line', 'label': emp, 'parent_id': row_id, 'vals': series(vals)})
 
     total_headcount = {m: len(total_headcount_sets[m]) for m in range(1, 13)}
@@ -139,7 +140,7 @@ def _headcount(data, pf, yr, dept=None):
     return len(emps)
 
 
-def fot2(month, series, deltas, top_n_per_dept=10):
+def fot2(month, series, deltas):
     """ФОТ v2: один месяц, настраиваемые колонки сравнения (см. pl_report.dashboard2)."""
     by_pf = {}
     for pf, year in series:
@@ -194,7 +195,7 @@ def fot2(month, series, deltas, top_n_per_dept=10):
         employees = sorted(
             {e for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year and d == dept},
             key=lambda e: -abs(agg(month_map, latest_pf, latest_year, dept=dept, employee=e))
-        )[:top_n_per_dept]
+        )
         for emp in employees:
             mme = {(pf, yr): agg(month_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
             yme = {(pf, yr): agg(ytd_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}

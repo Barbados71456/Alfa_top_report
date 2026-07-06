@@ -18,6 +18,10 @@
     </form>
 </div>
 
+<div class="mb-3" style="max-width:320px">
+    <input type="text" id="employeeSearch" class="form-control form-control-sm" placeholder="Поиск по сотрудникам...">
+</div>
+
 <div class="row g-3">
     <div class="col-lg-8">
         <div class="card p-3 table-responsive">
@@ -86,6 +90,20 @@ document.querySelectorAll('.tree-toggle').forEach(btn => {
         const expanding = btn.textContent.trim() === '▶';
         btn.textContent = expanding ? '▼' : '▶';
         document.querySelectorAll(`tr[data-parent-id="${id}"]`).forEach(tr => { tr.style.display = expanding ? '' : 'none'; });
+    });
+});
+
+const searchInput = document.getElementById('employeeSearch');
+searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) {
+        document.querySelectorAll('.tree-toggle').forEach(btn => { if (btn.textContent.trim() === '▼') btn.click(); });
+        return;
+    }
+    document.querySelectorAll('.tree-toggle').forEach(btn => { if (btn.textContent.trim() === '▶') btn.click(); });
+    document.querySelectorAll('tr.emp-row').forEach(tr => {
+        const name = tr.children[0].textContent.trim().toLowerCase();
+        tr.style.display = name.includes(q) ? '' : 'none';
     });
 });
 } catch (e) { console.error('fot1 script failed:', e); }
