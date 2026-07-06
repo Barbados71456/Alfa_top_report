@@ -456,6 +456,15 @@ def cbr_admin_creditors_update(creditor):
     return redirect(url_for('cbr_admin_creditors'))
 
 
+@app.route('/cbr/admin/creditors/auto_match', methods=['POST'])
+@classifier_required
+def cbr_admin_creditors_auto_match():
+    matched = cr.auto_match_creditor_projects()
+    audit.log_action(session.get('username'), 'auto_match_cbr_creditors', f'{matched} сопоставлено')
+    flash(f'Автосопоставлено по выручке: {matched}', 'success')
+    return redirect(url_for('cbr_admin_creditors'))
+
+
 @app.route('/investment')
 @report_required
 def investment():
