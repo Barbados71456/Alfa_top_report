@@ -784,6 +784,15 @@ def admin_users():
     return render_template('admin_users.html', rows=rows)
 
 
+@app.route('/admin/refresh_views', methods=['POST'])
+@admin_required
+def admin_refresh_views():
+    refresh_all()
+    audit.log_action(session.get('username'), 'refresh_views', 'Ручное обновление reporting.*')
+    flash('Все reporting-вьюшки обновлены', 'success')
+    return redirect(url_for('admin_users'))
+
+
 @app.route('/admin/users/create', methods=['POST'])
 @admin_required
 def admin_users_create():

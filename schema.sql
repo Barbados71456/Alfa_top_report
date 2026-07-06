@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS etl_load."FinancialData_GM" (LIKE public."FinancialDa
 -- строк, когда, кто запустил).
 CREATE TABLE IF NOT EXISTS etl_load.run_log (
     id SERIAL PRIMARY KEY,
-    period DATE NOT NULL,
+    period DATE,  -- NULL для полного пересчёта истории (run_full_rebuild) — там нет одного периода
     started_at TIMESTAMP DEFAULT now(),
     started_by TEXT,
     steps JSONB,

@@ -11,6 +11,19 @@
     </p>
 </div>
 
+<div class="card p-3 mb-4 d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <strong>Reporting-вьюшки</strong>
+        <div class="text-muted small">
+            Обновляются автоматически каждые 10 минут. Нажмите, чтобы обновить сразу
+            после ручных правок в базе (новые проводки, правки классификатора и т.п.).
+        </div>
+    </div>
+    <form method="post" action="{{ url_for('admin_refresh_views') }}">
+        <button type="submit" class="btn btn-outline-dark btn-sm">Обновить все вьюшки</button>
+    </form>
+</div>
+
 <div class="card p-3 table-responsive mb-4">
     <table class="table report-table mb-0">
         <thead>

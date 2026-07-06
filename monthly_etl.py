@@ -226,6 +226,80 @@ STEPS = [
 ]
 
 
+BONUS_START_PERIOD = datetime.date(2026, 6, 1)  # см. заголовок в pl_report.svod1()
+
+
+def seed_base_report_park1_from_public(schema):
+    """Альтернатива Excel-загрузке: копирует ВСЮ историю (2020-2026) из
+    public.base_report_park1 напрямую в {schema}, без загрузки Excel-файлов
+    по месяцам. public.base_report_park1 накапливает историю через append (в
+    отличие от fact_step_0/fact_step_1, которые каждый месяц перезаписываются
+    только текущим файлом) — это единственная существующая точка в БД, откуда
+    можно взять полную историю "как есть", не трогая public на запись."""
+    execute(f'TRUNCATE TABLE {schema}.base_report_park1')
+    execute(f'INSERT INTO {schema}.base_report_park1 SELECT * FROM public.base_report_park1')
+    count = query_one(f'SELECT count(*) AS n FROM {schema}.base_report_park1')
+    return count['n']
+
+
+def _full_rebuild_sql(sql):
+    """Для полного пересчёта истории (см. run_full_rebuild) точечный DELETE по
+    одному месяцу (см. 04_financial_data_base.sql) не подходит — нужно
+    очистить всю секцию "до распределения"/"факт" целиком, т.к. INSERT ниже
+    зальёт её заново из report_do_rasp, который теперь содержит ВСЮ историю."""
+    return sql.replace(
+        '''delete from public."FinancialData" where "Период" = %(period)s and "Распределение" = 'до распределения' and "п_ф" = 'факт';''',
+        '''delete from public."FinancialData" where "Распределение" = 'до распределения' and "п_ф" = 'факт';''',
+    )
+
+
+def run_full_rebuild(schema, started_by):
+    """Полный пересчёт ВСЕЙ истории на {schema}, минуя Excel — источник сырых
+    данных не файл, а public.base_report_park1 (см. seed_base_report_park1_from_public).
+    Позволяет сравнить весь конвейер классификации с public один-в-один по
+    всем периодам сразу, а не по одному месяцу за раз. Бонусы считаются только
+    для периодов >= BONUS_START_PERIOD (программа бонусов не существовала
+    раньше, ретроактивно их считать не нужно)."""
+    steps_result = []
+
+    def _step(step_id, label, fn):
+        try:
+            detail = fn()
+            steps_result.append({'step': step_id, 'label': label, 'status': 'ok', 'detail': detail})
+        except Exception as e:
+            steps_result.append({'step': step_id, 'label': label, 'status': 'error', 'detail': str(e)})
+            raise
+
+    run_id = _log_run_start(None, started_by)
+    try:
+        _step('seed', 'Копирование истории из public.base_report_park1 (минуя Excel)',
+              lambda: f'{seed_base_report_park1_from_public(schema)} строк')
+
+        for step_id, label, filename in STEPS:
+            if step_id in ('fact_step_1', 'base_report_park1'):
+                continue  # заменены шагом seed выше
+            sql = _prepare_sql(_retarget(_read_sql(filename), schema))
+            if step_id == 'financial_data_base':
+                sql = _full_rebuild_sql(sql)
+            _step(step_id, label, lambda sql=sql: _run_sql(sql, None))
+
+        periods = query(
+            f'''SELECT DISTINCT "Период" AS p FROM {schema}."FinancialData"
+               WHERE "п_ф" = 'факт' AND "Период" >= %s ORDER BY 1''',
+            (BONUS_START_PERIOD,)
+        )
+        bonus_details = []
+        for p in periods:
+            b = apply_bonuses(schema, p['p'])
+            bonus_details.append(f'{p["p"]}: {_format_bonus_detail(b)}')
+        _step('bonuses', f'Бонусы за {len(periods)} период(ов) с {BONUS_START_PERIOD}',
+              lambda: '; '.join(bonus_details) if bonus_details else 'нет периодов после старта программы бонусов')
+    finally:
+        _log_run_finish(run_id, steps_result)
+
+    return steps_result
+
+
 def run_pipeline(schema, file_obj, started_by):
     """Прогоняет весь конвейер на указанной схеме. Возвращает
     (period, steps) — steps это список {step, label, status, detail}."""
@@ -288,41 +362,46 @@ def _log_run_finish(run_id, steps_result):
     )
 
 
-def compare_with_public(schema, period):
-    """Сравнивает суммы по "Строка отчета" между {schema}."FinancialData" и
-    public."FinancialData" за один и тот же период. Возвращает список
-    расхождений {line, schema_val, public_val, diff} (пустой список = 1-в-1).
+def compare_with_public(schema, period=None):
+    """Сравнивает суммы по (Период, "Строка отчета") между {schema}."FinancialData"
+    и public."FinancialData". period=None — сравнить ВСЕ периоды сразу (полный
+    пересчёт, см. run_full_rebuild), иначе — только указанный месяц. Возвращает
+    список расхождений {period, line, schema_val, public_val, diff} (пустой
+    список = 1-в-1).
 
     Сравнение сознательно ограничено "Распределение"='до распределения' —
-    это классифицированный факт из Excel (единственное, что можно сравнить
-    1-в-1 построчно, т.к. оно не зависит от истории других месяцев). Секцию
-    "распределение" (косвенные затраты) сравнивать некорректно: в public она
-    сейчас вообще пустая (0 строк на момент внедрения — видимо, после
+    это классифицированный факт (единственное, что можно сравнить 1-в-1
+    построчно). Секцию "распределение" (косвенные затраты) сравнивать
+    некорректно: в public она на момент внедрения была пустая (видимо, после
     какой-то из прошлых полных перезаливок эти строки потерялись и не были
-    пересчитаны), а строится она из ВСЕЙ истории "до распределения", которой
-    в {schema} может не хватать, если туда загружен только один месяц."""
+    пересчитаны) — и даже когда она появится, зависит от полноты истории
+    "до распределения" в обеих схемах."""
+    where = 'WHERE "Распределение" = \'до распределения\''
+    params = ()
+    if period is not None:
+        where += ' AND "Период" = %s'
+        params = (period,)
+
     schema_rows = {
-        r['line']: r['val'] for r in query(
-            f'''SELECT "Строка отчета" AS line, SUM("Сумма") AS val
-               FROM {schema}."FinancialData"
-               WHERE "Период" = %s AND "Распределение" = 'до распределения' GROUP BY 1''',
-            (period,)
+        (r['period'], r['line']): r['val'] for r in query(
+            f'''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS val
+               FROM {schema}."FinancialData" {where} GROUP BY 1, 2''',
+            params
         )
     }
     public_rows = {
-        r['line']: r['val'] for r in query(
-            '''SELECT "Строка отчета" AS line, SUM("Сумма") AS val
-               FROM public."FinancialData"
-               WHERE "Период" = %s AND "Распределение" = 'до распределения' GROUP BY 1''',
-            (period,)
+        (r['period'], r['line']): r['val'] for r in query(
+            f'''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS val
+               FROM public."FinancialData" {where} GROUP BY 1, 2''',
+            params
         )
     }
     diffs = []
-    for line in sorted(set(schema_rows) | set(public_rows)):
-        sv = schema_rows.get(line, 0) or 0
-        pv = public_rows.get(line, 0) or 0
+    for key in sorted(set(schema_rows) | set(public_rows)):
+        sv = schema_rows.get(key, 0) or 0
+        pv = public_rows.get(key, 0) or 0
         if abs(sv - pv) > 0.01:
-            diffs.append({'line': line, 'schema_val': sv, 'public_val': pv, 'diff': sv - pv})
+            diffs.append({'period': key[0], 'line': key[1], 'schema_val': sv, 'public_val': pv, 'diff': sv - pv})
     return diffs
 
 
