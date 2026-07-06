@@ -234,7 +234,7 @@
 
                 {% if session.get('role') in ('admin', 'accountant') %}
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('classifier','employees','investment_admin','cbr_admin','cbr_admin_creditors','wallets_admin') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Справочники</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('classifier','employees','investment_admin','cbr_admin','cbr_admin_creditors','wallets_admin','monthly_load') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Справочники</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='classifier' %}active{% endif %}" href="{{ url_for('classifier') }}">Классификатор</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='employees' %}active{% endif %}" href="{{ url_for('employees') }}">Сотрудники</a></li>
@@ -242,6 +242,8 @@
                         <li><a class="dropdown-item {% if request.endpoint=='cbr_admin' %}active{% endif %}" href="{{ url_for('cbr_admin') }}">Взыскатели CBR</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='cbr_admin_creditors' %}active{% endif %}" href="{{ url_for('cbr_admin_creditors') }}">Кредиторы CBR → Проекты</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='wallets_admin' %}active{% endif %}" href="{{ url_for('wallets_admin') }}">Кошельки</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='monthly_load' %}active{% endif %}" href="{{ url_for('monthly_load') }}">Автозагрузка отчётности</a></li>
                     </ul>
                 </li>
                 {% endif %}

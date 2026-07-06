@@ -76,3 +76,44 @@ def execute(sql, params=None):
         conn.commit()
     finally:
         conn.close()
+
+
+def execute_returning(sql, params=None):
+    """INSERT/UPDATE ... RETURNING — query()/query_one() не коммитят (только
+    execute() коммитит), поэтому для write-запросов, которым нужна вернувшаяся
+    строка (например id только что вставленной записи), нужен отдельный
+    коммитящий путь, а не query_one()."""
+    if has_app_context():
+        conn = _request_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(sql, params or ())
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    conn = _connect()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(sql, params or ())
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def execute_values(sql, rows):
+    """INSERT INTO t (...) VALUES %s — одним round-trip для множества строк
+    (psycopg2.extras.execute_values), вместо execute() построчно в цикле."""
+    if has_app_context():
+        conn = _request_connection()
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, rows)
+        conn.commit()
+        return
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, rows)
+        conn.commit()
+    finally:
+        conn.close()

@@ -20,6 +20,7 @@ import wallet_report as wr
 import audit
 import chat_assistant
 import export
+import monthly_etl as etl
 
 logging.basicConfig(level=logging.INFO)
 
@@ -463,6 +464,32 @@ def cbr_admin_creditors_auto_match():
     audit.log_action(session.get('username'), 'auto_match_cbr_creditors', f'{matched} сопоставлено')
     flash(f'Автосопоставлено по выручке: {matched}', 'success')
     return redirect(url_for('cbr_admin_creditors'))
+
+
+@app.route('/admin/monthly_load')
+@classifier_required
+def monthly_load():
+    return render_template('monthly_load.html', runs=etl.get_run_log(), result=None)
+
+
+@app.route('/admin/monthly_load', methods=['POST'])
+@classifier_required
+def monthly_load_run():
+    file = request.files.get('excel_file')
+    if not file or not file.filename:
+        flash('Выберите файл .xlsx', 'danger')
+        return redirect(url_for('monthly_load'))
+
+    try:
+        period, steps = etl.run_pipeline('etl_load', file.stream, session.get('username'))
+        diffs = etl.compare_with_public('etl_load', period)
+        result = {'period': period, 'steps': steps, 'diffs': diffs, 'error': None}
+        audit.log_action(session.get('username'), 'monthly_load_run', f'{period}, шагов: {len(steps)}')
+    except Exception as e:
+        result = {'period': None, 'steps': [], 'diffs': [], 'error': str(e)}
+        audit.log_action(session.get('username'), 'monthly_load_error', str(e))
+
+    return render_template('monthly_load.html', runs=etl.get_run_log(), result=result)
 
 
 @app.route('/investment')

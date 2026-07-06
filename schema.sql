@@ -292,3 +292,33 @@ CREATE TABLE IF NOT EXISTS reporting.wallet_balances (
 
 -- Личный кабинет: доп. поле профиля пользователя (email уже был), см. /my/profile.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT;
+
+-- Автозагрузка отчётности (замена ручного KNIME-процесса, см. monthly_etl.py):
+-- зеркало таблиц конвейера "Excel -> FinancialData" на ОТДЕЛЬНОЙ схеме, чтобы
+-- прогонять и сверять с public перед тем, как это когда-либо тронет прод.
+-- Структуры взяты 1-в-1 из public через LIKE...INCLUDING ALL (не переписаны
+-- руками, чтобы точно не разойтись типами колонок).
+CREATE SCHEMA IF NOT EXISTS etl_load;
+
+CREATE TABLE IF NOT EXISTS etl_load.fact_step_0 (LIKE public.fact_step_0 INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load.fact_step_1 (LIKE public.fact_step_1 INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load.base_report_park1 (LIKE public.base_report_park1 INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load.report_do_rasp (LIKE public.report_do_rasp INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."FinancialData" (LIKE public."FinancialData" INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load.base_driver (LIKE public.base_driver INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."rasp_FOT" (LIKE public."rasp_FOT" INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."rasp_Ostatki" (LIKE public."rasp_Ostatki" INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."analiz_zaim" (LIKE public."analiz_zaim" INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."analiz_кошелек" (LIKE public."analiz_кошелек" INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS etl_load."FinancialData_GM" (LIKE public."FinancialData_GM" INCLUDING ALL);
+
+-- Журнал запусков автозагрузки — для админки (какие шаги прошли/упали, сколько
+-- строк, когда, кто запустил).
+CREATE TABLE IF NOT EXISTS etl_load.run_log (
+    id SERIAL PRIMARY KEY,
+    period DATE NOT NULL,
+    started_at TIMESTAMP DEFAULT now(),
+    started_by TEXT,
+    steps JSONB,
+    status TEXT
+);

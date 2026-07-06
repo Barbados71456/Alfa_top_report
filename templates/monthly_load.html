@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Автозагрузка отчётности — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Справочники</div>
+    <h1 class="page-title">Автозагрузка отчётности</h1>
+    <p class="page-subtitle">
+        Загрузка Excel-файла (лист "загрузка") за один новый месяц — прогоняет весь
+        конвейер классификации на отдельной схеме <code>etl_load</code> и сверяет
+        результат с <code>public</code>. Ничего в <code>public</code> не меняет.
+    </p>
+</div>
+
+<div class="card p-3 mb-3">
+    <form method="post" enctype="multipart/form-data" class="d-flex align-items-end gap-2 flex-wrap">
+        <div>
+            <label class="form-label mb-1">Файл .xlsx (лист "загрузка")</label>
+            <input type="file" name="excel_file" accept=".xlsx" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-dark">Запустить на etl_load</button>
+    </form>
+</div>
+
+{% if result %}
+    {% if result.error %}
+    <div class="alert alert-danger">Ошибка: {{ result.error }}</div>
+    {% else %}
+    <div class="card p-3 mb-3">
+        <h5 class="mb-3">Период: {{ result.period }}</h5>
+        <ul class="list-group list-group-flush">
+            {% for s in result.steps %}
+            <li class="list-group-item d-flex align-items-center gap-2">
+                {% if s.status == 'ok' %}
+                    <span class="text-success">&#9679;</span>
+                {% else %}
+                    <span class="text-danger">&#9679;</span>
+                {% endif %}
+                <span class="flex-grow-1">{{ s.label }}</span>
+                <span class="text-muted small">{{ s.detail }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="card p-3 table-responsive">
+        <h5 class="mb-3">Сверка с public (секция "до распределения", факт, по "Строка отчета")</h5>
+        {% if result.diffs %}
+        <table class="table report-table mb-0">
+            <thead>
+            <tr>
+                <th class="label-col">Строка отчета</th>
+                <th class="text-end">etl_load</th>
+                <th class="text-end">public</th>
+                <th class="text-end">Разница</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for d in result.diffs %}
+            <tr>
+                <td class="label-col">{{ d.line or '(без строки отчета)' }}</td>
+                <td class="text-end">{{ '{:,.2f}'.format(d.schema_val).replace(',', ' ') }}</td>
+                <td class="text-end">{{ '{:,.2f}'.format(d.public_val).replace(',', ' ') }}</td>
+                <td class="text-end">{{ '{:,.2f}'.format(d.diff).replace(',', ' ') }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-success mb-0">Полное совпадение — расхождений нет.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endif %}
+
+<div class="card p-3 table-responsive mt-3">
+    <h5 class="mb-3">История запусков</h5>
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th>Период</th>
+            <th>Когда</th>
+            <th>Кто</th>
+            <th>Статус</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in runs %}
+        <tr>
+            <td>{{ r.period }}</td>
+            <td>{{ r.started_at }}</td>
+            <td>{{ r.started_by }}</td>
+            <td>
+                {% if r.status == 'ok' %}<span class="text-success">OK</span>
+                {% else %}<span class="text-danger">{{ r.status }}</span>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
