@@ -223,11 +223,12 @@ def _build_wallet_rows(turnover, checkpoints):
         else:
             discrepancy = None
             opening = running
-        closing = (opening or 0.0) + amt
+        opening = opening or 0.0
+        closing = opening + amt
         running = closing
         rows.append({
             'period': p, 'label': f'{MONTHS_RU[p.month - 1]} {p.year}',
-            'turnover': amt, 'entered': entered, 'discrepancy': discrepancy,
+            'opening': opening, 'turnover': amt, 'entered': entered, 'discrepancy': discrepancy,
             'balance': closing,
         })
     return rows
@@ -391,8 +392,8 @@ def export_summary(data):
 
 
 def export_detail(data):
-    headers = ['Период', 'Оборот', 'Расчётный остаток', 'Введено при сверке', 'Расхождение']
-    rows = [[r['label'], r['turnover'], r['balance'], r['entered'], r['discrepancy']] for r in data['rows']]
+    headers = ['Период', 'Входящий остаток', 'Оборот', 'Расчётный остаток', 'Введено при сверке', 'Расхождение']
+    rows = [[r['label'], r['opening'], r['turnover'], r['balance'], r['entered'], r['discrepancy']] for r in data['rows']]
     return [(data['wallet']['canonical_name'][:31], headers, rows)]
 
 
