@@ -839,11 +839,22 @@ def overview_data(year, pf='факт', allocation='all'):
     return {
         'year': year, 'prev_year': prev_year, 'months': MONTHS_RU, 'pf': pf,
         'revenue_cur': revenue_cur, 'revenue_prev': revenue_prev,
+        'variable_cur': variable_cur, 'variable_prev': variable_prev,
+        'gm_cur': gm_cur, 'gm_prev': gm_prev,
+        'fixed_cur': fixed_cur, 'fixed_prev': fixed_prev,
         'profit_cur': profit_cur, 'profit_prev': profit_prev,
+        'investment_cur': inv_cur, 'investment_prev': inv_prev,
+        'financing_cur': fin_cur, 'financing_prev': fin_prev,
         'net_profit_cur': net_profit_cur, 'net_profit_prev': net_profit_prev,
         'gm_pct_cur': gm_pct_cur, 'gm_pct_prev': gm_pct_prev,
         'total_variable': abs(sum(variable_cur)), 'total_fixed': abs(sum(fixed_cur)),
         'top_projects': [{'project': p, 'revenue': v} for p, v in top_projects],
+        # Списки строк отчёта для клика-провала (window.showCellDetail) по каждому
+        # из графиков левой колонки — те же построчные группы, что в Свод1.
+        'revenue_lines': REVENUE_LINES, 'variable_lines': VARIABLE_LINES, 'fixed_lines': FIXED_LINES,
+        'gm_lines': REVENUE_LINES + VARIABLE_LINES,
+        'profit_lines': REVENUE_LINES + VARIABLE_LINES + FIXED_LINES,
+        'investment_lines': [INVESTMENT_LINE], 'financing_lines': FINANCING_LINES,
     }
 
 

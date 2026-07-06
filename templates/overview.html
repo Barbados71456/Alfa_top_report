@@ -25,26 +25,26 @@
 </div>
 
 <div class="row g-3">
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">Выручка по месяцам</div><canvas id="ovRevenue" height="140"></canvas></div>
+    <div class="col-lg-6">
+        <div class="d-flex flex-column gap-3">
+            <div class="card p-3"><div class="small text-secondary mb-1">Выручка по месяцам</div><canvas id="ovRevenue" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Переменные расходы по месяцам</div><canvas id="ovVariable" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">GM (Выручка + Переменные) по месяцам</div><canvas id="ovGmAbs" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Постоянные расходы по месяцам</div><canvas id="ovFixed" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Прибыль по месяцам</div><canvas id="ovProfitBar" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Покупка портфелей (цессия) по месяцам</div><canvas id="ovInvestment" height="110"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Итого финансирование по месяцам</div><canvas id="ovFinancing" height="110"></canvas></div>
+        </div>
     </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">Прибыль / Чистая прибыль</div><canvas id="ovProfit" height="140"></canvas></div>
-    </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">GM%, по месяцам</div><canvas id="ovGm" height="140"></canvas></div>
-    </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div>
-    </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div>
-    </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div>
-    </div>
-    <div class="col-md-6">
-        <div class="card p-3"><div class="small text-secondary mb-1">Топ-5 портфелей по выручке, {{ data.year }}</div><canvas id="ovTopProjects" height="140"></canvas></div>
+    <div class="col-lg-6">
+        <div class="d-flex flex-column gap-3">
+            <div class="card p-3"><div class="small text-secondary mb-1">Прибыль / Чистая прибыль</div><canvas id="ovProfit" height="140"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">GM%, по месяцам</div><canvas id="ovGm" height="140"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div>
+            <div class="card p-3"><div class="small text-secondary mb-1">Топ-5 портфелей по выручке, {{ data.year }}</div><canvas id="ovTopProjects" height="140"></canvas></div>
+        </div>
     </div>
 </div>
 
@@ -62,29 +62,39 @@ const mk = (id, config) => {
     return new Chart(document.getElementById(id), config);
 };
 
-mk('ovRevenue', {
-    type: 'bar',
-    data: {
-        labels: MONTHS,
-        datasets: [
-            {label: String(PREV_YEAR), data: {{ data.revenue_prev | tojson }}, backgroundColor: '#86868b'},
-            {label: String(YEAR), data: {{ data.revenue_cur | tojson }}, backgroundColor: '#1a7f37'}
-        ]
-    },
-    options: {
-        plugins: { legend: { display: true } },
-        onClick: (evt, elements, chart) => {
-            if (!elements.length || !window.showCellDetail) return;
-            const el = elements[0];
-            const year = el.datasetIndex === 0 ? PREV_YEAR : YEAR;
-            const month = el.index + 1;
-            window.showCellDetail({
-                lines: ['Выручка DP (цессия)', 'Выручка DCA (агентская)', 'Депозиты', 'Прочая выручка (перепродажа)'],
-                year, month, pf: PF, focus: 'projects', label: 'Выручка'
-            });
+// Общий конструктор для столбчатых графиков левой колонки (год/пред.год) с
+// провалом по клику через window.showCellDetail — та же механика, что у
+// кликабельных ячеек на Свод1.
+const mkDrillBar = (id, curData, prevData, color, lines, label, focus) => {
+    mk(id, {
+        type: 'bar',
+        data: {
+            labels: MONTHS,
+            datasets: [
+                {label: String(PREV_YEAR), data: prevData, backgroundColor: '#86868b'},
+                {label: String(YEAR), data: curData, backgroundColor: color}
+            ]
+        },
+        options: {
+            plugins: { legend: { display: true } },
+            onClick: (evt, elements) => {
+                if (!elements.length || !window.showCellDetail) return;
+                const el = elements[0];
+                const year = el.datasetIndex === 0 ? PREV_YEAR : YEAR;
+                const month = el.index + 1;
+                window.showCellDetail({ lines, year, month, pf: PF, focus: focus || 'statya', label });
+            }
         }
-    }
-});
+    });
+};
+
+mkDrillBar('ovRevenue', {{ data.revenue_cur | tojson }}, {{ data.revenue_prev | tojson }}, '#1a7f37', {{ data.revenue_lines | tojson }}, 'Выручка', 'projects');
+mkDrillBar('ovVariable', {{ data.variable_cur | tojson }}, {{ data.variable_prev | tojson }}, '#c0362c', {{ data.variable_lines | tojson }}, 'Переменные расходы');
+mkDrillBar('ovGmAbs', {{ data.gm_cur | tojson }}, {{ data.gm_prev | tojson }}, '#0d6efd', {{ data.gm_lines | tojson }}, 'GM', 'projects');
+mkDrillBar('ovFixed', {{ data.fixed_cur | tojson }}, {{ data.fixed_prev | tojson }}, '#c0362c', {{ data.fixed_lines | tojson }}, 'Постоянные расходы');
+mkDrillBar('ovProfitBar', {{ data.profit_cur | tojson }}, {{ data.profit_prev | tojson }}, '#000', {{ data.profit_lines | tojson }}, 'Прибыль', 'projects');
+mkDrillBar('ovInvestment', {{ data.investment_cur | tojson }}, {{ data.investment_prev | tojson }}, '#6f42c1', {{ data.investment_lines | tojson }}, 'Покупка портфелей (цессия)');
+mkDrillBar('ovFinancing', {{ data.financing_cur | tojson }}, {{ data.financing_prev | tojson }}, '#0dcaf0', {{ data.financing_lines | tojson }}, 'Итого финансирование');
 
 mk('ovProfit', {
     type: 'line',
