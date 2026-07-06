@@ -65,6 +65,15 @@
         .ts-wrapper { min-width: 110px; }
         .ts-wrapper.multi { min-width: 160px; }
         .toolbar .ts-wrapper, form.d-flex .ts-wrapper { width: auto; flex: 0 0 auto; }
+        /* Стрелка выпадающего списка наезжает на текст: .ts-wrapper копирует
+           класс .form-select (и его фон-стрелку) у Bootstrap, но тема
+           tom-select.bootstrap5 сбрасывает padding-right у .ts-control в 0 —
+           текст рендерится под стрелкой на всю ширину. Возвращаем отступ под
+           стрелку и обрезаем длинный текст многоточием, а не наездом. */
+        .ts-wrapper.form-select .ts-control { padding-right: 1.75rem !important; }
+        .ts-wrapper.form-select .ts-control > .item {
+            overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; max-width: 100% !important;
+        }
         /* Мульти-селект с большим числом выбранных значений (напр. "Текущий
            кредитор" — по умолчанию выбрано ~50 из 51) иначе растягивает всю
            строку фильтров на много строк чипов — ограничиваем высоту и даём

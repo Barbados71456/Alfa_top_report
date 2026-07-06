@@ -51,12 +51,21 @@ def query_one(sql, params=None):
     return rows[0] if rows else None
 
 
-def execute_autocommit(sql):
-    """Для команд, которые не могут идти внутри транзакции (REFRESH MATERIALIZED VIEW CONCURRENTLY и т.п.)."""
+def execute_autocommit(sql, statement_timeout_ms=60000):
+    """Для команд, которые не могут идти внутри транзакции (REFRESH MATERIALIZED VIEW CONCURRENTLY и т.п.).
+
+    С таймаутом на стороне Postgres (по умолчанию 60с, меньше gunicorn --timeout
+    120с в render.yaml) — иначе одно подвисшее обновление вьюшки (например,
+    из-за временной нестабильности удалённой БД) блокирует единственный
+    воркер до убийства по WORKER TIMEOUT/SIGKILL, роняя весь сайт 502-й
+    ошибкой для всех пользователей разом. С таймаутом обновление конкретной
+    вьюшки просто не удастся в этом цикле (см. try/except в refresh_all) —
+    сайт продолжает работать, следующий цикл через 10 минут попробует снова."""
     conn = _connect()
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
+            cur.execute(f'SET statement_timeout = {statement_timeout_ms}')
             cur.execute(sql)
     finally:
         conn.close()
