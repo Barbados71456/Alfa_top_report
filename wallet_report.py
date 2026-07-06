@@ -290,9 +290,10 @@ def all_wallets_reconciliation():
     контекста динамики) + расчётный остаток на сейчас + место для ручного ввода
     факта за текущий месяц прямо в своде (без захода в карточку кошелька) —
     расхождение (введено - расчёт до этой точки) сразу видно зелёной/красной
-    отметкой. Кошельки без оборотов за этот год скрываются (и группа целиком,
-    если после этого в ней не осталось строк), чтобы не захламлять таблицу
-    "пустыми" строками (остаток есть, но весь год — прочерки).
+    отметкой. Кошельки без входящего остатка И без оборотов за этот год
+    скрываются (и группа целиком, если после этого в ней не осталось строк) —
+    кошелёк с висящим входящим остатком (например, старая ДЗ), но без оборотов
+    в этом году, всё равно показывается.
     "Остаток на сейчас" считается напрямую как входящий остаток + сумма 12
     месяцев из этой же строки (а не отдельным накопительным расчётом), чтобы
     правка входящего остатка сразу отражалась в этой колонке."""
@@ -315,15 +316,18 @@ def all_wallets_reconciliation():
         # кошельков без активности много лет (иначе opening_year ниже был бы 0).
         rows = _build_wallet_rows(turnover, checkpoints, until=until)
         row_months = [turnover.get(m, 0.0) for m in months]
-        if all(abs(v) < 0.005 for v in row_months):
+        jan_row = next((r for r in rows if r['period'] == jan_period), None)
+        opening_year = jan_row['opening'] if jan_row else 0.0
+        current_balance = opening_year + sum(row_months)
+        # Скрываем только по-настоящему пустые строки (нет ни входящего остатка,
+        # ни оборотов за год) — кошелёк с входящей ДЗ, но без оборотов в этом
+        # году (например, висящая дебиторка), всё равно должен быть виден.
+        if abs(opening_year) < 0.005 and all(abs(v) < 0.005 for v in row_months):
             continue
         cur_row = next((r for r in rows if r['period'] == period), None)
         entered_now = cur_row['entered'] if cur_row else None
         discrepancy_now = cur_row['discrepancy'] if cur_row else None
         match_now = abs(discrepancy_now) < 0.01 if discrepancy_now is not None else None
-        jan_row = next((r for r in rows if r['period'] == jan_period), None)
-        opening_year = jan_row['opening'] if jan_row else 0.0
-        current_balance = opening_year + sum(row_months)
         by_group[w['group_name']].append({
             'id': w['id'], 'name': w['canonical_name'],
             'months': row_months,
