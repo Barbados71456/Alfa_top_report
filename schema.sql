@@ -228,6 +228,16 @@ CREATE TABLE IF NOT EXISTS cbr.employee_mapping (
     updated_at TIMESTAMP DEFAULT now()
 );
 
+-- Справочник "Текущий кредитор" (CBR) -> "Проект" (П&Л, public.projects) — изначально
+-- пустой, заполняется вручную на /cbr/admin/creditors по мере того, как сотрудник
+-- сопоставляет кредиторов с портфелями. Новые кредиторы, ещё без пары, видны там же
+-- как "не сопоставлено" (LEFT JOIN с cbr.monthly в cbr_report.get_creditor_project_mapping).
+CREATE TABLE IF NOT EXISTS cbr.creditor_project_mapping (
+    creditor TEXT PRIMARY KEY,
+    project TEXT,
+    updated_at TIMESTAMP DEFAULT now()
+);
+
 -- Сверка остатков по кошелькам: пользователь периодически вводит проверенный
 -- (сверенный с банком/кассой) остаток по кошельку, обороты между точками сверки
 -- считаются автоматически из FinancialData."Кошелек". Группировка кошельков (Счета/

@@ -359,6 +359,29 @@ def update_employee_mapping(employee, department, region, is_fired, employment_t
     )
 
 
+def get_creditor_project_mapping():
+    """Все кредиторы из cbr.monthly (даже без пары) + текущий проект, если уже
+    сопоставлен. Несопоставленные (project IS NULL) — первыми, чтобы их было видно
+    сразу на /cbr/admin/creditors."""
+    rows = query(
+        '''SELECT m.creditor, p.project, p.updated_at
+           FROM (SELECT DISTINCT creditor FROM cbr.monthly WHERE creditor IS NOT NULL) m
+           LEFT JOIN cbr.creditor_project_mapping p ON p.creditor = m.creditor
+           ORDER BY (p.project IS NULL) DESC, m.creditor'''
+    )
+    return rows
+
+
+def set_creditor_project(creditor, project):
+    from db import execute
+    execute(
+        '''INSERT INTO cbr.creditor_project_mapping (creditor, project, updated_at)
+           VALUES (%s, %s, now())
+           ON CONFLICT (creditor) DO UPDATE SET project = EXCLUDED.project, updated_at = now()''',
+        (creditor, project or None)
+    )
+
+
 def export_rows(overall):
     headers = ['Месяц', 'ОСЗ всего', 'ОСЗ всего, шт', 'Основной долг', 'Платежи за месяц',
                'Платежей за месяц, шт', 'CBR от ОСЗ %', 'CBR от ОД %']

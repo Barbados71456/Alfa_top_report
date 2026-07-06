@@ -440,6 +440,22 @@ def cbr_admin_update(employee):
     return redirect(url_for('cbr_admin'))
 
 
+@app.route('/cbr/admin/creditors')
+@classifier_required
+def cbr_admin_creditors():
+    rows = cr.get_creditor_project_mapping()
+    return render_template('cbr_creditor_mapping.html', rows=rows, all_projects=pr.get_projects_with_type())
+
+
+@app.route('/cbr/admin/creditors/<path:creditor>', methods=['POST'])
+@classifier_required
+def cbr_admin_creditors_update(creditor):
+    cr.set_creditor_project(creditor, request.form.get('project', '').strip())
+    audit.log_action(session.get('username'), 'edit_cbr_creditor_mapping', creditor)
+    flash(f'Кредитор «{creditor}» сопоставлен', 'success')
+    return redirect(url_for('cbr_admin_creditors'))
+
+
 @app.route('/investment')
 @report_required
 def investment():

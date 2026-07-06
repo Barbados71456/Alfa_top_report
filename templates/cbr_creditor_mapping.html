@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Кредиторы CBR → Проекты — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Справочники</div>
+    <h1 class="page-title">Кредиторы CBR → Проекты</h1>
+    <p class="page-subtitle">
+        Сопоставление "Текущего кредитора" из CBR с портфелем из отчётности — заполняется вручную,
+        по мере появления новых кредиторов они попадают сюда как "не сопоставлено".
+        {% set unmapped = rows | selectattr('project', 'none') | list %}
+        {% if unmapped %}<strong class="val-neg">Не сопоставлено: {{ unmapped | length }} из {{ rows | length }}.</strong>{% else %}Все кредиторы сопоставлены.{% endif %}
+    </p>
+</div>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Текущий кредитор</th>
+            <th>Проект</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        <tr class="{% if not r.project %}row-bold{% endif %}">
+            <form id="form-{{ loop.index }}" method="post" action="{{ url_for('cbr_admin_creditors_update', creditor=r.creditor) }}"></form>
+            <td class="label-col">{{ r.creditor }}{% if not r.project %} <span class="badge bg-danger ms-1">не сопоставлено</span>{% endif %}</td>
+            <td>
+                <select form="form-{{ loop.index }}" name="project" class="form-select form-select-sm">
+                    <option value="">— не сопоставлено —</option>
+                    {% for tip, names in all_projects %}
+                    <optgroup label="{{ tip }}">
+                        {% for n in names %}<option value="{{ n }}" {% if n==r.project %}selected{% endif %}>{{ n }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </td>
+            <td><button form="form-{{ loop.index }}" class="btn btn-sm btn-outline-dark" type="submit">Сохранить</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
