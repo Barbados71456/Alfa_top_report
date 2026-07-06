@@ -312,9 +312,17 @@ def counterparty():
     return render_template(
         'counterparty.html', data=data, contragents=contragents, pf=pf, projects=projects,
         date_from=date_from, date_to=date_to,
-        counterparties=pr.get_counterparties(),
         all_projects=pr.get_projects_with_type(),
     )
+
+
+@app.route('/api/counterparty_search')
+@report_required
+def api_counterparty_search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    return jsonify(pr.search_counterparties(q))
 
 
 @app.route('/cbr')
@@ -325,7 +333,16 @@ def cbr():
     employee = request.args.getlist('employee') or None
     network_param = request.args.get('network', 'network')
     is_network = {'network': True, 'non_network': False}.get(network_param)  # None => 'all'
-    creditor = request.args.getlist('creditor') or None
+    filter_options = cr.get_filter_options()
+    # "Текущий кредитор" отдаётся в URL списком ИСКЛЮЧЕНИЙ (обычно 0-2 записи из ~50),
+    # а не включений — иначе GET с полным списком выбранных кредиторов превышает лимит
+    # длины request-line на проде (gunicorn limit_request_line=4094) и соединение рвётся
+    # ещё до Flask (см. прод-логи: "Request Line is too large (6281 > 4094)").
+    exclude_creditor = request.args.getlist('exclude_creditor')
+    if exclude_creditor:
+        creditor = [c for c in filter_options['creditors'] if c not in exclude_creditor]
+    else:
+        creditor = None  # cbr_report._core_where по умолчанию сама исключает Займер
     debt_type = request.args.getlist('debt_type') or None
     work_type = request.args.getlist('work_type') or None
 
@@ -334,7 +351,6 @@ def cbr():
     chart_filtered = cr.filtered_monthly(dept, emp_region, employee, is_network, creditor, debt_type, work_type)
     creditor_pivot_partners = cr.creditor_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
     region_dept_pivot = cr.region_department_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
-    filter_options = cr.get_filter_options()
 
     legacy_dim = request.args.get('dim', 'department')
     if legacy_dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
@@ -351,7 +367,7 @@ def cbr():
         chart_filtered=chart_filtered, creditor_pivot_partners=creditor_pivot_partners,
         region_dept_pivot=region_dept_pivot, filter_options=filter_options,
         dept=dept or [], emp_region=emp_region or [], employee=employee or [], network_param=network_param,
-        creditor=creditor if creditor is not None else [c for c in filter_options['creditors'] if c != cr._ZAYMER_CREDITOR],
+        exclude_creditor=exclude_creditor or [cr._ZAYMER_CREDITOR],
         debt_type=debt_type or cr.DEFAULT_DEBT_TYPES, work_type=work_type or cr.DEFAULT_WORK_TYPES,
         legacy_dim=legacy_dim, legacy_by_dim=legacy_by_dim, legacy_perf=legacy_perf,
         legacy_recommendations=legacy_recommendations, dim_labels=cr.DIM_LABELS,
@@ -843,7 +859,12 @@ def export_report(kind):
                 return {'error': 'Портфель не найден'}, 404
             sheets = ir.export_detail(data)
         elif kind == 'cbr':
-            creditor = request.args.getlist('creditor') or None
+            exclude_creditor = request.args.getlist('exclude_creditor')
+            if exclude_creditor:
+                all_creditors = cr.get_filter_options()['creditors']
+                creditor = [c for c in all_creditors if c not in exclude_creditor]
+            else:
+                creditor = None
             debt_type = request.args.getlist('debt_type') or None
             work_type = request.args.getlist('work_type') or None
             sheets = cr.export_rows(cr.overall_by_month(creditor, debt_type, work_type))

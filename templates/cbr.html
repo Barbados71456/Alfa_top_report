@@ -9,9 +9,9 @@
 
 <form method="get" class="toolbar mb-1" id="cbrFilterForm">
     <div>
-        <label class="form-label small mb-0">Текущий кредитор</label>
-        <select multiple name="creditor" class="form-select form-select-sm" style="min-width:200px" onchange="this.form.submit()">
-            {% for c in filter_options.creditors %}<option value="{{ c }}" {% if c in creditor %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        <label class="form-label small mb-0">Исключить кредитора</label>
+        <select multiple name="exclude_creditor" class="form-select form-select-sm" style="min-width:200px" onchange="this.form.submit()">
+            {% for c in filter_options.creditors %}<option value="{{ c }}" {% if c in exclude_creditor %}selected{% endif %}>{{ c }}</option>{% endfor %}
         </select>
     </div>
     <div>
@@ -56,7 +56,7 @@
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='cbr') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </div>
 </form>
-<p class="text-secondary small mb-3">Текущий кредитор / Тип долга / Тип работы влияют на все вкладки. Отдел / Регион (сотрудника) / Сотрудник влияют только на вкладки «ОСЗ/ОД Сбор» и «ОСЗ/ОД CBR». «Сеть» — если у записи заполнено поле «Сотрудник», иначе «не Сеть»; влияет на все вкладки, кроме «Таблица».</p>
+<p class="text-secondary small mb-3">Исключить кредитора / Тип долга / Тип работы влияют на все вкладки. Отдел / Регион (сотрудника) / Сотрудник влияют только на вкладки «ОСЗ/ОД Сбор» и «ОСЗ/ОД CBR». «Сеть» — если у записи заполнено поле «Сотрудник», иначе «не Сеть»; влияет на все вкладки, кроме «Таблица».</p>
 
 <ul class="nav nav-tabs mb-3" id="cbrTabs" role="tablist">
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-table" type="button">Таблица</button></li>

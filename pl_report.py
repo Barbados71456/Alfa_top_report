@@ -736,6 +736,16 @@ def get_counterparties():
     return [r['name'] for r in rows]
 
 
+def search_counterparties(q, limit=50):
+    """Список контрагентов (~10 тыс. записей) слишком большой, чтобы отдавать
+    целиком в select — ищем по подстроке для Tom-Select remote search."""
+    rows = query(
+        'SELECT name FROM reporting.counterparty_list WHERE name ILIKE %s ORDER BY 1 LIMIT %s',
+        (f'%{q}%', limit),
+    )
+    return [r['name'] for r in rows]
+
+
 def get_latest_period(pf='факт'):
     rows = query('SELECT MAX(period) AS mx FROM reporting.pl_monthly WHERE pf = %s', (pf,))
     return rows[0]['mx'] if rows and rows[0]['mx'] else date.today().replace(day=1)

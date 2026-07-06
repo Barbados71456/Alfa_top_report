@@ -7,8 +7,8 @@
     <p class="page-subtitle">Можно выбрать несколько контрагентов и/или проектов — суммы считаются вместе, одним рядом (зажмите Ctrl/Cmd для множественного выбора).</p>
 </div>
 <form class="d-flex gap-2 mb-4 flex-wrap align-items-center" method="get">
-    <select name="name" class="form-select" multiple size="6" style="max-width:320px">
-        {% for c in counterparties %}<option value="{{ c }}" {% if c in contragents %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    <select name="name" id="counterpartySelect" class="form-select" multiple style="max-width:320px" placeholder="Начните вводить название...">
+        {% for c in contragents %}<option value="{{ c }}" selected>{{ c }}</option>{% endfor %}
     </select>
     <select name="project" class="form-select" multiple size="6" style="max-width:220px">
         {% for tip, names in all_projects %}
@@ -88,4 +88,34 @@ new Chart(document.getElementById('cpChart'), {
 {% elif contragents %}
 <p class="text-secondary">Нет данных по выбранным контрагентам.</p>
 {% endif %}
+
+<script>
+(function() {
+try {
+    // Контрагентов ~10 тыс. — отдавать их все в select нельзя (страница весит
+    // мегабайты, Tom-Select индексирует всё и подвешивает вкладку). Ищем по
+    // подстроке через /api/counterparty_search, в select остаются только уже
+    // выбранные значения.
+    const el = document.getElementById('counterpartySelect');
+    if (el && !el.tomselect) {
+        new TomSelect(el, {
+            plugins: ['remove_button'],
+            valueField: 'value',
+            labelField: 'value',
+            searchField: 'value',
+            options: Array.from(el.options).map(o => ({ value: o.value })),
+            items: Array.from(el.selectedOptions).map(o => o.value),
+            create: false,
+            load: function(query, callback) {
+                if (!query.length) return callback();
+                fetch('/api/counterparty_search?q=' + encodeURIComponent(query))
+                    .then(r => r.json())
+                    .then(data => callback(data.map(v => ({ value: v }))))
+                    .catch(() => callback());
+            },
+        });
+    }
+} catch (e) { console.error('counterparty tom-select init failed:', e); }
+})();
+</script>
 {% endblock %}
