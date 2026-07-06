@@ -587,6 +587,41 @@ def dashboard1(month, series, deltas, projects=None, top_n=12, allocation='all')
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 
+def portfolio_pl_summary(project, year=None, pf='факт', allocation='all'):
+    """Выручка/переменные/постоянные расходы/GM по ОДНОМУ портфелю (проекту) —
+    для чат-тула (вопросы про маржинальность конкретного портфеля). Переиспользует
+    dashboard1() с фильтром projects=[project]: раз запрос уже ограничен одним
+    проектом, его "Итого X" строки (обычно свод по компании) фактически и есть
+    показатели этого портфеля. Возвращает None, если портфель не найден (в т.ч.
+    по частичному регистронезависимому совпадению имени)."""
+    all_projects = get_projects()
+    match = next((p for p in all_projects if p == project), None)
+    if match is None:
+        match = next((p for p in all_projects if project.lower() in p.lower()), None)
+    if match is None:
+        return None
+    if year is None:
+        year = get_latest_period(pf).year
+    latest = get_latest_period(pf)
+    month = latest.month if latest.year == year else 12
+    data = dashboard1(month, [(pf, year)], [], projects=[match], top_n=1, allocation=allocation)
+    out = {'project': match, 'year': year, 'pf': pf, 'month_name': data['month_name']}
+    wanted = {'Итого выручка': 'revenue', 'Итого переменные': 'variable_costs',
+              'Итого постоянные': 'fixed_costs', 'GM (Валовая прибыль)': 'gm'}
+    for row in data['rows']:
+        key = wanted.get(row.get('label'))
+        if key:
+            out[key] = {'month': row['series_month'][0], 'ytd': row['series_ytd'][0]}
+    if 'revenue' in out and 'gm' in out:
+        rev_m, gm_m = out['revenue']['month'], out['gm']['month']
+        rev_y, gm_y = out['revenue']['ytd'], out['gm']['ytd']
+        out['gm_pct'] = {
+            'month': (gm_m / rev_m * 100) if rev_m else None,
+            'ytd': (gm_y / rev_y * 100) if rev_y else None,
+        }
+    return out
+
+
 def cell_detail(lines, year, month, pf, projects=None, allocation='all'):
     """Детализация ячейки Свод1/Dashboard2 (lines — список "Строка отчета", обычно
     одна строка, для итоговых строк — весь список секции): дерево

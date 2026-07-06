@@ -23,10 +23,6 @@
     </form>
 </div>
 
-<div class="card p-3 mb-4">
-    <canvas id="svod2Chart" height="90"></canvas>
-</div>
-
 <p class="text-secondary small">
     Верхний уровень — группы портфелей (справочник проектов), свёрнуто по умолчанию.
     Стрелка разворачивает подгруппу, затем — конкретные портфели. «Прочие» — портфели вне
@@ -68,23 +64,6 @@
 <script>
 (function() {
 try {
-    const rows = {{ data.rows | tojson }};
-    const top = rows.filter(r => r.level === 1 && r.row_id.startsWith('rev-')).slice(0, 10);
-    const existing = Chart.getChart('svod2Chart');
-    if (existing) existing.destroy();
-    new Chart(document.getElementById('svod2Chart'), {
-        type: 'bar',
-        data: {
-            labels: top.map(r => r.label),
-            datasets: [{
-                label: 'Выручка за год по группам портфелей, тыс. руб.',
-                data: top.map(r => r.vals.reduce((a,b) => a+b, 0)),
-                backgroundColor: top.map(r => r.vals.reduce((a,b)=>a+b,0) >= 0 ? '#1a7f37' : '#c0362c')
-            }]
-        },
-        options: { indexAxis: 'y', plugins: { legend: { display: false } } }
-    });
-
     document.querySelectorAll('.tree-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = btn.dataset.target;

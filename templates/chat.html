@@ -54,6 +54,20 @@ function renderAll() {
     loadHistory().forEach(m => renderMessage(m.role, m.content));
 }
 
+function renderTyping() {
+    const div = document.createElement('div');
+    div.className = 'mb-3 d-flex justify-content-start';
+    div.id = 'chatTyping';
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-light border rounded p-2 d-flex align-items-center gap-2';
+    bubble.style.maxWidth = '75%';
+    bubble.innerHTML = '<span class="spinner-border spinner-border-sm text-secondary" role="status"></span><span class="text-secondary small">Думаю…</span>';
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+}
+
 renderAll();
 
 form.addEventListener('submit', (e) => {
@@ -64,6 +78,7 @@ form.addEventListener('submit', (e) => {
     renderMessage('user', question);
     input.value = '';
     sendBtn.disabled = true;
+    const typingEl = renderTyping();
     fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,12 +87,13 @@ form.addEventListener('submit', (e) => {
         .then(r => r.json())
         .then(data => {
             const answer = data.answer || data.error || 'Не удалось получить ответ.';
+            typingEl.remove();
             renderMessage('assistant', answer);
             history.push({ role: 'user', content: question });
             history.push({ role: 'assistant', content: answer });
             saveHistory(history);
         })
-        .catch(() => renderMessage('assistant', 'Ошибка сети. Попробуйте ещё раз.'))
+        .catch(() => { typingEl.remove(); renderMessage('assistant', 'Ошибка сети. Попробуйте ещё раз.'); })
         .finally(() => { sendBtn.disabled = false; });
 });
 

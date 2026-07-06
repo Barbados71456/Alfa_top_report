@@ -1,34 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Dashboard2 — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
-    <div class="page-header">
-        <div class="page-eyebrow">Бизнес отчёты</div>
-        <h1 class="page-title">Dashboard2 — {{ data.month_name }}, тыс. руб.</h1>
-    </div>
-    <div class="toolbar">
-        <form class="d-flex gap-2" method="get" id="filterForm">
-            <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
-                {% for m in range(1,13) %}<option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}
-            </select>
-            <select name="project" class="form-select form-select-sm" multiple size="1" style="min-width:180px" id="projectSelect">
-                {% for tip, names in all_projects %}
-                <optgroup label="{{ tip }}">
-                    {% for n in names %}<option value="{{ n }}" {% if projects and n in projects %}selected{% endif %}>{{ n }}</option>{% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-            <select name="allocation" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
-                <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
-            </select>
-            <input type="hidden" name="series" id="seriesInput" value="{{ series_str }}">
-            <input type="hidden" name="deltas" id="deltasInput" value="{{ deltas_str }}">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
-        </form>
-        <button class="btn btn-sm btn-outline-dark" type="button" data-bs-toggle="collapse" data-bs-target="#compareEditor">Настроить сравнение</button>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='dashboard2') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
-    </div>
+<div class="page-header mb-3">
+    <div class="page-eyebrow">Бизнес отчёты</div>
+    <h1 class="page-title">Dashboard2 — {{ data.month_name }}, тыс. руб.</h1>
+</div>
+<div class="toolbar mb-3">
+    <form class="d-flex gap-2 flex-wrap" method="get" id="filterForm">
+        <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for m in range(1,13) %}<option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <select name="project" class="form-select form-select-sm" multiple size="1" style="min-width:180px" id="projectSelect">
+            {% for tip, names in all_projects %}
+            <optgroup label="{{ tip }}">
+                {% for n in names %}<option value="{{ n }}" {% if projects and n in projects %}selected{% endif %}>{{ n }}</option>{% endfor %}
+            </optgroup>
+            {% endfor %}
+        </select>
+        <select name="allocation" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
+            <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
+        </select>
+        <input type="hidden" name="series" id="seriesInput" value="{{ series_str }}">
+        <input type="hidden" name="deltas" id="deltasInput" value="{{ deltas_str }}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Применить</button>
+    </form>
+    <button class="btn btn-sm btn-outline-dark" type="button" data-bs-toggle="collapse" data-bs-target="#compareEditor">Настроить сравнение</button>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='dashboard2') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
 </div>
 
 <div class="collapse mb-3" id="compareEditor">
@@ -100,39 +98,12 @@
 </div>
 {% endmacro %}
 
-<div class="row g-3">
-    <div class="col-lg-8">
-        {{ block(data.rows, true, 'Месяц') }}
-        {{ block(data.rows, false, 'Накопительно с начала года') }}
-    </div>
-    <div class="col-lg-4">
-        <div class="d-flex flex-column gap-3">
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого выручка</div><canvas id="chartRevenue" height="110"></canvas></div>
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого переменные</div><canvas id="chartVariable" height="110"></canvas></div>
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Итого постоянные</div><canvas id="chartFixed" height="110"></canvas></div>
-        </div>
-    </div>
-</div>
+{{ block(data.rows, true, 'Месяц') }}
+{{ block(data.rows, false, 'Накопительно с начала года') }}
 
 <script>
 (function() {
 try {
-const seriesLabels = {{ data.series | tojson }}.map(s => s[0] + ' ' + s[1]);
-const findRow = (label) => {{ data.rows | tojson }}.find(r => r.label === label);
-const mkChart = (id, row) => {
-    if (!row) return;
-    const existing = Chart.getChart(id);
-    if (existing) existing.destroy();
-    new Chart(document.getElementById(id), {
-        type: 'bar',
-        data: { labels: seriesLabels, datasets: [{ data: row.series_month, backgroundColor: row.series_month.map(v => v >= 0 ? '#1a7f37' : '#c0362c') }] },
-        options: { plugins: { legend: { display: false } } }
-    });
-};
-mkChart('chartRevenue', findRow('Итого выручка'));
-mkChart('chartVariable', findRow('Итого переменные'));
-mkChart('chartFixed', findRow('Итого постоянные'));
-
 const PF_OPTIONS = ['факт', 'план', 'прогноз'];
 const YEARS = {{ years | tojson }};
 let seriesState = {{ series_str.split(',') | tojson }}.map(s => { const [pf, y] = s.split(':'); return { pf, year: parseInt(y) }; });

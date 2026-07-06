@@ -56,6 +56,23 @@
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 8px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--secondary-color); }
 
+        /* Tom-Select для одиночных селектов с коротким текстом (месяц "7" и т.п.)
+           без явной ширины схлопывается в узкую полоску — задаём разумный минимум.
+           А внутри строк фильтров (toolbar/d-flex-форма) Tom-Select копирует класс
+           Bootstrap-овского .form-select{width:100%} на обёртку — из-за этого один
+           селект в flex-строке распирает всю строку и толкает остальные фильтры на
+           новую строку; сбрасываем на auto, чтобы каждый селект был по контенту. */
+        .ts-wrapper { min-width: 110px; }
+        .ts-wrapper.multi { min-width: 160px; }
+        .toolbar .ts-wrapper, form.d-flex .ts-wrapper { width: auto; flex: 0 0 auto; }
+        /* Мульти-селект с большим числом выбранных значений (напр. "Текущий
+           кредитор" — по умолчанию выбрано ~50 из 51) иначе растягивает всю
+           строку фильтров на много строк чипов — ограничиваем высоту и даём
+           внутреннюю прокрутку. */
+        .toolbar .ts-wrapper.multi .ts-control, form.d-flex .ts-wrapper.multi .ts-control {
+            max-height: 74px; overflow-y: auto; max-width: 260px;
+        }
+
         .navbar {
             position: sticky;
             top: 0;
@@ -244,7 +261,7 @@
         {% endif %}
     </div>
 </nav>
-<div class="container-fluid" style="max-width:1400px; padding-top:2rem; padding-bottom:3rem;">
+<div class="container-fluid" style="max-width:1900px; padding-top:2rem; padding-bottom:3rem;">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}

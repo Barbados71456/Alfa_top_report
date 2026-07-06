@@ -101,6 +101,28 @@ TOOLS = [
             },
         },
     },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_portfolio_pl',
+            'description': (
+                'П&Л по ОДНОМУ конкретному портфелю/проекту (например "(DCA) AB", '
+                '"(DP) ALFA BIB"): выручка, переменные и постоянные расходы, GM и GM% '
+                'за последний месяц и накопительно с начала года, тыс. руб. Именно '
+                'этим инструментом считается маржинальность конкретного портфеля — '
+                'get_overview даёт только выручку по портфелям, без расходов.'
+            ),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'project': {'type': 'string', 'description': 'Название портфеля/проекта, например "(DCA) AB"'},
+                    'year': {'type': 'integer', 'description': 'Год; по умолчанию последний доступный'},
+                    'pf': {'type': 'string', 'enum': ['факт', 'план', 'прогноз'], 'description': 'По умолчанию факт'},
+                },
+                'required': ['project'],
+            },
+        },
+    },
 ]
 
 
@@ -135,6 +157,9 @@ def _call_tool(name, args):
             return {'months': data['months'], 'rows': rows}
         if name == 'get_loans_balance':
             return lr.loans_balance_series(args.get('pf', 'факт'))
+        if name == 'get_portfolio_pl':
+            result = pr.portfolio_pl_summary(args['project'], args.get('year'), args.get('pf', 'факт'))
+            return result if result is not None else {'error': f'Портфель «{args["project"]}» не найден'}
         return {'error': f'Неизвестный инструмент: {name}'}
     except Exception:
         logger.exception('Ошибка инструмента %s', name)

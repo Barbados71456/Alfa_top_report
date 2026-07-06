@@ -21,12 +21,34 @@ DIM_LABELS = {
     'debt_type': 'Тип долга', 'department': 'Отдел',
 }
 
-# Эталонный BI-отчёт (CBR_v4.xlsx) жёстко зафиксирован на срезе "Тип долга" =
-# "Агентский" (проверено в xl/slicerCaches/slicerCache1.xml файла — единственное
-# выбранное значение среза). "Цессия" почти не имеет платежей (за 01.2026: 67 руб.
-# при остатке 2.16 млрд), поэтому её включение искажает общий CBR — исключаем
-# везде, не переключаемо.
-_AGENCY_FILTER = "debt_type = 'Агентский'"
+# Эталонный BI-отчёт (CBR_v4.xlsx) был жёстко зафиксирован на срезе "Тип долга" =
+# "Агентский" (см. xl/slicerCaches/slicerCache1.xml) — теперь это тот же смысл,
+# но уже как обычный переключаемый фильтр с этим значением по умолчанию (см.
+# DEFAULT_DEBT_TYPES ниже), а не зашитое в SQL условие.
+DEFAULT_DEBT_TYPES = ['Агентский']
+# "Изъятие"/"Изъятие по ИП"/"Хранение ТС" по умолчанию исключены — это не этапы
+# взыскания долга, а физическая работа со связанным имуществом (запрошено
+# пользователем как набор "рабочих" типов по умолчанию).
+DEFAULT_WORK_TYPES = ['Взыскание', 'Взыскание по ИП', 'ДРЗ', 'Реализация', 'Реализация с баланса']
+# По умолчанию убран из "Текущего кредитора" (запрошено пользователем) — реализовано
+# как исключение по значению, а не список остальных 50 кредиторов, чтобы новые
+# кредиторы автоматически попадали в срез по умолчанию.
+_ZAYMER_CREDITOR = 'ПАО\xa0МФК «Займер»'
+
+
+def _core_where(prefix='', creditor=None, debt_type=None, work_type=None):
+    """Общий фильтр по Текущему кредитору/Типу долга/Типу работы — применяется на
+    всех вкладках CBR (раньше только "Тип долга"='Агентский' было зашито жёстко)."""
+    debt_type = debt_type if debt_type is not None else DEFAULT_DEBT_TYPES
+    work_type = work_type if work_type is not None else DEFAULT_WORK_TYPES
+    where, params = ['1=1'], []
+    if creditor is not None:
+        where.append(f'{prefix}creditor = ANY(%s)'); params.append(creditor)
+    else:
+        where.append(f'{prefix}creditor IS DISTINCT FROM %s'); params.append(_ZAYMER_CREDITOR)
+    where.append(f'{prefix}debt_type = ANY(%s)'); params.append(debt_type)
+    where.append(f'{prefix}work_type = ANY(%s)'); params.append(work_type)
+    return ' AND '.join(where), params
 
 
 def get_available_months():
@@ -38,13 +60,14 @@ def _cbr(payment, base):
     return (payment / base * 100) if base else 0.0
 
 
-def overall_by_month():
+def overall_by_month(creditor=None, debt_type=None, work_type=None):
     """Свод по месяцам — 1:1 со страницей "Таблица" в BI (7 строк: ОСЗ тыс.руб/шт,
     Платежи тыс.руб/шт, Основной долг тыс.руб, CBR от ОСЗ/ОД %)."""
+    where, params = _core_where('', creditor, debt_type, work_type)
     rows = query(f'''SELECT month, SUM(total_debt) AS total_debt, SUM(principal_debt) AS principal_debt,
                             SUM(payment_amount) AS payment_amount, SUM(do_count) AS do_count,
                             SUM(payment_count) AS payment_count
-                     FROM cbr.monthly WHERE {_AGENCY_FILTER} GROUP BY 1 ORDER BY 1''')
+                     FROM cbr.monthly WHERE {where} GROUP BY 1 ORDER BY 1''', params)
     months = [r['month'] for r in rows]
     total_debt = [float(r['total_debt'] or 0) for r in rows]
     principal_debt = [float(r['principal_debt'] or 0) for r in rows]
@@ -61,22 +84,25 @@ def overall_by_month():
     }
 
 
-def _dim_query(dim):
+def _dim_query(dim, creditor=None, debt_type=None, work_type=None):
     if dim == 'department':
+        where, params = _core_where('m.', creditor, debt_type, work_type)
         return f'''SELECT m.month, COALESCE(e.department, 'Без отдела') AS key,
                           SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
                    FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
-                   WHERE m.{_AGENCY_FILTER} GROUP BY 1, 2 ORDER BY 1'''
+                   WHERE {where} GROUP BY 1, 2 ORDER BY 1''', params
     col = DIM_COLUMNS[dim]
+    where, params = _core_where('', creditor, debt_type, work_type)
     return f'''SELECT month, COALESCE("{col}", 'Не указано') AS key,
                       SUM(total_debt) AS total_debt, SUM(payment_amount) AS payment_amount
-               FROM cbr.monthly WHERE {_AGENCY_FILTER} GROUP BY 1, 2 ORDER BY 1'''
+               FROM cbr.monthly WHERE {where} GROUP BY 1, 2 ORDER BY 1''', params
 
 
-def by_dim(dim, top_n=8):
+def by_dim(dim, top_n=8, creditor=None, debt_type=None, work_type=None):
     """CBR от ОСЗ по месяцам для top_n самых крупных (по остатку в последнем месяце)
     значений измерения dim (employee/region/creditor/debt_type/department)."""
-    rows = query(_dim_query(dim))
+    sql, params = _dim_query(dim, creditor, debt_type, work_type)
+    rows = query(sql, params)
     by_key = defaultdict(dict)
     months_set = set()
     for r in rows:
@@ -95,17 +121,19 @@ def by_dim(dim, top_n=8):
     return {'months': [m.strftime('%m.%Y') for m in months], 'rows': dim_rows}
 
 
-def top_bottom_performers(month, dim, n=5, min_debt=1_000_000):
+def top_bottom_performers(month, dim, n=5, min_debt=1_000_000, creditor=None, debt_type=None, work_type=None):
     if dim == 'department':
+        where, params = _core_where('m.', creditor, debt_type, work_type)
         rows = query(f'''SELECT COALESCE(e.department, 'Без отдела') AS key,
                                 SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
                          FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
-                         WHERE m.month = %s AND m.{_AGENCY_FILTER} GROUP BY 1''', (month,))
+                         WHERE m.month = %s AND {where} GROUP BY 1''', [month] + params)
     else:
         col = DIM_COLUMNS[dim]
+        where, params = _core_where('', creditor, debt_type, work_type)
         rows = query(f'''SELECT COALESCE("{col}", 'Не указано') AS key,
                                  SUM(total_debt) AS total_debt, SUM(payment_amount) AS payment_amount
-                          FROM cbr.monthly WHERE month = %s AND {_AGENCY_FILTER} GROUP BY 1''', (month,))
+                          FROM cbr.monthly WHERE month = %s AND {where} GROUP BY 1''', [month] + params)
     items = []
     for r in rows:
         total_debt = float(r['total_debt'] or 0)
@@ -118,10 +146,10 @@ def top_bottom_performers(month, dim, n=5, min_debt=1_000_000):
     return {'top': items[:n], 'bottom': bottom}
 
 
-def analysis_and_recommendations(dim='department'):
+def analysis_and_recommendations(dim='department', creditor=None, debt_type=None, work_type=None):
     """Текстовые выводы, посчитанные правилами (не LLM): тренд CBR, отстающие и
     лидирующие срезы выбранного измерения за последний месяц."""
-    overall = overall_by_month()
+    overall = overall_by_month(creditor, debt_type, work_type)
     months, cbr_osz = overall['months'], overall['cbr_osz']
     bullets = []
     if len(cbr_osz) >= 2:
@@ -137,7 +165,7 @@ def analysis_and_recommendations(dim='department'):
     months_raw = overall['months_raw']
     if months_raw:
         latest_month = months_raw[-1]
-        perf = top_bottom_performers(latest_month, dim, n=3)
+        perf = top_bottom_performers(latest_month, dim, n=3, creditor=creditor, debt_type=debt_type, work_type=work_type)
         avg_cbr = cbr_osz[-1] if cbr_osz else 0
         for item in perf['bottom']:
             if avg_cbr - item['cbr'] > 2:
@@ -162,8 +190,10 @@ def analysis_and_recommendations(dim='department'):
 _IS_NETWORK_SQL = "(m.employee IS NOT NULL AND trim(m.employee) <> '')"
 
 
-def _cbr_filters_where(dept=None, emp_region=None, employee=None, is_network=None):
-    where, params = [f'm.{_AGENCY_FILTER}'], []
+def _cbr_filters_where(dept=None, emp_region=None, employee=None, is_network=None,
+                        creditor=None, debt_type=None, work_type=None):
+    where, params = _core_where('m.', creditor, debt_type, work_type)
+    where = [where]
     if dept:
         where.append('e.department = ANY(%s)'); params.append(dept)
     if emp_region:
@@ -175,10 +205,11 @@ def _cbr_filters_where(dept=None, emp_region=None, employee=None, is_network=Non
     return ' AND '.join(where), params
 
 
-def creditor_pivot(dept=None, emp_region=None, employee=None, is_network=None):
+def creditor_pivot(dept=None, emp_region=None, employee=None, is_network=None,
+                    creditor=None, debt_type=None, work_type=None):
     """Rows=Текущий кредитор, columns=месяц, values=CBR от ОСЗ % (страница
     "Таблица"/"Партнёры" в BI). Без фильтров — свод по всей компании."""
-    where, params = _cbr_filters_where(dept, emp_region, employee, is_network)
+    where, params = _cbr_filters_where(dept, emp_region, employee, is_network, creditor, debt_type, work_type)
     sql = f'''SELECT m.month, COALESCE(m.creditor, 'Не указано') AS creditor,
                      SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
               FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
@@ -203,10 +234,11 @@ def creditor_pivot(dept=None, emp_region=None, employee=None, is_network=None):
     }
 
 
-def filtered_monthly(dept=None, emp_region=None, employee=None, is_network=None):
+def filtered_monthly(dept=None, emp_region=None, employee=None, is_network=None,
+                      creditor=None, debt_type=None, work_type=None):
     """То же, что overall_by_month(), но с фильтрами по Отделу/Региону сотрудника/
     Сотруднику/Сеть (страницы "ОСЗ/ОД Сбор" и "ОСЗ/ОД CBR" в BI)."""
-    where, params = _cbr_filters_where(dept, emp_region, employee, is_network)
+    where, params = _cbr_filters_where(dept, emp_region, employee, is_network, creditor, debt_type, work_type)
     sql = f'''SELECT m.month, SUM(m.total_debt) AS total_debt, SUM(m.principal_debt) AS principal_debt,
                      SUM(m.payment_amount) AS payment_amount
               FROM cbr.monthly m LEFT JOIN cbr.employee_mapping e ON e.employee = m.employee
@@ -224,10 +256,10 @@ def filtered_monthly(dept=None, emp_region=None, employee=None, is_network=None)
     }
 
 
-def region_department_pivot(is_network=None):
+def region_department_pivot(is_network=None, creditor=None, debt_type=None, work_type=None):
     """Rows = Регион(сотрудника) -> Отдел (2-уровневая иерархия), columns=месяц,
     values=CBR от ОСЗ % (страница "Регионы" в BI)."""
-    where, params = _cbr_filters_where(is_network=is_network)
+    where, params = _cbr_filters_where(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
     sql = f'''SELECT m.month, COALESCE(e.region, 'Не указано') AS region,
                      COALESCE(e.department, 'Без отдела') AS department,
                      SUM(m.total_debt) AS total_debt, SUM(m.payment_amount) AS payment_amount
@@ -257,14 +289,21 @@ def region_department_pivot(is_network=None):
 
 
 def get_filter_options():
-    """Списки значений для срезов Отдел/Регион(сотрудника)/Сотрудник."""
+    """Списки значений для срезов Отдел/Регион(сотрудника)/Сотрудник/Текущий
+    кредитор/Тип долга/Тип работы."""
     depts = query("SELECT DISTINCT department FROM cbr.employee_mapping WHERE department IS NOT NULL ORDER BY 1")
     regions = query("SELECT DISTINCT region FROM cbr.employee_mapping WHERE region IS NOT NULL ORDER BY 1")
     employees = query("SELECT DISTINCT employee FROM cbr.employee_mapping WHERE employee IS NOT NULL ORDER BY 1")
+    creditors = query("SELECT DISTINCT creditor FROM cbr.monthly WHERE creditor IS NOT NULL ORDER BY 1")
+    debt_types = query("SELECT DISTINCT debt_type FROM cbr.monthly WHERE debt_type IS NOT NULL ORDER BY 1")
+    work_types = query("SELECT DISTINCT work_type FROM cbr.monthly WHERE work_type IS NOT NULL ORDER BY 1")
     return {
         'departments': [r['department'] for r in depts],
         'emp_regions': [r['region'] for r in regions],
         'employees': [r['employee'] for r in employees],
+        'creditors': [r['creditor'] for r in creditors],
+        'debt_types': [r['debt_type'] for r in debt_types],
+        'work_types': [r['work_type'] for r in work_types],
     }
 
 

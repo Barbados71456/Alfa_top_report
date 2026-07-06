@@ -29,9 +29,7 @@
     </form>
 </div>
 
-<div class="row g-3">
-    <div class="col-lg-8">
-        <div class="card p-3 table-responsive" style="max-height:75vh;">
+<div class="card p-3 table-responsive" style="max-height:75vh;">
             <table class="table report-table mb-0">
                 <thead>
                 <tr>
@@ -73,40 +71,4 @@
                 </tbody>
             </table>
         </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="d-flex flex-column gap-3">
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Прибыль / Чистая прибыль</div><canvas id="unitplChart" height="110"></canvas></div>
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка</div><canvas id="unitplRevenue" height="110"></canvas></div>
-            <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Расходы (переменные + постоянные)</div><canvas id="unitplCost" height="110"></canvas></div>
-        </div>
-    </div>
-</div>
-
-<script>
-(function() {
-try {
-const periods = {{ data.periods | tojson }};
-const mk = (id, labels, datasets, type) => {
-    const existing = Chart.getChart(id);
-    if (existing) existing.destroy();
-    new Chart(document.getElementById(id), {
-        type: type || 'line',
-        data: { labels, datasets },
-        options: { plugins: { legend: { display: type !== 'bar' } }, elements: { point: { radius: 0 } } }
-    });
-};
-mk('unitplChart', periods, [
-    {label: 'ПРИБЫЛЬ', data: {{ data.profit | tojson }}, borderColor: '#000', backgroundColor: 'rgba(0,0,0,0.05)', tension: 0.15},
-    {label: 'ЧИСТАЯ ПРИБЫЛЬ', data: {{ data.net_profit | tojson }}, borderColor: '#c0362c', backgroundColor: 'rgba(192,54,44,0.05)', tension: 0.15}
-]);
-mk('unitplRevenue', periods, [
-    {data: {{ data.revenue_series | tojson }}, backgroundColor: '#1a7f37'}
-], 'bar');
-mk('unitplCost', periods, [
-    {data: {{ data.cost_series | tojson }}, backgroundColor: '#c0362c'}
-], 'bar');
-} catch (e) { console.error('unitpl script failed:', e); }
-})();
-</script>
 {% endblock %}

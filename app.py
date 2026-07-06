@@ -325,22 +325,25 @@ def cbr():
     employee = request.args.getlist('employee') or None
     network_param = request.args.get('network', 'network')
     is_network = {'network': True, 'non_network': False}.get(network_param)  # None => 'all'
+    creditor = request.args.getlist('creditor') or None
+    debt_type = request.args.getlist('debt_type') or None
+    work_type = request.args.getlist('work_type') or None
 
-    table_data = cr.overall_by_month()
-    creditor_pivot_all = cr.creditor_pivot()
-    chart_filtered = cr.filtered_monthly(dept, emp_region, employee, is_network)
-    creditor_pivot_partners = cr.creditor_pivot(is_network=is_network)
-    region_dept_pivot = cr.region_department_pivot(is_network=is_network)
+    table_data = cr.overall_by_month(creditor, debt_type, work_type)
+    creditor_pivot_all = cr.creditor_pivot(creditor=creditor, debt_type=debt_type, work_type=work_type)
+    chart_filtered = cr.filtered_monthly(dept, emp_region, employee, is_network, creditor, debt_type, work_type)
+    creditor_pivot_partners = cr.creditor_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
+    region_dept_pivot = cr.region_department_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
     filter_options = cr.get_filter_options()
 
     legacy_dim = request.args.get('dim', 'department')
     if legacy_dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
         legacy_dim = 'department'
-    legacy_by_dim = cr.by_dim(legacy_dim)
+    legacy_by_dim = cr.by_dim(legacy_dim, creditor=creditor, debt_type=debt_type, work_type=work_type)
     months_raw = table_data['months_raw']
     latest_month = months_raw[-1] if months_raw else None
-    legacy_perf = cr.top_bottom_performers(latest_month, legacy_dim) if latest_month else {'top': [], 'bottom': []}
-    legacy_recommendations = cr.analysis_and_recommendations(legacy_dim)
+    legacy_perf = cr.top_bottom_performers(latest_month, legacy_dim, creditor=creditor, debt_type=debt_type, work_type=work_type) if latest_month else {'top': [], 'bottom': []}
+    legacy_recommendations = cr.analysis_and_recommendations(legacy_dim, creditor, debt_type, work_type)
 
     return render_template(
         'cbr.html',
@@ -348,6 +351,8 @@ def cbr():
         chart_filtered=chart_filtered, creditor_pivot_partners=creditor_pivot_partners,
         region_dept_pivot=region_dept_pivot, filter_options=filter_options,
         dept=dept or [], emp_region=emp_region or [], employee=employee or [], network_param=network_param,
+        creditor=creditor if creditor is not None else [c for c in filter_options['creditors'] if c != cr._ZAYMER_CREDITOR],
+        debt_type=debt_type or cr.DEFAULT_DEBT_TYPES, work_type=work_type or cr.DEFAULT_WORK_TYPES,
         legacy_dim=legacy_dim, legacy_by_dim=legacy_by_dim, legacy_perf=legacy_perf,
         legacy_recommendations=legacy_recommendations, dim_labels=cr.DIM_LABELS,
     )
@@ -838,7 +843,10 @@ def export_report(kind):
                 return {'error': 'Портфель не найден'}, 404
             sheets = ir.export_detail(data)
         elif kind == 'cbr':
-            sheets = cr.export_rows(cr.overall_by_month())
+            creditor = request.args.getlist('creditor') or None
+            debt_type = request.args.getlist('debt_type') or None
+            work_type = request.args.getlist('work_type') or None
+            sheets = cr.export_rows(cr.overall_by_month(creditor, debt_type, work_type))
         elif kind == 'wallets':
             sheets = wr.export_summary(wr.all_wallets_reconciliation())
         elif kind == 'wallets_detail':
