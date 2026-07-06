@@ -794,17 +794,24 @@ def default_counterparty_range(pf='факт'):
 
 
 def counterparty_series(contragents, pf='факт', projects=None, date_from=None, date_to=None, allocation='all'):
-    """Динамика выручки/затрат по одному или нескольким контрагентам (индекс по
-    "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый), опционально
-    отфильтрованная по проекту(ам) и диапазону дат. Несколько контрагентов/проектов
-    суммируются в один ряд (не сравниваются по отдельности)."""
+    """Динамика выручки/затрат по одному или нескольким контрагентам и/или проектам
+    (индекс по "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый),
+    опционально отфильтрованная по диапазону дат. Несколько контрагентов/проектов
+    суммируются в один ряд (не сравниваются по отдельности). Можно указать только
+    contragents, только projects, или оба вместе — хотя бы один обязателен (иначе
+    это будет агрегат по всей компании, не для этого отчёта)."""
     if isinstance(contragents, str):
         contragents = [contragents]
+    if not contragents and not projects:
+        raise ValueError('Нужно указать хотя бы контрагента или проект')
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
     sql = '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
              FROM public."FinancialData"
-             WHERE "Контрагент" = ANY(%s) AND "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
-    params = [contragents, pf, all_lines]
+             WHERE "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
+    params = [pf, all_lines]
+    if contragents:
+        sql += ' AND "Контрагент" = ANY(%s)'
+        params.append(contragents)
     if projects:
         sql += ' AND "Проект" = ANY(%s)'
         params.append(projects)
