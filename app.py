@@ -350,13 +350,14 @@ def counterparty():
     contragents = request.args.getlist('name')
     pf = request.args.get('pf', 'факт')
     projects = request.args.getlist('project') or None
+    allocation = request.args.get('allocation', 'all')
     default_from, default_to = pr.default_counterparty_range(pf)
     date_from = request.args.get('date_from') or default_from.isoformat()
     date_to = request.args.get('date_to') or default_to.isoformat()
-    data = pr.counterparty_series(contragents, pf, projects, date_from, date_to) if (contragents or projects) else None
+    data = pr.counterparty_series(contragents, pf, projects, date_from, date_to, allocation) if (contragents or projects) else None
     return render_template(
         'counterparty.html', data=data, contragents=contragents, pf=pf, projects=projects,
-        date_from=date_from, date_to=date_to,
+        date_from=date_from, date_to=date_to, allocation=allocation,
         all_projects=pr.get_projects_with_type(),
     )
 

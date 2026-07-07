@@ -794,21 +794,25 @@ def default_counterparty_range(pf='факт'):
 
 
 def counterparty_series(contragents, pf='факт', projects=None, date_from=None, date_to=None, allocation='all'):
-    """Динамика выручки/затрат по одному или нескольким контрагентам и/или проектам
-    (индекс по "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый),
+    """Динамика по одному или нескольким контрагентам и/или проектам (индекс по
+    "Контрагент" уже есть — idx_financial_data_contragent, запрос быстрый),
     опционально отфильтрованная по диапазону дат. Несколько контрагентов/проектов
     суммируются в один ряд (не сравниваются по отдельности). Можно указать только
     contragents, только projects, или оба вместе — хотя бы один обязателен (иначе
-    это будет агрегат по всей компании, не для этого отчёта)."""
+    это будет агрегат по всей компании, не для этого отчёта).
+
+    Разбивка по секциям — та же, что в svod1() (Выручка/Переменные/Постоянные/
+    Прибыль/Инвестиции в портфели/Финансирование/Чистая прибыль), формула
+    ЧИСТОЙ ПРИБЫЛИ идентична svod1: профит + бонусы + инвестиции + финансирование.
+    allocation: 'all' (с распределением затрат, по умолчанию) / 'no_alloc' (без)."""
     if isinstance(contragents, str):
         contragents = [contragents]
     if not contragents and not projects:
         raise ValueError('Нужно указать хотя бы контрагента или проект')
-    all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
     sql = '''SELECT "Период" AS period, "Строка отчета" AS line, SUM("Сумма") AS amount
              FROM public."FinancialData"
              WHERE "п_ф" = %s AND "Строка отчета" = ANY(%s)'''
-    params = [pf, all_lines]
+    params = [pf, ALL_LINES]
     if contragents:
         sql += ' AND "Контрагент" = ANY(%s)'
         params.append(contragents)
@@ -825,29 +829,57 @@ def counterparty_series(contragents, pf='факт', projects=None, date_from=Non
         sql += " AND \"Распределение\" = 'до распределения'"
     sql += ' GROUP BY 1, 2 ORDER BY 1'
     rows = query(sql, params)
-    revenue_set = set(REVENUE_LINES)
-    by_period = defaultdict(lambda: {'revenue': 0.0, 'cost': 0.0})
+
+    revenue_set, variable_set, fixed_set = set(REVENUE_LINES), set(VARIABLE_LINES), set(FIXED_LINES)
+    bonus_set, financing_set = set(BONUS_LINES), set(FINANCING_LINES)
+    by_period = defaultdict(lambda: {'revenue': 0.0, 'variable': 0.0, 'fixed': 0.0,
+                                      'bonus': 0.0, 'investment': 0.0, 'financing': 0.0})
     for r in rows:
-        bucket = 'revenue' if r['line'] in revenue_set else 'cost'
-        by_period[r['period']][bucket] += float(r['amount'] or 0)
+        amount = float(r['amount'] or 0)
+        line = r['line']
+        if line in revenue_set:
+            bucket = 'revenue'
+        elif line in variable_set:
+            bucket = 'variable'
+        elif line in fixed_set:
+            bucket = 'fixed'
+        elif line in bonus_set:
+            bucket = 'bonus'
+        elif line == INVESTMENT_LINE:
+            bucket = 'investment'
+        else:
+            bucket = 'financing'
+        by_period[r['period']][bucket] += amount
 
     periods = sorted(by_period)
-    table = [
-        {
+    table = []
+    for p in periods:
+        d = by_period[p]
+        profit = d['revenue'] + d['variable'] + d['fixed']
+        net_profit = profit + d['bonus'] + d['investment'] + d['financing']
+        table.append({
             'period': p.strftime('%m.%Y'),
-            'revenue': by_period[p]['revenue'],
-            'cost': by_period[p]['cost'],
-            'net': by_period[p]['revenue'] + by_period[p]['cost'],
-        }
-        for p in periods
-    ]
+            'revenue': d['revenue'], 'variable': d['variable'], 'fixed': d['fixed'],
+            'profit': profit, 'investment': d['investment'], 'financing': d['financing'],
+            'net_profit': net_profit,
+        })
+
+    def _total(key):
+        return sum(row[key] for row in table)
+
     return {
         'periods': [p.strftime('%Y-%m') for p in periods],
-        'revenue': [by_period[p]['revenue'] for p in periods],
-        'cost': [by_period[p]['cost'] for p in periods],
         'table': table,
-        'total_revenue': sum(by_period[p]['revenue'] for p in periods),
-        'total_cost': sum(by_period[p]['cost'] for p in periods),
+        'revenue': [row['revenue'] for row in table],
+        'profit': [row['profit'] for row in table],
+        'net_profit': [row['net_profit'] for row in table],
+        'total_revenue': _total('revenue'),
+        'total_variable': _total('variable'),
+        'total_fixed': _total('fixed'),
+        'total_profit': _total('profit'),
+        'total_investment': _total('investment'),
+        'total_financing': _total('financing'),
+        'total_net_profit': _total('net_profit'),
     }
 
 
@@ -949,6 +981,11 @@ def export_overview(data):
 
 
 def export_counterparty(data):
-    headers = ['Месяц', 'Выручка', 'Затраты', 'Нетто']
-    rows = [[r['period'], r['revenue'], r['cost'], r['net']] for r in data['table']]
+    headers = ['Месяц', 'Выручка', 'Переменные', 'Постоянные', 'Прибыль', 'Инвестиции в портфели',
+               'Финансирование', 'Чистая прибыль / Кэш флоу']
+    rows = [
+        [r['period'], r['revenue'], r['variable'], r['fixed'], r['profit'], r['investment'],
+         r['financing'], r['net_profit']]
+        for r in data['table']
+    ]
     return [('По контрагенту', headers, rows)]

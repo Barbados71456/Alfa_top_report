@@ -22,6 +22,10 @@
         <option value="план" {% if pf=='план' %}selected{% endif %}>План</option>
         <option value="прогноз" {% if pf=='прогноз' %}selected{% endif %}>Прогноз</option>
     </select>
+    <select name="allocation" class="form-select" style="max-width:200px">
+        <option value="all" {% if allocation=='all' %}selected{% endif %}>С распределением затрат</option>
+        <option value="no_alloc" {% if allocation=='no_alloc' %}selected{% endif %}>Без распределения затрат</option>
+    </select>
     <input type="date" name="date_from" class="form-control" style="max-width:160px" value="{{ date_from }}">
     <span class="text-secondary">—</span>
     <input type="date" name="date_to" class="form-control" style="max-width:160px" value="{{ date_to }}">
@@ -29,15 +33,19 @@
 </form>
 
 {% if data %}
-<div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-    <div class="d-flex gap-3 flex-grow-1">
+<div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+    <div class="d-flex gap-3 flex-grow-1 flex-wrap">
         <div class="card p-3 flex-fill kpi-card">
             <div class="kpi-label">Выручка всего</div>
             <div class="kpi-value val-pos">{{ '{:,.0f}'.format(data.total_revenue).replace(',', ' ') }}</div>
         </div>
         <div class="card p-3 flex-fill kpi-card">
-            <div class="kpi-label">Затраты всего</div>
-            <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.total_cost).replace(',', ' ') }}</div>
+            <div class="kpi-label">Прибыль всего</div>
+            <div class="kpi-value {% if data.total_profit > 0 %}val-pos{% elif data.total_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.total_profit).replace(',', ' ') }}</div>
+        </div>
+        <div class="card p-3 flex-fill kpi-card">
+            <div class="kpi-label">Чистая прибыль / Кэш флоу всего</div>
+            <div class="kpi-value {% if data.total_net_profit > 0 %}val-pos{% elif data.total_net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.total_net_profit).replace(',', ' ') }}</div>
         </div>
     </div>
     <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='counterparty') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
@@ -47,14 +55,29 @@
     <div class="col-lg-8">
         <div class="card p-3 table-responsive">
             <table class="table report-table mb-0">
-                <thead><tr><th class="label-col">Месяц</th><th>Выручка</th><th>Затраты</th><th>Нетто</th></tr></thead>
+                <thead>
+                <tr>
+                    <th class="label-col">Месяц</th>
+                    <th>Выручка</th>
+                    <th>Расходы переменные</th>
+                    <th>Расходы постоянные</th>
+                    <th>Прибыль</th>
+                    <th>Инвестиции в портфели</th>
+                    <th>Финансирование</th>
+                    <th>Чистая прибыль / Кэш флоу</th>
+                </tr>
+                </thead>
                 <tbody>
                 {% for r in data.table %}
                 <tr>
                     <td class="label-col">{{ r.period }}</td>
                     <td class="val-pos">{{ '{:,.0f}'.format(r.revenue).replace(',', ' ') if r.revenue else '—' }}</td>
-                    <td class="val-neg">{{ '{:,.0f}'.format(r.cost).replace(',', ' ') if r.cost else '—' }}</td>
-                    <td class="{% if r.net > 0 %}val-pos{% elif r.net < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net).replace(',', ' ') }}</td>
+                    <td class="val-neg">{{ '{:,.0f}'.format(r.variable).replace(',', ' ') if r.variable else '—' }}</td>
+                    <td class="val-neg">{{ '{:,.0f}'.format(r.fixed).replace(',', ' ') if r.fixed else '—' }}</td>
+                    <td class="{% if r.profit > 0 %}val-pos{% elif r.profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.profit).replace(',', ' ') }}</td>
+                    <td class="{% if r.investment > 0 %}val-pos{% elif r.investment < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.investment).replace(',', ' ') if r.investment else '—' }}</td>
+                    <td class="{% if r.financing > 0 %}val-pos{% elif r.financing < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.financing).replace(',', ' ') if r.financing else '—' }}</td>
+                    <td class="{% if r.net_profit > 0 %}val-pos{% elif r.net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net_profit).replace(',', ' ') }}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -62,7 +85,7 @@
         </div>
     </div>
     <div class="col-lg-4">
-        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка / Затраты по месяцам</div><canvas id="cpChart" height="220"></canvas></div>
+        <div class="card p-2"><div class="small text-secondary ps-2 pt-1">Выручка / Прибыль / Чистая прибыль по месяцам</div><canvas id="cpChart" height="220"></canvas></div>
     </div>
 </div>
 
@@ -77,7 +100,8 @@ new Chart(document.getElementById('cpChart'), {
         labels: {{ data.periods | tojson }},
         datasets: [
             {label: 'Выручка', data: {{ data.revenue | tojson }}, backgroundColor: '#1a7f37'},
-            {label: 'Затраты', data: {{ data.cost | tojson }}, backgroundColor: '#c0362c'}
+            {label: 'Прибыль', data: {{ data.profit | tojson }}, backgroundColor: '#0071e3'},
+            {label: 'Чистая прибыль / Кэш флоу', data: {{ data.net_profit | tojson }}, backgroundColor: '#c0362c'}
         ]
     },
     options: { plugins: { legend: { display: true } } }
@@ -85,8 +109,8 @@ new Chart(document.getElementById('cpChart'), {
 } catch (e) { console.error('counterparty script failed:', e); }
 })();
 </script>
-{% elif contragents %}
-<p class="text-secondary">Нет данных по выбранным контрагентам.</p>
+{% elif contragents or request.args.get('project') %}
+<p class="text-secondary">Нет данных по выбранным контрагентам/проектам.</p>
 {% endif %}
 
 <script>
