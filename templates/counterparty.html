@@ -75,8 +75,18 @@
                     <td class="val-neg">{{ '{:,.0f}'.format(r.variable).replace(',', ' ') if r.variable else '—' }}</td>
                     <td class="val-neg">{{ '{:,.0f}'.format(r.fixed).replace(',', ' ') if r.fixed else '—' }}</td>
                     <td class="{% if r.profit > 0 %}val-pos{% elif r.profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.profit).replace(',', ' ') }}</td>
-                    <td class="{% if r.investment > 0 %}val-pos{% elif r.investment < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.investment).replace(',', ' ') if r.investment else '—' }}</td>
-                    <td class="{% if r.financing > 0 %}val-pos{% elif r.financing < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.financing).replace(',', ' ') if r.financing else '—' }}</td>
+                    <td class="amount-cell {% if r.investment > 0 %}val-pos{% elif r.investment < 0 %}val-neg{% endif %}"
+                        data-lines='{{ [investment_line] | tojson }}' data-year="{{ r.year }}" data-month="{{ r.month }}" data-pf="{{ pf }}"
+                        data-label="Инвестиции в портфели" data-focus="statya"
+                        {% if projects %}data-projects='{{ projects | tojson }}'{% endif %}
+                        {% if contragents %}data-employee='{{ contragents | tojson }}'{% endif %}
+                        >{{ '{:,.0f}'.format(r.investment).replace(',', ' ') if r.investment else '—' }}</td>
+                    <td class="amount-cell {% if r.financing > 0 %}val-pos{% elif r.financing < 0 %}val-neg{% endif %}"
+                        data-lines='{{ financing_lines | tojson }}' data-year="{{ r.year }}" data-month="{{ r.month }}" data-pf="{{ pf }}"
+                        data-label="Финансирование" data-focus="statya"
+                        {% if projects %}data-projects='{{ projects | tojson }}'{% endif %}
+                        {% if contragents %}data-employee='{{ contragents | tojson }}'{% endif %}
+                        >{{ '{:,.0f}'.format(r.financing).replace(',', ' ') if r.financing else '—' }}</td>
                     <td class="{% if r.net_profit > 0 %}val-pos{% elif r.net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.net_profit).replace(',', ' ') }}</td>
                 </tr>
                 {% endfor %}

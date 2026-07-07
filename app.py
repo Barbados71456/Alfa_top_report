@@ -358,6 +358,7 @@ def counterparty():
     return render_template(
         'counterparty.html', data=data, contragents=contragents, pf=pf, projects=projects,
         date_from=date_from, date_to=date_to, allocation=allocation,
+        investment_line=pr.INVESTMENT_LINE, financing_lines=pr.FINANCING_LINES,
         all_projects=pr.get_projects_with_type(),
     )
 

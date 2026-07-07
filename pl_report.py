@@ -163,7 +163,9 @@ def svod1(year, pf='факт', allocation='all'):
     allocation: 'all' (с распределением затрат, по умолчанию) / 'no_alloc' (без)."""
     by_line = _fetch_year(year, pf, allocation)
     all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
-    statya3_detail = _fetch_statya3_detail(year, pf, all_lines, allocation)
+    # Инвестиции/Финансирование кликабельны так же, как Выручка/Переменные/Постоянные —
+    # тултип до СтатьяУровень3 нужен и для них, поэтому считаем деталь сразу на весь набор.
+    statya3_detail = _fetch_statya3_detail(year, pf, all_lines + [INVESTMENT_LINE] + FINANCING_LINES, allocation)
     rows = []
     section_totals = {}
 
@@ -201,14 +203,22 @@ def svod1(year, pf='факт', allocation='all'):
     rows.append({'kind': 'header', 'label': '  ИНВЕСТИЦИИ В ПОРТФЕЛИ'})
     investment = by_line.get(INVESTMENT_LINE, _empty_months())
     if not _is_all_zero(_series(investment)):
-        rows.append({'kind': 'line', 'label': INVESTMENT_LINE, 'vals': _series(investment)})
+        inv_detail = statya3_detail.get(INVESTMENT_LINE, {})
+        rows.append({
+            'kind': 'line', 'label': INVESTMENT_LINE, 'vals': _series(investment), 'focus': 'statya',
+            'detail': [inv_detail.get(m, []) for m in range(1, 13)],
+        })
 
     rows.append({'kind': 'header', 'label': '  ФИНАНСИРОВАНИЕ'})
     for line in FINANCING_LINES:
         vals = _series(by_line.get(line, _empty_months()))
         if _is_all_zero(vals):
             continue
-        rows.append({'kind': 'line', 'label': line, 'vals': vals})
+        line_detail = statya3_detail.get(line, {})
+        rows.append({
+            'kind': 'line', 'label': line, 'vals': vals, 'focus': 'statya',
+            'detail': [line_detail.get(m, []) for m in range(1, 13)],
+        })
     financing_total = _sum_lines(by_line, FINANCING_LINES)
     rows.append({'kind': 'subtotal', 'label': 'Итого финансирование', 'vals': _series(financing_total)})
 
@@ -859,7 +869,7 @@ def counterparty_series(contragents, pf='факт', projects=None, date_from=Non
         profit = d['revenue'] + d['variable'] + d['fixed']
         net_profit = profit + d['bonus'] + d['investment'] + d['financing']
         table.append({
-            'period': p.strftime('%m.%Y'),
+            'period': p.strftime('%m.%Y'), 'year': p.year, 'month': p.month,
             'revenue': d['revenue'], 'variable': d['variable'], 'fixed': d['fixed'],
             'profit': profit, 'investment': d['investment'], 'financing': d['financing'],
             'net_profit': net_profit,
