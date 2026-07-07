@@ -25,25 +25,20 @@
 </div>
 
 <div class="row g-3">
-    <div class="col-lg-6">
-        <div class="d-flex flex-column gap-3">
-            <div class="card p-3"><div class="small text-secondary mb-1">Выручка по месяцам</div><canvas id="ovRevenue" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Переменные расходы по месяцам</div><canvas id="ovVariable" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">GM (Выручка + Переменные) по месяцам</div><canvas id="ovGmAbs" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Постоянные расходы по месяцам</div><canvas id="ovFixed" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Прибыль по месяцам</div><canvas id="ovProfitBar" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Покупка портфелей (цессия) по месяцам</div><canvas id="ovInvestment" height="110"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Итого финансирование по месяцам</div><canvas id="ovFinancing" height="110"></canvas></div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="d-flex flex-column gap-3">
-            <div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">Топ-5 портфелей по выручке, {{ data.year }}</div><canvas id="ovTopProjects" height="140"></canvas></div>
-        </div>
-    </div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Выручка по месяцам</div><canvas id="ovRevenue" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Переменные расходы по месяцам</div><canvas id="ovVariable" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">GM (Выручка + Переменные) по месяцам</div><canvas id="ovGmAbs" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Постоянные расходы по месяцам</div><canvas id="ovFixed" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Прибыль по месяцам</div><canvas id="ovProfitBar" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Покупка портфелей (цессия) по месяцам</div><canvas id="ovInvestment" height="220"></canvas></div></div>
+    <div class="col-12"><div class="card p-3"><div class="small text-secondary mb-1">Итого финансирование по месяцам</div><canvas id="ovFinancing" height="220"></canvas></div></div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-md-6"><div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div></div>
+    <div class="col-md-6"><div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div></div>
+    <div class="col-md-6"><div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div></div>
+    <div class="col-md-6"><div class="card p-3"><div class="small text-secondary mb-1">Топ-5 портфелей по выручке, {{ data.year }}</div><canvas id="ovTopProjects" height="140"></canvas></div></div>
 </div>
 
 <script>
