@@ -38,8 +38,6 @@
     </div>
     <div class="col-lg-6">
         <div class="d-flex flex-column gap-3">
-            <div class="card p-3"><div class="small text-secondary mb-1">Прибыль / Чистая прибыль</div><canvas id="ovProfit" height="140"></canvas></div>
-            <div class="card p-3"><div class="small text-secondary mb-1">GM%, по месяцам</div><canvas id="ovGm" height="140"></canvas></div>
             <div class="card p-3"><div class="small text-secondary mb-1">Структура расходов, {{ data.year }}</div><canvas id="ovCostStructure" height="140"></canvas></div>
             <div class="card p-3"><div class="small text-secondary mb-1">ФОТ и численность, {{ data.year }}</div><canvas id="ovFot" height="140"></canvas></div>
             <div class="card p-3"><div class="small text-secondary mb-1">Остаток долга (Займы), вся история</div><canvas id="ovLoans" height="140"></canvas></div>
@@ -95,31 +93,6 @@ mkDrillBar('ovFixed', {{ data.fixed_cur | tojson }}, {{ data.fixed_prev | tojson
 mkDrillBar('ovProfitBar', {{ data.profit_cur | tojson }}, {{ data.profit_prev | tojson }}, '#000', {{ data.profit_lines | tojson }}, 'Прибыль', 'projects');
 mkDrillBar('ovInvestment', {{ data.investment_cur | tojson }}, {{ data.investment_prev | tojson }}, '#6f42c1', {{ data.investment_lines | tojson }}, 'Покупка портфелей (цессия)');
 mkDrillBar('ovFinancing', {{ data.financing_cur | tojson }}, {{ data.financing_prev | tojson }}, '#0dcaf0', {{ data.financing_lines | tojson }}, 'Итого финансирование');
-
-mk('ovProfit', {
-    type: 'line',
-    data: {
-        labels: MONTHS,
-        datasets: [
-            {label: 'Прибыль ' + YEAR, data: {{ data.profit_cur | tojson }}, borderColor: '#000', tension: 0.15},
-            {label: 'Чистая прибыль ' + YEAR, data: {{ data.net_profit_cur | tojson }}, borderColor: '#c0362c', tension: 0.15},
-            {label: 'Прибыль ' + PREV_YEAR, data: {{ data.profit_prev | tojson }}, borderColor: '#86868b', borderDash: [4,4], tension: 0.15}
-        ]
-    },
-    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
-});
-
-mk('ovGm', {
-    type: 'line',
-    data: {
-        labels: MONTHS,
-        datasets: [
-            {label: String(YEAR), data: {{ data.gm_pct_cur | tojson }}, borderColor: '#1a7f37', tension: 0.15},
-            {label: String(PREV_YEAR), data: {{ data.gm_pct_prev | tojson }}, borderColor: '#86868b', borderDash: [4,4], tension: 0.15}
-        ]
-    },
-    options: { plugins: { legend: { display: true } }, elements: { point: { radius: 0 } } }
-});
 
 mk('ovCostStructure', {
     type: 'doughnut',
