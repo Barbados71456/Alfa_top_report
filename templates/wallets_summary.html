@@ -101,6 +101,72 @@
 {% endif %}
 </form>
 
+<div class="page-header mt-4 mb-3">
+    <div class="page-eyebrow">Сверка счетов</div>
+    <h1 class="page-title">Сверка чужие деньги</h1>
+    <p class="page-subtitle">
+        Та же логика, что и выше, но по строке отчёта «Чужие деньги» (не по кошельку) —
+        одна строка на всю компанию. Входящий остаток на 01.01.{{ foreign_money.year }}
+        рассчитан автоматически (накопительная сумма факта за всю историю до этой даты),
+        можно поправить вручную.
+    </p>
+</div>
+<div class="card p-3 table-responsive">
+    <table class="table report-table mb-0">
+        <thead>
+        <tr>
+            <th class="label-col">Строка отчёта</th>
+            <th>Входящий остаток на 01.01.{{ foreign_money.year }}</th>
+            {% for lbl in foreign_money.month_labels %}<th>{{ lbl }}</th>{% endfor %}
+            <th>Остаток на сейчас</th>
+            <th>Введено ({{ foreign_money.period_label }})</th>
+            <th class="text-center">Сверено</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td class="label-col">Чужие деньги</td>
+            <td>
+                {% if can_edit %}
+                <form id="fm-opening" method="post" action="{{ url_for('wallets_foreign_money_opening') }}"></form>
+                <div class="d-flex gap-1 align-items-center">
+                    <input form="fm-opening" type="hidden" name="year" value="{{ foreign_money.year }}">
+                    <input form="fm-opening" type="number" step="0.01" name="balance"
+                           value="{{ '%.2f'|format(foreign_money.opening_year) }}" class="form-control form-control-sm text-end" style="min-width:110px">
+                    <button form="fm-opening" type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Сохранить входящий остаток"><i class="bi bi-check-lg"></i></button>
+                </div>
+                {% else %}
+                <span class="{% if foreign_money.opening_year > 0 %}val-pos{% elif foreign_money.opening_year < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(foreign_money.opening_year).replace(',', ' ') if foreign_money.opening_year else '—' }}</span>
+                {% endif %}
+            </td>
+            {% for v in foreign_money.row_months %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+            <td class="{% if foreign_money.current_balance > 0 %}val-pos{% elif foreign_money.current_balance < 0 %}val-neg{% endif %}">{{ '{:,.2f}'.format(foreign_money.current_balance).replace(',', ' ') }}</td>
+            <td>
+                {% if can_edit %}
+                <form id="fm-current" method="post" action="{{ url_for('wallets_foreign_money_current') }}"></form>
+                <input form="fm-current" type="number" step="0.01" class="form-control form-control-sm text-end" name="balance"
+                       value="{{ '%.2f'|format(foreign_money.entered_now) if foreign_money.entered_now is not none else '' }}" style="min-width:130px">
+                {% else %}
+                {{ '{:,.2f}'.format(foreign_money.entered_now).replace(',', ' ') if foreign_money.entered_now is not none else '—' }}
+                {% endif %}
+            </td>
+            <td class="text-center">
+                {% if foreign_money.match_now is none %}
+                <input type="checkbox" disabled class="form-check-input">
+                {% elif foreign_money.match_now %}
+                <input type="checkbox" checked disabled class="form-check-input" style="accent-color: var(--pos-color)">
+                {% else %}
+                <input type="checkbox" checked disabled class="form-check-input" style="accent-color: var(--neg-color)">
+                {% endif %}
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+{% if can_edit %}
+<button form="fm-current" type="submit" class="btn btn-dark btn-sm mt-3">Сохранить точку сверки «Чужие деньги»</button>
+{% endif %}
+
 <script>
 (function() {
 try {

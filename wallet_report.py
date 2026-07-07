@@ -371,6 +371,85 @@ def all_wallets_reconciliation():
     }
 
 
+def _foreign_money_turnover():
+    """{period: amount} по строке отчёта "Чужие деньги" (public.FinancialData,
+    факт) — тот же принцип, что обороты кошельков, но источник не "Кошелек",
+    а "Строка отчета" (см. FINANCING_LINES в pl_report.py)."""
+    rows = query('''
+        SELECT "Период" AS period, SUM("Сумма") AS amount
+        FROM public."FinancialData"
+        WHERE "Строка отчета" = 'Чужие деньги' AND "п_ф" = 'факт'
+        GROUP BY 1
+    ''')
+    return {r['period']: float(r['amount'] or 0) for r in rows}
+
+
+def _foreign_money_checkpoints():
+    rows = query('SELECT period, balance FROM reporting.foreign_money_balances')
+    return {r['period']: float(r['balance']) for r in rows}
+
+
+def seed_foreign_money_balance(year=None):
+    """Разовый расчёт входящего остатка на 01.01.{year} (по умолчанию — текущий
+    год) — накопительная сумма факта "Чужие деньги" за всю историю до этой даты.
+    Не перезаписывает уже сохранённую точку (ON CONFLICT DO NOTHING), чтобы не
+    затереть ручную правку админа."""
+    year = year or date.today().year
+    opening_period = date(year, 1, 1)
+    row = query_one(
+        '''SELECT COALESCE(SUM("Сумма"), 0) AS total FROM public."FinancialData"
+           WHERE "Строка отчета" = 'Чужие деньги' AND "п_ф" = 'факт' AND "Период" < %s''',
+        (opening_period,)
+    )
+    execute(
+        '''INSERT INTO reporting.foreign_money_balances (period, balance, notes, created_by)
+           VALUES (%s, %s, %s, %s) ON CONFLICT (period) DO NOTHING''',
+        (opening_period, row['total'], 'Авторасчёт: накопительная сумма факта до этой даты', 'system')
+    )
+    return opening_period, row['total']
+
+
+def foreign_money_reconciliation(year=None):
+    """Та же механика, что all_wallets_reconciliation(), но для одной строки
+    "Чужие деньги" — без группировки, всего одна строка."""
+    today = date.today()
+    year = year or today.year
+    period = today.replace(day=1)
+    months = [date(year, m, 1) for m in range(1, 13)]
+    until = date(year, 12, 1)
+    jan_period = date(year, 1, 1)
+
+    turnover = _foreign_money_turnover()
+    checkpoints = _foreign_money_checkpoints()
+    rows = _build_wallet_rows(turnover, checkpoints, until=until)
+    row_months = [turnover.get(m, 0.0) for m in months]
+    jan_row = next((r for r in rows if r['period'] == jan_period), None)
+    opening_year = jan_row['opening'] if jan_row else 0.0
+    current_balance = opening_year + sum(row_months)
+
+    cur_row = next((r for r in rows if r['period'] == period), None)
+    entered_now = cur_row['entered'] if cur_row else None
+    discrepancy_now = cur_row['discrepancy'] if cur_row else None
+    match_now = abs(discrepancy_now) < 0.01 if discrepancy_now is not None else None
+
+    return {
+        'year': year, 'period': period, 'period_label': f'{MONTHS_RU[period.month - 1]} {year}',
+        'months': months, 'month_labels': [MONTHS_RU[m.month - 1] for m in months],
+        'row_months': row_months, 'opening_year': opening_year, 'current_balance': current_balance,
+        'entered_now': entered_now, 'discrepancy_now': discrepancy_now, 'match_now': match_now,
+    }
+
+
+def add_foreign_money_balance(period, balance, notes, username):
+    execute(
+        '''INSERT INTO reporting.foreign_money_balances (period, balance, notes, created_by)
+           VALUES (%s, %s, %s, %s)
+           ON CONFLICT (period) DO UPDATE SET balance = EXCLUDED.balance, notes = EXCLUDED.notes,
+               created_by = EXCLUDED.created_by, created_at = now()''',
+        (period, balance, notes or None, username)
+    )
+
+
 def save_reconciliation(entries, username):
     """entries: {wallet_id: значение из формы (str)} — сохраняет точку сверки на
     текущий месяц для каждого непустого значения. Возвращает число сохранённых."""

@@ -587,7 +587,32 @@ def investment_admin_remove_alias():
 @report_required
 def wallets():
     data = wr.all_wallets_reconciliation()
-    return render_template('wallets_summary.html', data=data)
+    foreign_money = wr.foreign_money_reconciliation()
+    return render_template('wallets_summary.html', data=data, foreign_money=foreign_money)
+
+
+@app.route('/wallets/foreign_money/opening', methods=['POST'])
+@classifier_required
+def wallets_foreign_money_opening():
+    year = request.form.get('year', type=int) or date.today().year
+    balance = request.form.get('balance')
+    if balance:
+        wr.add_foreign_money_balance(date(year, 1, 1), balance, None, session.get('username'))
+        audit.log_action(session.get('username'), 'foreign_money_opening', f'01.01.{year} = {balance}')
+        flash('Входящий остаток «Чужие деньги» сохранён', 'success')
+    return redirect(url_for('wallets'))
+
+
+@app.route('/wallets/foreign_money/current', methods=['POST'])
+@classifier_required
+def wallets_foreign_money_current():
+    balance = request.form.get('balance')
+    if balance:
+        period = date.today().replace(day=1)
+        wr.add_foreign_money_balance(period, balance, None, session.get('username'))
+        audit.log_action(session.get('username'), 'foreign_money_reconcile', f'{period} = {balance}')
+        flash('Точка сверки «Чужие деньги» сохранена', 'success')
+    return redirect(url_for('wallets'))
 
 
 @app.route('/wallets/reconcile', methods=['POST'])

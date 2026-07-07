@@ -65,3 +65,9 @@ def refresh_all():
         logger.info('Обновлены алиасы reporting.wallet_aliases')
     except Exception:
         logger.exception('Не удалось обновить reporting.wallet_aliases')
+
+    try:
+        wr.seed_foreign_money_balance()
+        logger.info('Проверен входящий остаток reporting.foreign_money_balances')
+    except Exception:
+        logger.exception('Не удалось проверить reporting.foreign_money_balances')

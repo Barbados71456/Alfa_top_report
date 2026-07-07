@@ -322,3 +322,16 @@ CREATE TABLE IF NOT EXISTS etl_load.run_log (
     steps JSONB,
     status TEXT
 );
+
+-- "Сверка чужие деньги" — тот же принцип, что reporting.wallet_balances (входящий
+-- остаток + обороты = расчётный остаток), но для одной строки отчёта "Чужие деньги"
+-- (public."FinancialData"."Строка отчета"), а не кошелька — отдельная таблица без
+-- wallet_id, т.к. это не кошелёк (см. wallet_report.py foreign_money_*).
+CREATE TABLE IF NOT EXISTS reporting.foreign_money_balances (
+    id SERIAL PRIMARY KEY,
+    period DATE NOT NULL UNIQUE,
+    balance NUMERIC NOT NULL,
+    notes TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
