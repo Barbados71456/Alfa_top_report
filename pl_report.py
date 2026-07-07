@@ -61,7 +61,7 @@ FIXED_LINES = [
 
 BONUS_LINES = ['Бонус Генерального директора', 'Бонус Руководитель взыскания']
 INVESTMENT_LINE = 'Покупка портфелей (цессия)'
-FINANCING_LINES = ['Займ приход', 'Возврат тела займа', 'Дивиденды учредителям']
+FINANCING_LINES = ['Займ приход', 'Возврат тела займа', 'Чужие деньги', 'Дивиденды учредителям']
 
 ALL_LINES = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES + BONUS_LINES + [INVESTMENT_LINE] + FINANCING_LINES
 
