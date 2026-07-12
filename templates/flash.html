@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Flash — Alfa Top Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div class="page-header">
+        <div class="page-eyebrow">Flash-отчёт</div>
+        <h1 class="page-title">Flash по банковским выпискам</h1>
+        <p class="page-subtitle mb-0">
+            Предварительная (неаудированная) картина месяца прямо по выпискам — без ожидания
+            ежемесячного бухгалтерского закрытия. Классификация выучена по уже готовым данным
+            <code>FinancialData</code>; часть статей (распределение затрат, начисления, займы
+            агрегатом) сюда не попадает по конструкции и будет отличаться от финального П&Л.
+        </p>
+    </div>
+    {% if periods %}
+    <form class="toolbar" method="get">
+        <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for p in periods %}
+            <option value="{{ p.isoformat() }}" {% if p==period %}selected{% endif %}>{{ p.strftime('%m.%Y') }}</option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+
+{% if session.get('role') in ('admin', 'accountant') %}
+<div class="card p-3 mb-3">
+    <h6 class="mb-2">Загрузить выписки</h6>
+    <form method="post" action="{{ url_for('flash_upload') }}" enctype="multipart/form-data" class="d-flex align-items-end gap-2 flex-wrap">
+        <div>
+            <label class="form-label mb-1 small">Файлы выписок (.xlsx/.xls, можно несколько)</label>
+            <input type="file" name="statements" accept=".xlsx,.xls" multiple class="form-control" required>
+        </div>
+        <div>
+            <label class="form-label mb-1 small">Период (для дообучения классификации)</label>
+            <input type="month" name="period" class="form-control" value="{{ period.strftime('%Y-%m') }}">
+        </div>
+        <button type="submit" class="btn btn-dark">Загрузить</button>
+    </form>
+</div>
+{% endif %}
+
+{% if not periods %}
+<p class="text-secondary">Пока нет загруженных выписок — загрузите файл(ы) выше.</p>
+{% else %}
+
+<div class="d-flex gap-3 flex-wrap mb-3">
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Выручка (размечено)</div>
+        <div class="kpi-value val-pos">{{ '{:,.0f}'.format(data.totals.revenue).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Переменные</div>
+        <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.totals.variable).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Постоянные</div>
+        <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.totals.fixed).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Прибыль (кассовая, по размеченным)</div>
+        <div class="kpi-value {% if data.profit > 0 %}val-pos{% elif data.profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.profit).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Размечено операций</div>
+        <div class="kpi-value">{{ summary.cnt_matched }} / {{ summary.cnt_matched + summary.cnt_unmatched }}
+            <span class="small text-secondary">({{ '%.1f'|format(100 * summary.cnt_matched / (summary.cnt_matched + summary.cnt_unmatched)) if (summary.cnt_matched + summary.cnt_unmatched) else 0 }}%)</span></div>
+    </div>
+</div>
+
+<div class="card p-3 table-responsive mb-3">
+    <h6 class="mb-3">Разбивка по статьям (только размеченные операции)</h6>
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Статья</th><th class="text-end">Сумма</th><th class="text-end">Операций</th></tr></thead>
+        <tbody>
+        {% for key, title in [('revenue','Выручка'), ('variable','Переменные'), ('fixed','Постоянные'), ('other','Прочее (инвестиции/финансы/не в П&Л)')] %}
+        {% if data.buckets[key] %}
+        <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
+        {% for r in data.buckets[key] %}
+        <tr>
+            <td class="label-col ps-3">{{ r['Статья'] or '(без статьи)' }} <span class="text-secondary small">— {{ r['Строка отчета'] }}</span></td>
+            <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
+            <td class="text-end text-secondary">{{ r.cnt }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="row-bold"><td class="label-col">Итого {{ title|lower }}</td>
+            <td class="text-end">{{ '{:,.0f}'.format(data.totals[key]).replace(',', ' ') }}</td><td></td></tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card p-3 table-responsive">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Не размечено ({{ unmatched|length }}{% if unmatched|length == 200 %}+{% endif %}) — сумма {{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</h6>
+    </div>
+    {% if unmatched %}
+    <table class="table report-table mb-0">
+        <thead><tr><th>Дата</th><th class="text-end">Сумма</th><th>Контрагент</th><th>Назначение платежа</th><th>Кошелёк</th>{% if session.get('role') in ('admin','accountant') %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for t in unmatched %}
+        <tr>
+            <td>{{ t.operation_date.strftime('%d.%m.%Y') }}</td>
+            <td class="text-end {% if t.amount > 0 %}val-pos{% elif t.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(t.amount).replace(',', ' ') }}</td>
+            <td>{{ t.counterparty_name or '—' }}</td>
+            <td class="small text-secondary" style="max-width:360px">{{ (t.purpose_text or '')[:120] }}</td>
+            <td>{{ t.wallet or '—' }}</td>
+            {% if session.get('role') in ('admin','accountant') %}
+            <td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#classifyModal"
+                onclick="fillClassifyModal({{ t.id }}, {{ (t.counterparty_name or '')|tojson }}, {{ (t.purpose_text or '')|tojson }})">Разметить</button></td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-success mb-0">Всё размечено.</p>
+    {% endif %}
+</div>
+
+{% if session.get('role') in ('admin','accountant') %}
+<div class="modal fade" id="classifyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="classifyForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Разметить операцию</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-secondary mb-3" id="classifyInfo"></p>
+                    <input type="hidden" name="period" value="{{ period.strftime('%Y-%m') }}">
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Признак</label>
+                        <input type="text" name="priznak" class="form-control form-control-sm" list="priznakList">
+                        <datalist id="priznakList">{% for v in priznaki %}<option value="{{ v }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Категория</label>
+                        <input type="text" name="kategoria" class="form-control form-control-sm" list="kategoriaList">
+                        <datalist id="kategoriaList">{% for v in kategorii %}<option value="{{ v }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Статья</label>
+                        <input type="text" name="statya" class="form-control form-control-sm" list="statyaList">
+                        <datalist id="statyaList">{% for v in statyi %}<option value="{{ v }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Проект</label>
+                        <input type="text" name="proekt" class="form-control form-control-sm" list="projectList">
+                        <datalist id="projectList">{% for v in projects %}<option value="{{ v }}">{% endfor %}</datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Контрагент (для отчёта)</label>
+                        <input type="text" name="kontragent" class="form-control form-control-sm">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Строка отчета <span class="text-danger">*</span></label>
+                        <select name="stroka" class="form-select form-select-sm" required>
+                            <option value=""></option>
+                            {% for l in all_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-sm btn-dark">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function fillClassifyModal(id, counterparty, purpose) {
+    document.getElementById('classifyForm').action = '/flash/classify/' + id;
+    document.getElementById('classifyInfo').textContent = (counterparty || '(без контрагента)') + ' — ' + (purpose || '');
+}
+</script>
+{% endif %}
+
+{% endif %}
+{% endblock %}

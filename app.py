@@ -21,6 +21,7 @@ import audit
 import chat_assistant
 import export
 import monthly_etl as etl
+import flash_report as flr
 
 logging.basicConfig(level=logging.INFO)
 
@@ -492,6 +493,89 @@ def monthly_load_run():
         audit.log_action(session.get('username'), 'monthly_load_error', str(e))
 
     return render_template('monthly_load.html', runs=etl.get_run_log(), result=result)
+
+
+@app.route('/flash')
+@report_required
+def flash_page():
+    periods_rows = query(
+        "SELECT DISTINCT date_trunc('month', operation_date)::date AS p FROM flash.transactions ORDER BY 1 DESC"
+    )
+    periods = [r['p'] for r in periods_rows]
+    period_str = request.args.get('period')
+    if period_str:
+        period = date.fromisoformat(period_str)
+    elif periods:
+        period = periods[0]
+    else:
+        period = date.today().replace(day=1)
+
+    data = flr.month_breakdown(period) if periods else None
+    smry = flr.summary(period) if periods else None
+    unmatched = flr.get_unmatched(period, limit=200) if periods else []
+    dim_rows = query('SELECT DISTINCT "Признак", "Категория", "Статья" FROM dim_level_report')
+    projects = [p for _, names in pr.get_projects_with_type() for p in names]
+    return render_template(
+        'flash.html', data=data, summary=smry, unmatched=unmatched,
+        period=period, periods=periods, all_lines=pr.ALL_LINES,
+        priznaki=sorted({r['Признак'] for r in dim_rows if r['Признак']}),
+        kategorii=sorted({r['Категория'] for r in dim_rows if r['Категория']}),
+        statyi=sorted({r['Статья'] for r in dim_rows if r['Статья']}),
+        projects=sorted(set(projects)),
+    )
+
+
+@app.route('/flash/upload', methods=['POST'])
+@classifier_required
+def flash_upload():
+    files = request.files.getlist('statements')
+    period_str = request.form.get('period')
+    results, errors = [], []
+    for f in files:
+        if not f or not f.filename:
+            continue
+        try:
+            res = flr.import_statement(f.stream, f.filename, session.get('username'))
+            results.append((f.filename, res))
+        except Exception as e:
+            errors.append((f.filename, str(e)))
+
+    if period_str and results:
+        period = date.fromisoformat(period_str)
+        learned = flr.learn_rules(period, created_by=session.get('username'))
+        wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
+        audit.log_action(
+            session.get('username'), 'flash_upload',
+            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, кошельков: {wallets_learned}'
+        )
+
+    if errors:
+        flash('Ошибки при загрузке: ' + '; '.join(f'{fn}: {e}' for fn, e in errors), 'danger')
+    if results:
+        total = sum(r['total'] for _, r in results)
+        matched = sum(r['matched'] for _, r in results)
+        flash(f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}', 'success')
+    elif not errors:
+        flash('Выберите хотя бы один файл выписки', 'danger')
+
+    return redirect(url_for('flash_page', period=period_str))
+
+
+@app.route('/flash/classify/<int:txn_id>', methods=['POST'])
+@classifier_required
+def flash_classify(txn_id):
+    fields = {
+        'Признак': (request.form.get('priznak') or '').strip() or None,
+        'Категория': (request.form.get('kategoria') or '').strip() or None,
+        'Статья': (request.form.get('statya') or '').strip() or None,
+        'Проект': (request.form.get('proekt') or '').strip() or None,
+        'Контрагент_report': (request.form.get('kontragent') or '').strip() or None,
+        'Строка отчета': (request.form.get('stroka') or '').strip() or None,
+    }
+    flr.set_manual_classification(txn_id, fields, session.get('username'))
+    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}')
+    flash('Операция размечена', 'success')
+    return redirect(url_for('flash_page', period=request.form.get('period')))
 
 
 @app.route('/investment')

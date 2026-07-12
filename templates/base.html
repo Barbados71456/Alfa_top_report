@@ -202,6 +202,7 @@
             <ul class="navbar-nav me-auto flex-wrap">
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='overview' %}active{% endif %}" href="{{ url_for('overview') }}">Обзор</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint in ('wallets','wallets_detail') %}active{% endif %}" href="{{ url_for('wallets') }}">Сверка счетов</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint=='flash_page' %}active{% endif %}" href="{{ url_for('flash_page') }}">Flash <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size:.6rem;">неаудировано</span></a></li>
 
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Бизнес отчеты</a>

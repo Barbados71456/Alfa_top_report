@@ -335,3 +335,70 @@ CREATE TABLE IF NOT EXISTS reporting.foreign_money_balances (
     created_by TEXT,
     created_at TIMESTAMP DEFAULT now()
 );
+
+-- "Flash"-отчёт: предварительная (неаудированная) картина текущего месяца из
+-- банковских выписок, до того как бухгалтер вручную классифицирует их и они
+-- попадут в public."FinancialData" обычным ежемесячным процессом. См. flash_report.py.
+CREATE SCHEMA IF NOT EXISTS flash;
+
+-- Разобранные строки выписок в нормализованном виде + разметка полями той же
+-- схемы, что public."FinancialData" (Признак/Категория/Статья/Проект/...) —
+-- чтобы не изобретать вторую систему классификации.
+CREATE TABLE IF NOT EXISTS flash.transactions (
+    id SERIAL PRIMARY KEY,
+    source_file TEXT NOT NULL,
+    bank_format TEXT NOT NULL,
+    account_number TEXT,
+    wallet TEXT,
+    operation_date DATE NOT NULL,
+    document_number TEXT,
+    amount NUMERIC NOT NULL,
+    counterparty_name TEXT,
+    counterparty_inn TEXT,
+    purpose_text TEXT,
+    "Признак" TEXT,
+    "Категория" TEXT,
+    "Статья" TEXT,
+    "Проект" TEXT,
+    "Контрагент_report" TEXT,
+    "Строка отчета" TEXT,
+    classification_source TEXT,
+    matched_financialdata_id BIGINT,
+    imported_by TEXT,
+    imported_at TIMESTAMP DEFAULT now(),
+    UNIQUE (bank_format, account_number, document_number, operation_date, amount, counterparty_inn, purpose_text)
+);
+CREATE INDEX IF NOT EXISTS idx_flash_transactions_period ON flash.transactions (operation_date);
+
+-- "Выучены" из истории public."FinancialData" (см. flash_report.learn_rules) —
+-- сопоставление ИНН контрагента или ключевой фразы в назначении платежа с
+-- классификацией; приоритет — чем выше priority, тем раньше проверяется правило.
+CREATE TABLE IF NOT EXISTS flash.classification_rules (
+    id SERIAL PRIMARY KEY,
+    match_type TEXT NOT NULL,
+    match_value TEXT NOT NULL,
+    "Признак" TEXT,
+    "Категория" TEXT,
+    "Статья" TEXT,
+    "Проект" TEXT,
+    "Контрагент_report" TEXT,
+    "Строка отчета" TEXT,
+    priority INTEGER DEFAULT 0,
+    source TEXT,
+    hits INTEGER DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_flash_rules_match ON flash.classification_rules (match_type, match_value);
+
+-- Номер счёта из выписки -> канонический "Кошелек" (как в public."FinancialData"),
+-- см. flash_report.learn_wallet_aliases — тоже выучено из истории, где возможно.
+CREATE TABLE IF NOT EXISTS flash.wallet_aliases (
+    id SERIAL PRIMARY KEY,
+    account_number TEXT UNIQUE NOT NULL,
+    wallet TEXT NOT NULL,
+    wallet_type TEXT,
+    source TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
