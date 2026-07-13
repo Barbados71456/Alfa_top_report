@@ -13,13 +13,22 @@
         </p>
     </div>
     {% if periods %}
-    <form class="toolbar" method="get">
-        <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
-            {% for p in periods %}
-            <option value="{{ p.isoformat() }}" {% if p==period %}selected{% endif %}>{{ p.strftime('%m.%Y') }}</option>
-            {% endfor %}
-        </select>
-    </form>
+    <div class="d-flex gap-2 flex-wrap align-items-end">
+        <form class="toolbar" method="get">
+            <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for p in periods %}
+                <option value="{{ p.isoformat() }}" {% if p==period %}selected{% endif %}>{{ p.strftime('%m.%Y') }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% if session.get('role') in ('admin', 'accountant') %}
+        <form method="post" action="{{ url_for('flash_relearn') }}">
+            <input type="hidden" name="period" value="{{ period.isoformat() }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Пересчитать правила классификации по этому периоду против актуальной FinancialData — не требует новой загрузки файлов">Дообучить классификацию</button>
+        </form>
+        {% endif %}
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_load') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Файл для загрузки в FinancialData</a>
+    </div>
     {% endif %}
 </div>
 
@@ -139,7 +148,7 @@
             <td>{{ t.operation_date.strftime('%d.%m.%Y') }}</td>
             <td class="text-end {% if t.amount > 0 %}val-pos{% elif t.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(t.amount).replace(',', ' ') }}</td>
             <td>{{ t.counterparty_name or '—' }}</td>
-            <td class="small text-secondary" style="max-width:360px">{{ (t.purpose_text or '')[:120] }}</td>
+            <td class="small text-secondary" style="max-width:360px; white-space:normal; word-break:break-word;">{{ t.purpose_text or '' }}</td>
             <td>{{ t.wallet or '—' }}</td>
             {% if session.get('role') in ('admin','accountant') %}
             <td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#classifyModal"

@@ -718,3 +718,51 @@ def set_manual_classification(txn_id, fields, username):
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 10, 'manual', %s)''',
             (match_type, match_value) + values + (username,)
         )
+
+
+_MONTH_NAMES_RU = [
+    'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+]
+
+
+def export_for_load(period):
+    """Строки Flash за period в точности в формате листа "загрузка"
+    (monthly_etl.FACT_COLUMNS) — готовый файл для /admin/monthly_load.
+    Только уже размеченные операции (classification_source != 'unmatched');
+    неразмеченные не экспортируются, их нужно сначала разобрать на /flash.
+
+    "Контрагент" берём из сырого banковского counterparty_name (не
+    Контрагент_report — это уже производное отчётное имя, его пересчитает
+    сам конвейер по тем же правилам, что и для остальной FinancialData).
+    "Проект" копируется из последней совпавшей исторической строки
+    FinancialData и не проверяется построчно — распределение по проектам
+    для новых операций это допущение, а не факт; стоит перепроверить перед
+    финальной загрузкой, если контрагент участвует в нескольких проектах."""
+    rows = query(
+        '''SELECT operation_date, "Признак", "Категория", "Статья", "Проект", counterparty_name,
+                  wallet, amount, purpose_text
+           FROM flash.transactions
+           WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
+           ORDER BY operation_date''',
+        (period,)
+    )
+    wallet_types = {r['account_number']: r['wallet_type'] for r in query(
+        'SELECT account_number, wallet_type FROM flash.wallet_aliases'
+    )}
+    accounts_by_wallet = {}
+    for r in query('SELECT account_number, wallet FROM flash.wallet_aliases'):
+        accounts_by_wallet[r['wallet']] = r['account_number']
+
+    out = []
+    for r in rows:
+        d = r['operation_date']
+        account = accounts_by_wallet.get(r['wallet'])
+        out.append({
+            'Дата': d, 'Год': d.year, 'месяц': _MONTH_NAMES_RU[d.month - 1],
+            'Признак': r['Признак'], 'Категория': r['Категория'], 'Статья': r['Статья'],
+            'Проект': r['Проект'], 'Контрагент': r['counterparty_name'],
+            'Тип Кошелька': wallet_types.get(account), 'Кошелек': r['wallet'],
+            'Сумма': float(r['amount']), 'Комментарии': r['purpose_text'],
+        })
+    return out

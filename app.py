@@ -562,6 +562,21 @@ def flash_upload():
     return redirect(url_for('flash_page', period=period_str))
 
 
+@app.route('/flash/relearn', methods=['POST'])
+@classifier_required
+def flash_relearn():
+    period_str = request.form.get('period')
+    if not period_str:
+        flash('Не выбран период', 'danger')
+        return redirect(url_for('flash_page'))
+    period = date.fromisoformat(period_str)
+    learned = flr.learn_rules(period, created_by=session.get('username'))
+    wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
+    audit.log_action(session.get('username'), 'flash_relearn', f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}')
+    flash(f'Классификация за период пересчитана против актуальной FinancialData: новых правил {learned}, кошельков {wallets_learned}.', 'success')
+    return redirect(url_for('flash_page', period=period_str))
+
+
 @app.route('/flash/classify/<int:txn_id>', methods=['POST'])
 @classifier_required
 def flash_classify(txn_id):
@@ -1103,6 +1118,13 @@ def export_report(kind):
             if data is None:
                 return {'error': 'Кошелёк не найден'}, 404
             sheets = wr.export_ledger(data)
+        elif kind == 'flash_load':
+            period_str = request.args.get('period')
+            if not period_str:
+                return {'error': 'period обязателен'}, 400
+            period = date.fromisoformat(period_str)
+            rows = flr.export_for_load(period)
+            sheets = [('загрузка', etl.FACT_COLUMNS, [[r[c] for c in etl.FACT_COLUMNS] for r in rows])]
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
     except Exception:
