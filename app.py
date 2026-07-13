@@ -513,10 +513,11 @@ def flash_page():
     data = flr.month_breakdown(period) if periods else None
     smry = flr.summary(period) if periods else None
     unmatched = flr.get_unmatched(period, limit=200) if periods else []
+    wallets_recon = flr.wallet_reconciliation(period) if periods else []
     dim_rows = query('SELECT DISTINCT "Признак", "Категория", "Статья" FROM dim_level_report')
     projects = [p for _, names in pr.get_projects_with_type() for p in names]
     return render_template(
-        'flash.html', data=data, summary=smry, unmatched=unmatched,
+        'flash.html', data=data, summary=smry, unmatched=unmatched, wallets_recon=wallets_recon,
         period=period, periods=periods, all_lines=pr.ALL_LINES,
         priznaki=sorted({r['Признак'] for r in dim_rows if r['Признак']}),
         kategorii=sorted({r['Категория'] for r in dim_rows if r['Категория']}),

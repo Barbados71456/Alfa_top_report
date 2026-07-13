@@ -484,6 +484,64 @@ def learn_wallet_aliases(period, created_by='system'):
     return learned
 
 
+def wallet_reconciliation(period):
+    """Сверка кассового движения по Flash с уже известными остатками из
+    "Сверка счетов" (wallet_report) — по той же канонической привязке
+    account_number -> "Кошелек", что уже выучена в flash.wallet_aliases
+    (см. learn_wallet_aliases) и показана пользователю в колонке "Кошелёк".
+
+    Один физический счёт иногда фактически финансирует больше одного
+    бухгалтерского "Кошелька" (проверено на реальных данных) — но надёжно
+    различить это по (Дата, Сумма) не получается: на некрупных круглых суммах
+    попадается заметная доля случайных совпадений с совершенно другими
+    кошельками (до ~10% операций счёта в проверке), из-за чего наивное
+    "просуммировать остатки всех когда-либо совпавших кошельков" завышает
+    результат чужими остатками. Поэтому берём только доминирующий кошелёк
+    счёта (как и остальной Flash) — известное упрощение, но оно не путает
+    счета между собой.
+
+    Возвращает по каждому кошельку: opening (остаток на начало периода из
+    Сверка счетов), flash_turnover (оборот по Flash за period), calculated
+    (opening + flash_turnover), known_after (если за period в Сверка счетов
+    уже введён факт вручную — иначе None), discrepancy (known_after -
+    calculated, если известно)."""
+    import wallet_report as wr
+
+    turnover_rows = query(
+        '''SELECT wallet, SUM(amount) AS amt, count(*) AS cnt FROM flash.transactions
+           WHERE date_trunc('month', operation_date) = %s AND wallet IS NOT NULL
+           GROUP BY 1 ORDER BY 1''',
+        (period,)
+    )
+
+    rows = []
+    for r in turnover_rows:
+        wname = r['wallet']
+        detail = wr.wallet_detail(wname, year='all')
+        opening = 0.0
+        known_after = None
+        if detail:
+            prior = [row for row in detail['rows'] if row['period'] < period]
+            if prior:
+                opening = prior[-1]['balance']
+            same = next((row for row in detail['rows'] if row['period'] == period), None)
+            if same and same['entered'] is not None:
+                known_after = same['entered']
+
+        flash_amt = float(r['amt'])
+        calculated = opening + flash_amt
+        rows.append({
+            'wallet': wname,
+            'opening': opening,
+            'flash_turnover': flash_amt,
+            'cnt': r['cnt'],
+            'calculated': calculated,
+            'known_after': known_after,
+            'discrepancy': (known_after - calculated) if known_after is not None else None,
+        })
+    return rows
+
+
 def import_statement(file_obj, filename, username):
     """Разбирает один файл выписки, классифицирует построчно по уже выученным
     правилам и сохраняет в flash.transactions (ON CONFLICT — повторная загрузка

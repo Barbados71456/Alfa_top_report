@@ -91,6 +91,41 @@
     </table>
 </div>
 
+<div class="card p-3 table-responsive mb-3">
+    <h6 class="mb-1">Сверка остатка по кошелькам</h6>
+    <p class="small text-secondary mb-3">
+        Остаток на начало периода — из "Сверка счетов" (последняя известная точка до этого месяца).
+        Расчётный остаток = начало + обороты Flash за месяц. "Введено (Сверка счетов)" — если бухгалтер
+        уже вбил факт за этот же месяц в обычной сверке; расхождение показывается только тогда.
+        Один физический счёт иногда финансирует больше одного кошелька в отчётности — здесь показан
+        только доминирующий (то же упрощение, что и в колонке "Кошелёк" у операций).
+    </p>
+    {% if wallets_recon %}
+    <table class="table report-table mb-0">
+        <thead><tr>
+            <th class="label-col">Кошелёк</th><th class="text-end">Остаток на начало</th>
+            <th class="text-end">Оборот Flash</th><th class="text-end">Расчётный остаток</th>
+            <th class="text-end">Введено (Сверка счетов)</th><th class="text-end">Расхождение</th>
+        </tr></thead>
+        <tbody>
+        {% for w in wallets_recon %}
+        <tr>
+            <td class="label-col"><a href="{{ url_for('wallets_detail', name=w.wallet) }}">{{ w.wallet }}</a></td>
+            <td class="text-end">{{ '{:,.0f}'.format(w.opening).replace(',', ' ') }}</td>
+            <td class="text-end {% if w.flash_turnover > 0 %}val-pos{% elif w.flash_turnover < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(w.flash_turnover).replace(',', ' ') }} <span class="text-secondary small">({{ w.cnt }})</span></td>
+            <td class="text-end fw-bold">{{ '{:,.0f}'.format(w.calculated).replace(',', ' ') }}</td>
+            <td class="text-end">{{ '{:,.0f}'.format(w.known_after).replace(',', ' ') if w.known_after is not none else '—' }}</td>
+            <td class="text-end {% if w.discrepancy and w.discrepancy|abs > 1 %}val-neg{% elif w.discrepancy is not none %}val-pos{% endif %}">
+                {{ '{:,.0f}'.format(w.discrepancy).replace(',', ' ') if w.discrepancy is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary mb-0">Нет данных по кошелькам за этот период.</p>
+    {% endif %}
+</div>
+
 <div class="card p-3 table-responsive">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="mb-0">Не размечено ({{ unmatched|length }}{% if unmatched|length == 200 %}+{% endif %}) — сумма {{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</h6>
