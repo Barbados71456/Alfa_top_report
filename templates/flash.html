@@ -88,7 +88,7 @@
         <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
         {% for r in data.buckets[key] %}
         <tr class="flash-drill-row" role="button" style="cursor:pointer"
-            onclick="openDrilldown({{ (r['Статья'] or '')|tojson }}, {{ (r['Строка отчета'] or '')|tojson }})">
+            onclick='openDrilldown({{ (r["Статья"] or "")|tojson }}, {{ (r["Строка отчета"] or "")|tojson }})'>
             <td class="label-col ps-3">{{ r['Статья'] or '(без статьи)' }} <span class="text-secondary small">— {{ r['Строка отчета'] }}</span></td>
             <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
             <td class="text-end text-secondary">{{ r.cnt }}</td>
