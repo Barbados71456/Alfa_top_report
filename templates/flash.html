@@ -103,7 +103,7 @@
     <table class="table report-table mb-0">
         <thead><tr><th class="label-col">Статья</th><th class="text-end">Сумма</th><th class="text-end">Операций</th></tr></thead>
         <tbody>
-        {% for key, title in [('revenue','Выручка'), ('variable','Переменные'), ('fixed','Постоянные'), ('investment','Инвестиции в портфели'), ('financing','Финансирование'), ('bonus','Бонусы менеджеров'), ('other','Прочее (вне П&Л)')] %}
+        {% for key, title in [('revenue','Выручка'), ('variable','Переменные'), ('fixed','Постоянные')] %}
         {% if data.buckets[key] %}
         <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
         {% for r in data.buckets[key] %}
@@ -118,12 +118,55 @@
             <td class="text-end">{{ '{:,.0f}'.format(data.totals[key]).replace(',', ' ') }}</td><td></td></tr>
         {% endif %}
         {% endfor %}
+
+        <tr class="row-bold" style="border-top:2px solid var(--border-color);">
+            <td class="label-col">ПРИБЫЛЬ</td>
+            <td class="text-end {% if data.profit > 0 %}val-pos{% elif data.profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.profit).replace(',', ' ') }}</td>
+            <td></td>
+        </tr>
+
+        {% for key, title in [('bonus','Бонусы менеджеров'), ('investment','Инвестиции в портфели'), ('financing','Финансирование')] %}
+        {% if data.buckets[key] %}
+        <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
+        {% for r in data.buckets[key] %}
+        <tr class="flash-drill-row" role="button" style="cursor:pointer"
+            onclick='openDrilldown({{ (r["Статья"] or "")|tojson }}, {{ (r["Строка отчета"] or "")|tojson }})'>
+            <td class="label-col ps-3">{{ r['Статья'] or '(без статьи)' }} <span class="text-secondary small">— {{ r['Строка отчета'] }}</span></td>
+            <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
+            <td class="text-end text-secondary">{{ r.cnt }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="row-bold"><td class="label-col">Итого {{ title|lower }}</td>
+            <td class="text-end">{{ '{:,.0f}'.format(data.totals[key]).replace(',', ' ') }}</td><td></td></tr>
+        {% endif %}
+        {% endfor %}
+
+        <tr class="row-bold" style="border-top:2px solid var(--border-color);">
+            <td class="label-col">💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ</td>
+            <td class="text-end {% if data.net_profit > 0 %}val-pos{% elif data.net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.net_profit).replace(',', ' ') }}</td>
+            <td></td>
+        </tr>
+
+        {% if data.buckets['other'] %}
+        <tr><td class="label-col fw-bold" colspan="3">Прочее (вне П&Л)</td></tr>
+        {% for r in data.buckets['other'] %}
+        <tr class="flash-drill-row" role="button" style="cursor:pointer"
+            onclick='openDrilldown({{ (r["Статья"] or "")|tojson }}, {{ (r["Строка отчета"] or "")|tojson }})'>
+            <td class="label-col ps-3">{{ r['Статья'] or '(без статьи)' }} <span class="text-secondary small">— {{ r['Строка отчета'] }}</span></td>
+            <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
+            <td class="text-end text-secondary">{{ r.cnt }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="row-bold"><td class="label-col">Итого прочее</td>
+            <td class="text-end">{{ '{:,.0f}'.format(data.totals['other']).replace(',', ' ') }}</td><td></td></tr>
+        {% endif %}
+
         {% if summary.cnt_unmatched %}
         <tr class="table-danger"><td class="label-col fw-bold" colspan="3">⚠ Неразмеченные операции</td></tr>
         <tr class="row-bold table-danger flash-drill-row" role="button" style="cursor:pointer"
             onclick="document.getElementById('unmatched-section').scrollIntoView({behavior:'smooth', block:'start'})">
-            <td class="label-col">Сальдо неразмеченных ({{ summary.cnt_unmatched }} операций)</td>
-            <td class="text-end">{{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</td>
+            <td class="label-col text-danger">Сальдо неразмеченных ({{ summary.cnt_unmatched }} операций)</td>
+            <td class="text-end text-danger">{{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</td>
             <td></td>
         </tr>
         {% endif %}
