@@ -611,12 +611,56 @@ def api_flash_transactions():
     period = date.fromisoformat(period_str)
     rows = flr.get_transactions(period, statya=request.args.get('statya') or None, stroka=request.args.get('stroka') or None)
     return jsonify([{
-        'id': r['id'], 'operation_date': r['operation_date'].isoformat(), 'amount': float(r['amount']),
+        'id': r['id'], 'split_id': r['split_id'], 'operation_date': r['operation_date'].isoformat(), 'amount': float(r['amount']),
         'counterparty_name': r['counterparty_name'], 'purpose_text': r['purpose_text'], 'wallet': r['wallet'],
         'Признак': r['Признак'], 'Категория': r['Категория'], 'Статья': r['Статья'], 'Проект': r['Проект'],
         'Контрагент_report': r['Контрагент_report'], 'Строка отчета': r['Строка отчета'],
         'classification_source': r['classification_source'],
     } for r in rows])
+
+
+@app.route('/api/flash_transactions/<int:txn_id>')
+@report_required
+def api_flash_transaction_one(txn_id):
+    txn = query_one(
+        '''SELECT id, operation_date, amount, counterparty_name, purpose_text
+           FROM flash.transactions WHERE id = %s''',
+        (txn_id,)
+    )
+    if txn is None:
+        return {'error': 'Операция не найдена'}, 404
+    splits = flr.get_transaction_splits(txn_id)
+    return jsonify({
+        'id': txn['id'], 'operation_date': txn['operation_date'].isoformat(), 'amount': float(txn['amount']),
+        'counterparty_name': txn['counterparty_name'], 'purpose_text': txn['purpose_text'],
+        'splits': [{
+            'id': s['id'], 'amount': float(s['amount']), 'Признак': s['Признак'], 'Категория': s['Категория'],
+            'Статья': s['Статья'], 'Проект': s['Проект'], 'Контрагент_report': s['Контрагент_report'],
+            'Строка отчета': s['Строка отчета'],
+        } for s in splits],
+    })
+
+
+@app.route('/flash/split/<int:txn_id>', methods=['POST'])
+@classifier_required
+def flash_split(txn_id):
+    payload = request.get_json(silent=True) or {}
+    splits = payload.get('splits') or []
+    period_str = payload.get('period')
+    try:
+        flr.set_transaction_splits(txn_id, splits, session.get('username'))
+    except ValueError as e:
+        return {'error': str(e)}, 400
+    audit.log_action(session.get('username'), 'flash_split', f'txn_id={txn_id}, частей: {len(splits)}')
+    return {'ok': True}
+
+
+@app.route('/flash/split/<int:txn_id>/clear', methods=['POST'])
+@classifier_required
+def flash_split_clear(txn_id):
+    flr.clear_transaction_splits(txn_id)
+    audit.log_action(session.get('username'), 'flash_split_clear', f'txn_id={txn_id}')
+    return {'ok': True}
 
 
 @app.route('/investment')

@@ -402,3 +402,27 @@ CREATE TABLE IF NOT EXISTS flash.wallet_aliases (
     created_by TEXT,
     created_at TIMESTAMP DEFAULT now()
 );
+
+-- Ручное разбиение одной банковской операции на несколько частей с разными
+-- "Проект"/"Строка отчета" (например, платёж полевому агенту, распределённый
+-- по проектам его загрузки — сигнала для такого распределения нет ни в ИНН,
+-- ни в тексте платежа, только в отдельной таблице драйверов, которой у Flash
+-- нет). Сумма всех строк должна равняться сумме исходной flash.transactions
+-- (проверяется в flash_report.set_transaction_splits). Пока у операции есть
+-- строки в этой таблице, сама операция помечается classification_source=
+-- 'split' и в отчётах Flash заменяется этими строками (см.
+-- flash_report._effective_rows_sql()).
+CREATE TABLE IF NOT EXISTS flash.transaction_splits (
+    id SERIAL PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES flash.transactions(id) ON DELETE CASCADE,
+    amount NUMERIC NOT NULL,
+    "Признак" TEXT,
+    "Категория" TEXT,
+    "Статья" TEXT,
+    "Проект" TEXT,
+    "Контрагент_report" TEXT,
+    "Строка отчета" TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_flash_splits_txn ON flash.transaction_splits (transaction_id);

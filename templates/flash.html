@@ -153,8 +153,11 @@
             <td class="small text-secondary" style="max-width:360px; white-space:normal; word-break:break-word;">{{ t.purpose_text or '' }}</td>
             <td>{{ t.wallet or '—' }}</td>
             {% if session.get('role') in ('admin','accountant') %}
-            <td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#classifyModal"
-                onclick='fillClassifyModal({{ {"id": t.id, "counterparty_name": t.counterparty_name, "purpose_text": t.purpose_text, "Признак": None, "Категория": None, "Статья": None, "Проект": None, "Контрагент_report": None, "Строка отчета": None}|tojson }})'>Разметить</button></td>
+            <td class="text-nowrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#classifyModal"
+                    onclick='fillClassifyModal({{ {"id": t.id, "counterparty_name": t.counterparty_name, "purpose_text": t.purpose_text, "Признак": None, "Категория": None, "Статья": None, "Проект": None, "Контрагент_report": None, "Строка отчета": None}|tojson }})'>Разметить</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSplitEditor({{ t.id }})">Разбить</button>
+            </td>
             {% endif %}
         </tr>
         {% endfor %}
@@ -234,6 +237,58 @@
     </div>
 </div>
 
+<div class="modal fade" id="splitModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Разбить операцию по проектам</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-secondary mb-3" id="splitInfo"></p>
+                <p class="small text-secondary mb-3">
+                    Для платежей, которые в самой FinancialData расходятся по нескольким проектам
+                    (например, оплата полевому агенту, распределённая по проектам его загрузки) —
+                    сигнала для такого распределения нет ни в ИНН, ни в тексте платежа, поэтому Flash
+                    не угадывает его сам. Общие поля ниже одинаковы для всех частей, у каждой части —
+                    свои Проект/Строка отчета/Статья/Сумма.
+                </p>
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <label class="form-label small mb-1">Признак (общий)</label>
+                        <input type="text" id="sp-priznak" class="form-control form-control-sm" list="priznakList">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-1">Категория (общая)</label>
+                        <input type="text" id="sp-kategoria" class="form-control form-control-sm" list="kategoriaList">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-1">Контрагент отчёт (общий)</label>
+                        <input type="text" id="sp-kontragent" class="form-control form-control-sm">
+                    </div>
+                </div>
+                <table class="table table-sm mb-2">
+                    <thead><tr>
+                        <th>Проект</th><th>Строка отчета</th><th>Статья</th><th style="width:130px">Сумма</th><th></th>
+                    </tr></thead>
+                    <tbody id="splitRowsBody"></tbody>
+                </table>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addSplitRow()">+ Добавить часть</button>
+                <div class="mt-3 small">
+                    Итого частей: <strong id="splitRunningTotal">0</strong> из <strong id="splitTargetAmount">0</strong>
+                    <span id="splitDiffWarning" class="text-danger ms-2"></span>
+                </div>
+                <div id="splitError" class="alert alert-danger mt-2 mb-0 py-2 small" style="display:none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="splitClearBtn" onclick="clearSplit()" style="display:none">Отменить разбиение</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-sm btn-dark" onclick="saveSplit()">Сохранить разбиение</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function fillClassifyModal(row) {
     document.getElementById('classifyForm').action = '/flash/classify/' + row.id;
@@ -271,27 +326,139 @@ function openDrilldown(statya, stroka) {
             const canEdit = {{ 'true' if session.get('role') in ('admin','accountant') else 'false' }};
             body.innerHTML = rows.map(row => {
                 const amtCls = row.amount > 0 ? 'val-pos' : (row.amount < 0 ? 'val-neg' : '');
-                const editBtn = canEdit
-                    ? `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="editFromDrilldownById(${row.id})">Изменить</button>`
-                    : '';
+                let actions = '';
+                if (canEdit) {
+                    if (row.split_id == null) {
+                        actions += `<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="editFromDrilldownById(${row.id})">Изменить</button>`;
+                        actions += `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSplitEditor(${row.id})">Разбить</button>`;
+                    } else {
+                        actions += `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSplitEditor(${row.id})">Изменить разбивку</button>`;
+                    }
+                }
+                const badge = row.split_id != null ? ' <span class="badge bg-secondary-subtle text-secondary-emphasis">часть разбивки</span>' : '';
                 return `<tr>
                     <td>${_escapeHtml(row.operation_date.split('-').reverse().join('.'))}</td>
                     <td class="text-end ${amtCls}">${row.amount.toLocaleString('ru-RU', {maximumFractionDigits:0})}</td>
-                    <td style="max-width:220px; white-space:normal; word-break:break-word;">${_escapeHtml(row.counterparty_name || '—')}</td>
+                    <td style="max-width:220px; white-space:normal; word-break:break-word;">${_escapeHtml(row.counterparty_name || '—')}${badge}</td>
                     <td class="small text-secondary" style="max-width:320px; white-space:normal; word-break:break-word;">${_escapeHtml(row.purpose_text || '')}</td>
                     <td class="small text-secondary">${_escapeHtml(row.classification_source)}</td>
-                    <td>${editBtn}</td>
+                    <td class="text-nowrap">${actions}</td>
                 </tr>`;
             }).join('');
         });
 }
 
 function editFromDrilldownById(id) {
-    const row = _drilldownRows.find(r => r.id === id);
+    const row = _drilldownRows.find(r => r.id === id && r.split_id == null);
     if (!row) return;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('drilldownModal')).hide();
     fillClassifyModal(row);
     new bootstrap.Modal(document.getElementById('classifyModal')).show();
+}
+
+let _splitTxnId = null;
+let _splitTargetAmount = 0;
+
+function addSplitRow(prefill) {
+    prefill = prefill || {};
+    const tbody = document.getElementById('splitRowsBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm sp-proekt" list="projectList" value="${prefill['Проект'] ? _escapeHtml(prefill['Проект']) : ''}"></td>
+        <td><select class="form-select form-select-sm sp-stroka">
+            <option value=""></option>
+            {% for l in all_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+        </select></td>
+        <td><input type="text" class="form-control form-control-sm sp-statya" list="statyaList" value="${prefill['Статья'] ? _escapeHtml(prefill['Статья']) : ''}"></td>
+        <td><input type="number" step="0.01" class="form-control form-control-sm sp-amount" value="${prefill.amount != null ? prefill.amount : ''}" oninput="updateSplitTotal()"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove(); updateSplitTotal();">×</button></td>
+    `;
+    tbody.appendChild(tr);
+    if (prefill['Строка отчета']) {
+        tr.querySelector('.sp-stroka').value = prefill['Строка отчета'];
+    }
+    updateSplitTotal();
+}
+
+function updateSplitTotal() {
+    const amounts = Array.from(document.querySelectorAll('#splitRowsBody .sp-amount')).map(el => parseFloat(el.value) || 0);
+    const total = amounts.reduce((a, b) => a + b, 0);
+    document.getElementById('splitRunningTotal').textContent = total.toLocaleString('ru-RU', {maximumFractionDigits: 2});
+    document.getElementById('splitTargetAmount').textContent = _splitTargetAmount.toLocaleString('ru-RU', {maximumFractionDigits: 2});
+    const diff = Math.abs(total - _splitTargetAmount);
+    document.getElementById('splitDiffWarning').textContent = diff > 0.01 ? `(расхождение ${diff.toFixed(2)})` : '';
+}
+
+function openSplitEditor(txnId) {
+    _splitTxnId = txnId;
+    document.getElementById('splitRowsBody').innerHTML = '';
+    document.getElementById('splitError').style.display = 'none';
+    fetch('/api/flash_transactions/' + txnId)
+        .then(r => r.json())
+        .then(data => {
+            _splitTargetAmount = data.amount;
+            document.getElementById('splitInfo').textContent =
+                (data.counterparty_name || '(без контрагента)') + ' — ' + (data.purpose_text || '') +
+                ' — сумма ' + data.amount.toLocaleString('ru-RU');
+            const clearBtn = document.getElementById('splitClearBtn');
+            if (data.splits && data.splits.length) {
+                clearBtn.style.display = '';
+                document.getElementById('sp-priznak').value = data.splits[0]['Признак'] || '';
+                document.getElementById('sp-kategoria').value = data.splits[0]['Категория'] || '';
+                document.getElementById('sp-kontragent').value = data.splits[0]['Контрагент_report'] || '';
+                data.splits.forEach(s => addSplitRow({
+                    amount: s.amount, 'Проект': s['Проект'], 'Статья': s['Статья'], 'Строка отчета': s['Строка отчета'],
+                }));
+            } else {
+                clearBtn.style.display = 'none';
+                document.getElementById('sp-priznak').value = '';
+                document.getElementById('sp-kategoria').value = '';
+                document.getElementById('sp-kontragent').value = '';
+                addSplitRow({ amount: data.amount });
+                addSplitRow({ amount: 0 });
+            }
+            updateSplitTotal();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('drilldownModal')).hide();
+            new bootstrap.Modal(document.getElementById('splitModal')).show();
+        });
+}
+
+function saveSplit() {
+    const priznak = document.getElementById('sp-priznak').value.trim() || null;
+    const kategoria = document.getElementById('sp-kategoria').value.trim() || null;
+    const kontragent = document.getElementById('sp-kontragent').value.trim() || null;
+    const rows = Array.from(document.querySelectorAll('#splitRowsBody tr')).map(tr => ({
+        'Признак': priznak, 'Категория': kategoria, 'Контрагент_report': kontragent,
+        'Проект': tr.querySelector('.sp-proekt').value.trim() || null,
+        'Строка отчета': tr.querySelector('.sp-stroka').value || null,
+        'Статья': tr.querySelector('.sp-statya').value.trim() || null,
+        'amount': parseFloat(tr.querySelector('.sp-amount').value) || 0,
+    }));
+    const errEl = document.getElementById('splitError');
+    errEl.style.display = 'none';
+    fetch('/flash/split/' + _splitTxnId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ splits: rows, period: '{{ period.isoformat() }}' }),
+    })
+        .then(r => r.json().then(data => ({ status: r.status, data })))
+        .then(({ status, data }) => {
+            if (status !== 200) {
+                errEl.textContent = data.error || 'Ошибка сохранения';
+                errEl.style.display = '';
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('splitModal')).hide();
+            location.reload();
+        });
+}
+
+function clearSplit() {
+    fetch('/flash/split/' + _splitTxnId + '/clear', { method: 'POST' })
+        .then(() => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('splitModal')).hide();
+            location.reload();
+        });
 }
 </script>
 

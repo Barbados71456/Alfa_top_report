@@ -703,6 +703,30 @@ def import_statement(file_obj, filename, username):
     return {'bank_format': bank_format, 'total': len(rows), 'matched': matched}
 
 
+def _effective_rows_sql():
+    """SQL (без WHERE/ORDER) операций Flash с учётом ручного разбиения по
+    проектам (flash.transaction_splits, см. set_transaction_splits): у
+    разбитых операций вместо одной строки исходной транзакции подставляются
+    её части (каждая со своей суммой/классификацией), а сама исходная
+    транзакция (classification_source='split') из результата исключается —
+    иначе сумма задвоилась бы. split_id IS NULL — обычная (неразбитая)
+    операция, iначе — конкретная часть разбивки."""
+    return '''
+        SELECT t.id, NULL::int AS split_id, t.operation_date, t.amount, t.counterparty_name,
+               t.counterparty_inn, t.purpose_text, t.wallet, t.bank_format, t.source_file,
+               t."Признак", t."Категория", t."Статья", t."Проект", t."Контрагент_report",
+               t."Строка отчета", t.classification_source
+        FROM flash.transactions t
+        WHERE t.classification_source != 'split'
+        UNION ALL
+        SELECT t.id, s.id AS split_id, t.operation_date, s.amount, t.counterparty_name,
+               t.counterparty_inn, t.purpose_text, t.wallet, t.bank_format, t.source_file,
+               s."Признак", s."Категория", s."Статья", s."Проект", s."Контрагент_report",
+               s."Строка отчета", 'manual' AS classification_source
+        FROM flash.transaction_splits s JOIN flash.transactions t ON t.id = s.transaction_id
+    '''
+
+
 def summary(period=None):
     """Свод по Flash: обороты по месяцам (как Свод1), разбивка размечено/не
     размечено по сумме — предварительная картина, помечается на странице как
@@ -717,7 +741,7 @@ def summary(period=None):
     rows = query(
         f'''SELECT date_trunc('month', operation_date)::date AS period, "Статья", "Категория", "Признак", "Проект",
                    classification_source, SUM(amount) AS amount, count(*) AS cnt
-           FROM flash.transactions {where}
+           FROM ({_effective_rows_sql()}) AS ft {where}
            GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1''',
         params
     )
@@ -739,8 +763,8 @@ def month_breakdown(period):
     бухгалтера."""
     import pl_report as pr
     rows = query(
-        '''SELECT "Статья", "Строка отчета", SUM(amount) AS amount, count(*) AS cnt
-           FROM flash.transactions
+        f'''SELECT "Статья", "Строка отчета", SUM(amount) AS amount, count(*) AS cnt
+           FROM ({_effective_rows_sql()}) AS ft
            WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
            GROUP BY 1, 2 ORDER BY 3 ASC''',
         (period,)
@@ -784,7 +808,10 @@ def get_transactions(period, statya=None, stroka=None):
     """Список операций за период — для drill-down по строке отчёта
     (statya/stroka) с странице /flash: и уже размеченные, и нет, чтобы можно
     было провалиться в любую агрегированную строку и отредактировать любую
-    отдельную операцию, а не только явно "неразмеченные"."""
+    отдельную операцию, а не только явно "неразмеченные". split_id — часть
+    ручного разбиения (см. set_transaction_splits) или NULL для обычной
+    операции; id — всегда id самой транзакции (для разбитых операций
+    указывает на исходную flash.transactions, split_id — на конкретную часть)."""
     where = ["date_trunc('month', operation_date) = %s"]
     params = [period]
     if statya is not None:
@@ -794,10 +821,10 @@ def get_transactions(period, statya=None, stroka=None):
         where.append('"Строка отчета" = %s')
         params.append(stroka)
     return query(
-        f'''SELECT id, operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet,
+        f'''SELECT id, split_id, operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet,
                    "Признак", "Категория", "Статья", "Проект", "Контрагент_report", "Строка отчета",
                    classification_source
-           FROM flash.transactions WHERE {" AND ".join(where)}
+           FROM ({_effective_rows_sql()}) AS ft WHERE {" AND ".join(where)}
            ORDER BY abs(amount) DESC''',
         tuple(params)
     )
@@ -894,6 +921,69 @@ def set_manual_classification(txn_id, fields, username):
     return 0
 
 
+def get_transaction_splits(txn_id):
+    return query(
+        '''SELECT id, amount, "Признак", "Категория", "Статья", "Проект", "Контрагент_report", "Строка отчета"
+           FROM flash.transaction_splits WHERE transaction_id = %s ORDER BY id''',
+        (txn_id,)
+    )
+
+
+def set_transaction_splits(txn_id, splits, username):
+    """Разбивает одну операцию на несколько частей с разными "Проект"/"Строка
+    отчета" — нужно для платежей, которые в самой FinancialData распадаются
+    на несколько проектов (например, оплата полевому агенту, распределённая
+    по проектам его загрузки — сигнала для такого распределения нет ни в
+    ИНН, ни в тексте платежа, см. RULE_CONFIDENCE_THRESHOLD выше). splits —
+    список словарей с Признак/Категория/Статья/Проект/Контрагент_report/
+    Строка отчета/Сумма; сумма всех частей должна совпадать с суммой самой
+    операции (допуск 0.01 на округление) — иначе ValueError, чтобы случайно
+    не потерять/задвоить часть платежа. Помечает исходную операцию
+    classification_source='split' (из обычных отчётов Flash она после этого
+    исключается, см. _effective_rows_sql) и полностью заменяет предыдущее
+    разбиение этой операции, если оно было."""
+    txn = query_one('SELECT amount FROM flash.transactions WHERE id = %s', (txn_id,))
+    if txn is None:
+        raise ValueError('Операция не найдена')
+    if not splits:
+        raise ValueError('Нужна хотя бы одна часть разбиения')
+
+    total = sum(float(s.get('amount') or 0) for s in splits)
+    if abs(total - float(txn['amount'])) > 0.01:
+        raise ValueError(
+            f'Сумма частей ({total:,.2f}) не совпадает с суммой операции ({float(txn["amount"]):,.2f})'
+        )
+
+    execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
+    rows = [(
+        txn_id, s.get('amount'), s.get('Признак'), s.get('Категория'), s.get('Статья'),
+        s.get('Проект'), s.get('Контрагент_report'), s.get('Строка отчета'), username,
+    ) for s in splits]
+    execute_values(
+        '''INSERT INTO flash.transaction_splits
+           (transaction_id, amount, "Признак", "Категория", "Статья", "Проект", "Контрагент_report",
+            "Строка отчета", created_by)
+           VALUES %s''',
+        rows
+    )
+    execute(
+        '''UPDATE flash.transactions SET "Признак"=NULL, "Категория"=NULL, "Статья"=NULL, "Проект"=NULL,
+           "Контрагент_report"=NULL, "Строка отчета"=NULL, classification_source='split' WHERE id = %s''',
+        (txn_id,)
+    )
+
+
+def clear_transaction_splits(txn_id):
+    """Отменяет разбиение — операция возвращается в 'unmatched' (обычная
+    точечная разметка через set_manual_classification/автоправила дальше как
+    для любой другой неразмеченной операции)."""
+    execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
+    execute(
+        '''UPDATE flash.transactions SET classification_source='unmatched' WHERE id = %s''',
+        (txn_id,)
+    )
+
+
 _MONTH_NAMES_RU = [
     'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
     'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
@@ -912,11 +1002,13 @@ def export_for_load(period):
     "Проект" копируется из последней совпавшей исторической строки
     FinancialData и не проверяется построчно — распределение по проектам
     для новых операций это допущение, а не факт; стоит перепроверить перед
-    финальной загрузкой, если контрагент участвует в нескольких проектах."""
+    финальной загрузкой, если контрагент участвует в нескольких проектах.
+    Разбитые вручную по проектам операции (см. set_transaction_splits) идут
+    отдельными строками — по одной на каждую часть разбиения."""
     rows = query(
-        '''SELECT operation_date, "Признак", "Категория", "Статья", "Проект", counterparty_name,
+        f'''SELECT operation_date, "Признак", "Категория", "Статья", "Проект", counterparty_name,
                   wallet, amount, purpose_text
-           FROM flash.transactions
+           FROM ({_effective_rows_sql()}) AS ft
            WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
            ORDER BY operation_date''',
         (period,)
