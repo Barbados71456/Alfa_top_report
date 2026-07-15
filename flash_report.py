@@ -282,13 +282,36 @@ def detect_and_parse(file_obj, filename):
 # Классификация: выучивание правил из уже классифицированной истории + применение
 # ---------------------------------------------------------------------------
 
+RULE_CONFIDENCE_THRESHOLD = 0.85
+# Один контрагент (по ИНН) или один и тот же текст назначения платежа
+# (purpose_contains) на практике сплошь и рядом относится к РАЗНЫМ строкам
+# отчёта и проектам — проверено на реальных данных: "Рубанков Иван
+# Владимирович" / текст "Оплата самозанятому за услуги по договору № 21/КА"
+# за май-июнь распадается на 4 разные "Строка отчета" и 11 разных "Проект"
+# (один платёж полевому агенту распределяется по проектам его загрузки —
+# сигнала для этого распределения нет ни в ИНН, ни в тексте платежа, только
+# в отдельной таблице драйверов, которой у Flash нет). Обобщающее правило
+# создаём ТОЛЬКО когда один вариант набирает свою долю от общей суммы
+# сопоставленных операций >= порога — иначе платёж остаётся неразмеченным
+# для бухгалтера, вместо угадывания наугад.
+
+
 def learn_rules(period, created_by='system'):
-    """Сопоставляет ещё не выученные (Дата, round(Сумма,2), Контрагент) из
-    public."FinancialData" за period с текущими flash.transactions той же даты и
-    суммы — если находится совпадение по (Дата, Сумма) и "Комментарии" совпадает
-    с purpose_text хотя бы частично, берёт готовую классификацию оттуда и
-    заводит правило по ИНН контрагента (более надёжно) либо по началу текста
-    назначения платежа (если ИНН нет). Возвращает число новых/обновлённых правил."""
+    """Двухшаговый процесс:
+    1) Каждую операцию Flash за period сопоставляет её СОБСТВЕННОЙ строке
+       public."FinancialData" по (Дата, round(Сумма,2)) — при нескольких
+       кандидатах предпочитает совпадение "Комментарии"/purpose_text, а если
+       текстового совпадения нет и кандидаты расходятся по "Строка отчета",
+       НЕ гадает (оставляет операцию неразмеченной) — раньше здесь молча
+       брался первый попавшийся кандидат, что путало напрямую несвязанные
+       проводки, совпавшие по (Дата, Сумма) случайно.
+    2) Строит ОБОБЩАЮЩЕЕ правило (для будущих операций без точного совпадения
+       по сумме — например, разбитые по проектам платежи агентам) только
+       если по всем найденным в шаге 1 операциям того же ИНН/текста платежа
+       один вариант "Строка отчета" набирает >= RULE_CONFIDENCE_THRESHOLD от
+       суммы; "Проект" в правило попадает отдельным, более строгим условием
+       (тот же порог, но уже внутри доминирующей строки).
+    Возвращает число новых/обновлённых обобщающих правил."""
     fd_rows = query(
         '''SELECT "Дата", "Сумма", "Контрагент", "Комментарии", "Признак", "Категория",
                   "Статья", "Проект", "Контрагент_report", "Строка отчета"
@@ -307,6 +330,29 @@ def learn_rules(period, created_by='system'):
         (period, period)
     )
 
+    # Шаг 1 — точное сопоставление каждой операции со своей строкой FinancialData.
+    txn_matches = []
+    for t in txns:
+        key = (t['operation_date'], round(float(t['amount']), 2))
+        candidates = by_key.get(key)
+        if not candidates:
+            continue
+        match = None
+        if len(candidates) == 1:
+            match = candidates[0]
+        else:
+            if t['purpose_text']:
+                for c in candidates:
+                    if c['Комментарии'] and t['purpose_text'][:30] in (c['Комментарии'] or ''):
+                        match = c
+                        break
+            if match is None:
+                lines = {c['Строка отчета'] for c in candidates}
+                if len(lines) == 1:
+                    match = candidates[0]
+        if match is not None:
+            txn_matches.append((t, match))
+
     # Существующие правила грузим одним запросом и матчим/апдейтим в памяти —
     # раньше здесь было 3 SQL-запроса НА КАЖДУЮ строку выписки (существующее
     # правило? апдейт/инсерт правила; апдейт транзакции), что на удалённой
@@ -315,30 +361,55 @@ def learn_rules(period, created_by='system'):
     existing_rules = query('SELECT id, match_type, match_value FROM flash.classification_rules')
     existing_by_key = {(r['match_type'], r['match_value']): r['id'] for r in existing_rules}
 
+    # Шаг 1.5 — применяем точный, проверенный результат к самим этим операциям
+    # (это реальная истина именно для них, не обобщение).
+    txn_updates = [
+        (fd['Признак'], fd['Категория'], fd['Статья'], fd['Проект'], fd['Контрагент_report'],
+         fd['Строка отчета'], 'learned', t['id'])
+        for t, fd in txn_matches
+    ]
+
+    # Шаг 2 — обобщающие правила по ИНН / тексту платежа, только при уверенном большинстве.
+    inn_records = defaultdict(list)
+    purpose_records = defaultdict(list)
+    for t, fd in txn_matches:
+        amt = abs(float(t['amount']))
+        line = (fd['Признак'], fd['Категория'], fd['Статья'], fd['Контрагент_report'], fd['Строка отчета'])
+        if t['counterparty_inn']:
+            inn_records[t['counterparty_inn']].append((amt, line, fd['Проект']))
+        elif t['purpose_text']:
+            mv = t['purpose_text'][:60].strip()
+            purpose_records[mv].append((amt, line, fd['Проект']))
+
     rule_inserts = {}
     rule_updates = {}
-    txn_updates = []
-    for t in txns:
-        key = (t['operation_date'], round(float(t['amount']), 2))
-        candidates = by_key.get(key)
-        if not candidates:
-            continue
-        match = candidates[0]
-        if len(candidates) > 1 and t['purpose_text']:
-            for c in candidates:
-                if c['Комментарии'] and t['purpose_text'][:30] in (c['Комментарии'] or ''):
-                    match = c
-                    break
 
-        if t['counterparty_inn']:
-            match_type, match_value = 'inn', t['counterparty_inn']
-        elif t['purpose_text']:
-            match_type, match_value = 'purpose_contains', t['purpose_text'][:60].strip()
-        else:
-            continue
+    def _build_rule(match_type, match_value, records):
+        line_totals = defaultdict(float)
+        total = 0.0
+        for amt, line, _proekt in records:
+            line_totals[line] += amt
+            total += amt
+        if total <= 0:
+            return
+        dominant_line, dominant_amt = max(line_totals.items(), key=lambda kv: kv[1])
+        if dominant_amt / total < RULE_CONFIDENCE_THRESHOLD:
+            return
 
-        fields = (match['Признак'], match['Категория'], match['Статья'], match['Проект'],
-                  match['Контрагент_report'], match['Строка отчета'])
+        proj_totals = defaultdict(float)
+        proj_total = 0.0
+        for amt, line, proekt in records:
+            if line == dominant_line:
+                proj_totals[proekt] += amt
+                proj_total += amt
+        proekt_val = None
+        if proj_total > 0:
+            dom_proj, dom_proj_amt = max(proj_totals.items(), key=lambda kv: kv[1])
+            if dom_proj_amt / proj_total >= RULE_CONFIDENCE_THRESHOLD:
+                proekt_val = dom_proj
+
+        priznak, kategoria, statya, kontragent, stroka = dominant_line
+        fields = (priznak, kategoria, statya, proekt_val, kontragent, stroka)
         rule_key = (match_type, match_value)
         rid = existing_by_key.get(rule_key)
         if rid:
@@ -346,7 +417,10 @@ def learn_rules(period, created_by='system'):
         else:
             rule_inserts[rule_key] = (match_type, match_value) + fields + ('learned', created_by)
 
-        txn_updates.append(fields + ('learned', t['id']))
+    for inn, records in inn_records.items():
+        _build_rule('inn', inn, records)
+    for mv, records in purpose_records.items():
+        _build_rule('purpose_contains', mv, records)
 
     learned = len(rule_inserts)
     if rule_inserts:
@@ -418,6 +492,41 @@ def _match_rule(txn, inn_rules, purpose_rules):
             if r['match_value'] and r['match_value'] in txn['purpose_text']:
                 return r, r['id']
     return None, None
+
+
+def reclassify_unmatched(period):
+    """Повторно применяет ТЕКУЩИЕ flash.classification_rules к уже
+    загруженным неразмеченным операциям месяца — для периодов, у которых ещё
+    нет своей "факт"-FinancialData (learn_rules() тогда ничего не находит,
+    т.к. сверять не с чем), но уже есть правила, выученные по предыдущим
+    закрытым месяцам. Тот же батч-путь _load_classification_rules/_match_rule,
+    что использует import_statement(), только по уже сохранённым в базе
+    операциям, а не по свежераспарсенному файлу. Возвращает число размеченных."""
+    inn_rules, purpose_rules = _load_classification_rules()
+    txns = query(
+        '''SELECT id, counterparty_inn, purpose_text FROM flash.transactions
+           WHERE date_trunc('month', operation_date) = %s AND classification_source = 'unmatched' ''',
+        (period,)
+    )
+    updates = []
+    for t in txns:
+        rule, _rule_id = _match_rule(t, inn_rules, purpose_rules)
+        if rule:
+            updates.append((
+                rule['Признак'], rule['Категория'], rule['Статья'], rule['Проект'],
+                rule['Контрагент_report'], rule['Строка отчета'], 'rule', t['id']
+            ))
+    if updates:
+        execute_values(
+            '''UPDATE flash.transactions AS t SET
+                 "Признак" = v.priznak, "Категория" = v.kategoria, "Статья" = v.statya,
+                 "Проект" = v.proekt, "Контрагент_report" = v.kontragent, "Строка отчета" = v.stroka,
+                 classification_source = v.source
+               FROM (VALUES %s) AS v(priznak, kategoria, statya, proekt, kontragent, stroka, source, id)
+               WHERE t.id = v.id''',
+            updates
+        )
+    return len(updates)
 
 
 def classify_transaction(txn):
@@ -722,16 +831,25 @@ def export_for_review(period):
 
 def set_manual_classification(txn_id, fields, username):
     """Ручная правка одной операции бухгалтером — заодно заводит/обновляет
-    правило по ИНН (или по назначению платежа, если ИНН нет) и СРАЗУ ЖЕ
-    применяет его ко всем остальным ещё неразмеченным операциям (по всем
-    периодам, не только текущему) — не только будущие загрузки подхватят
-    правило, но и уже загруженные "соседние" операции того же контрагента
-    доразмечаются мгновенно, без re-upload. fields: Признак, Категория,
-    Статья, Проект, Контрагент_report, Строка отчета (последнее — из
-    фиксированного списка pl_report.ALL_LINES, определяет, куда строка
-    попадёт в Выручка/Переменные/Постоянные — см. month_breakdown).
-    Возвращает число дополнительно доразмеченных операций (без учёта самой
-    txn_id)."""
+    правило по ИНН (или по назначению платежа, если ИНН нет), чтобы это же
+    правило подхватило будущие загрузки такой же операции.
+
+    НЕ применяет правило задним числом к другим уже загруженным
+    неразмеченным операциям того же контрагента/текста — попробовали так
+    раньше и получили реальную порчу данных: один контрагент (тем более один
+    и тот же текст назначения платежа, например "Оплата самозанятому...")
+    сплошь и рядом относится к разным строкам отчёта и проектам (проверено:
+    у одного самозанятого агента один и тот же текст в мае-июне разошёлся на
+    4 разные "Строка отчета"), так что решение бухгалтера по ОДНОЙ операции
+    не гарантированно верно для остальных — каждую нужно смотреть отдельно
+    через drill-down. Массовое обучение правил с проверкой статистической
+    уверенности (>= RULE_CONFIDENCE_THRESHOLD доли по сумме) — задача
+    learn_rules(), не этой функции.
+
+    fields: Признак, Категория, Статья, Проект, Контрагент_report, Строка
+    отчета (последнее — из фиксированного списка pl_report.ALL_LINES,
+    определяет, куда строка попадёт в Выручка/Переменные/Постоянные — см.
+    month_breakdown)."""
     txn = query_one('SELECT counterparty_inn, purpose_text FROM flash.transactions WHERE id = %s', (txn_id,))
     if txn is None:
         raise ValueError('Операция не найдена')
@@ -773,36 +891,7 @@ def set_manual_classification(txn_id, fields, username):
             (match_type, match_value) + values + (username,)
         )
 
-    if match_type == 'inn':
-        pending = query_one(
-            '''SELECT count(*) AS c FROM flash.transactions
-               WHERE classification_source='unmatched' AND counterparty_inn = %s''',
-            (match_value,)
-        )
-        execute(
-            '''UPDATE flash.transactions SET "Признак"=%s, "Категория"=%s, "Статья"=%s, "Проект"=%s,
-               "Контрагент_report"=%s, "Строка отчета"=%s, classification_source='rule'
-               WHERE classification_source='unmatched' AND counterparty_inn = %s''',
-            values + (match_value,)
-        )
-    else:
-        # strpos(), не LIKE — совпадение той же чистой Python-подстрокой, что
-        # использует _match_rule(), без риска, что "%"/"_" внутри match_value
-        # (реальные суммы в тексте платежа) сработают как LIKE-wildcard.
-        pending = query_one(
-            '''SELECT count(*) AS c FROM flash.transactions
-               WHERE classification_source='unmatched' AND purpose_text IS NOT NULL
-                     AND strpos(purpose_text, %s) > 0''',
-            (match_value,)
-        )
-        execute(
-            '''UPDATE flash.transactions SET "Признак"=%s, "Категория"=%s, "Статья"=%s, "Проект"=%s,
-               "Контрагент_report"=%s, "Строка отчета"=%s, classification_source='rule'
-               WHERE classification_source='unmatched' AND purpose_text IS NOT NULL
-                     AND strpos(purpose_text, %s) > 0''',
-            values + (match_value,)
-        )
-    return pending['c']
+    return 0
 
 
 _MONTH_NAMES_RU = [

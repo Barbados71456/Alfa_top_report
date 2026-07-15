@@ -277,7 +277,7 @@ function openDrilldown(statya, stroka) {
                 return `<tr>
                     <td>${_escapeHtml(row.operation_date.split('-').reverse().join('.'))}</td>
                     <td class="text-end ${amtCls}">${row.amount.toLocaleString('ru-RU', {maximumFractionDigits:0})}</td>
-                    <td>${_escapeHtml(row.counterparty_name || '—')}</td>
+                    <td style="max-width:220px; white-space:normal; word-break:break-word;">${_escapeHtml(row.counterparty_name || '—')}</td>
                     <td class="small text-secondary" style="max-width:320px; white-space:normal; word-break:break-word;">${_escapeHtml(row.purpose_text || '')}</td>
                     <td class="small text-secondary">${_escapeHtml(row.classification_source)}</td>
                     <td>${editBtn}</td>

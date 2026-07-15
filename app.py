@@ -572,8 +572,16 @@ def flash_relearn():
     period = date.fromisoformat(period_str)
     learned = flr.learn_rules(period, created_by=session.get('username'))
     wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
-    audit.log_action(session.get('username'), 'flash_relearn', f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}')
-    flash(f'Классификация за период пересчитана против актуальной FinancialData: новых правил {learned}, кошельков {wallets_learned}.', 'success')
+    reclassified = flr.reclassify_unmatched(period)
+    audit.log_action(
+        session.get('username'), 'flash_relearn',
+        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, доразмечено по правилам: {reclassified}'
+    )
+    flash(
+        f'Классификация пересчитана против FinancialData (новых правил: {learned}, кошельков: {wallets_learned}) '
+        f'и по уже известным правилам доразмечено ещё {reclassified} операций.',
+        'success'
+    )
     return redirect(url_for('flash_page', period=period_str))
 
 
@@ -588,12 +596,9 @@ def flash_classify(txn_id):
         'Контрагент_report': (request.form.get('kontragent') or '').strip() or None,
         'Строка отчета': (request.form.get('stroka') or '').strip() or None,
     }
-    also_updated = flr.set_manual_classification(txn_id, fields, session.get('username'))
-    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}, ещё доразмечено: {also_updated}')
-    if also_updated:
-        flash(f'Операция размечена, заодно доразмечено ещё {also_updated} похожих операций', 'success')
-    else:
-        flash('Операция размечена', 'success')
+    flr.set_manual_classification(txn_id, fields, session.get('username'))
+    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}')
+    flash('Операция размечена. Правило заведено для будущих загрузок, но на уже загруженные похожие операции не распространяется — их нужно проверить и разметить отдельно.', 'success')
     return redirect(url_for('flash_page', period=request.form.get('period')))
 
 
