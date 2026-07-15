@@ -653,11 +653,23 @@ def wallet_reconciliation(period):
 
 def import_statement(file_obj, filename, username):
     """Разбирает один файл выписки, классифицирует построчно по уже выученным
-    правилам и сохраняет в flash.transactions (ON CONFLICT — повторная загрузка
-    того же файла не дублирует строки). Правила/алиасы кошельков грузятся
-    один раз на файл и классификация идёт в памяти (не по запросу на строку) —
-    на файле в тысячи операций на удалённой Render Postgres это разница между
-    минутами и секундами. Возвращает {bank_format, total, matched}."""
+    правилам и сохраняет в flash.transactions. ON CONFLICT — по содержимому
+    операции (bank_format, account_number, document_number, дата, сумма, ИНН,
+    назначение платежа), не по порядку строк в файле: выписки грузятся
+    еженедельно/ежедневно растущим диапазоном дат, и повторная загрузка того
+    же (или расширенного) файла добавляет только новые строки, уже
+    размеченные не трогает — даже если банк отдал строки в другом порядке.
+    Дедуп-индекс — idx_flash_transactions_dedup (см. schema.sql), с COALESCE
+    на ИНН/назначение платежа: у операций от физлиц-должников counterparty_inn
+    часто NULL, а в Postgres NULL никогда не равен NULL, так что обычный
+    UNIQUE(...) такие строки не считал бы дубликатами — было реально
+    проверено на живых данных: повторная загрузка того же файла задвоила
+    ровно те 2 строки, где ИНН плательщика отсутствовал.
+
+    Правила/алиасы кошельков грузятся один раз на файл и классификация идёт
+    в памяти (не по запросу на строку) — на файле в тысячи операций на
+    удалённой Render Postgres это разница между минутами и секундами.
+    Возвращает {bank_format, total, matched}."""
     bank_format, rows = detect_and_parse(file_obj, filename)
     if not rows:
         raise ValueError(f'В файле "{filename}" не найдено ни одной операции — проверь формат.')
@@ -693,7 +705,8 @@ def import_statement(file_obj, filename, username):
             "Признак", "Категория", "Статья", "Проект", "Контрагент_report", "Строка отчета",
             classification_source, imported_by)
            VALUES %s
-           ON CONFLICT (bank_format, account_number, document_number, operation_date, amount, counterparty_inn, purpose_text)
+           ON CONFLICT (bank_format, account_number, document_number, operation_date, amount,
+                        COALESCE(counterparty_inn, ''), COALESCE(purpose_text, ''))
            DO NOTHING''',
         values
     )

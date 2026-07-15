@@ -365,10 +365,19 @@ CREATE TABLE IF NOT EXISTS flash.transactions (
     classification_source TEXT,
     matched_financialdata_id BIGINT,
     imported_by TEXT,
-    imported_at TIMESTAMP DEFAULT now(),
-    UNIQUE (bank_format, account_number, document_number, operation_date, amount, counterparty_inn, purpose_text)
+    imported_at TIMESTAMP DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_flash_transactions_period ON flash.transactions (operation_date);
+-- Обычный UNIQUE(...) тут не работает как задумано: в Postgres NULL никогда
+-- не равен NULL, а counterparty_inn часто NULL (должники-физлица без ИНН на
+-- выписке) — при повторной загрузке того же файла (выписки грузятся
+-- еженедельно/ежедневно, растущий диапазон дат, порядок строк может
+-- отличаться) такие операции тихо задваивались бы. COALESCE в expression-
+-- индексе нормализует NULL для сравнения, оставляя сам столбец NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_flash_transactions_dedup ON flash.transactions (
+    bank_format, account_number, document_number, operation_date, amount,
+    COALESCE(counterparty_inn, ''), COALESCE(purpose_text, '')
+);
 
 -- "Выучены" из истории public."FinancialData" (см. flash_report.learn_rules) —
 -- сопоставление ИНН контрагента или ключевой фразы в назначении платежа с
