@@ -769,11 +769,13 @@ def summary(period=None):
 
 
 def month_breakdown(period):
-    """Разбивка одного месяца по Выручка/Переменные/Постоянные/Прочее (по
-    "Строка отчета", те же списки строк, что и pl_report.svod1) — только
-    размеченные операции (classification_source != 'unmatched'), по аналогии
-    со Свод1, но на сырых данных выписки, без ожидания ручной классификации
-    бухгалтера."""
+    """Разбивка одного месяца по тем же секциям, что и Свод1 (Выручка/
+    Переменные/Постоянные/Инвестиции в портфели/Финансирование/Бонусы —
+    pl_report.REVENUE_LINES и т.д.), только размеченные операции
+    (classification_source != 'unmatched'), на сырых данных выписки, без
+    ожидания ручной классификации бухгалтера. profit/gm/net_profit считаются
+    по тем же формулам, что pl_report.svod1() — кассовая прикидка того же
+    П&Л по банковским движениям."""
     import pl_report as pr
     rows = query(
         f'''SELECT "Статья", "Строка отчета", SUM(amount) AS amount, count(*) AS cnt
@@ -782,8 +784,8 @@ def month_breakdown(period):
            GROUP BY 1, 2 ORDER BY 3 ASC''',
         (period,)
     )
-    buckets = {'revenue': [], 'variable': [], 'fixed': [], 'other': []}
-    totals = {'revenue': 0.0, 'variable': 0.0, 'fixed': 0.0, 'other': 0.0}
+    buckets = {'revenue': [], 'variable': [], 'fixed': [], 'investment': [], 'financing': [], 'bonus': [], 'other': []}
+    totals = {k: 0.0 for k in buckets}
     for r in rows:
         line = r['Строка отчета']
         amt = float(r['amount'])
@@ -793,12 +795,47 @@ def month_breakdown(period):
             key = 'variable'
         elif line in pr.FIXED_LINES:
             key = 'fixed'
+        elif line == pr.INVESTMENT_LINE:
+            key = 'investment'
+        elif line in pr.FINANCING_LINES:
+            key = 'financing'
+        elif line in pr.BONUS_LINES:
+            key = 'bonus'
         else:
             key = 'other'
         buckets[key].append(r)
         totals[key] += amt
-    profit = totals['revenue'] + totals['variable'] + totals['fixed']
-    return {'buckets': buckets, 'totals': totals, 'profit': profit}
+    gm = totals['revenue'] + totals['variable']
+    profit = gm + totals['fixed']
+    net_profit = profit + totals['bonus'] + totals['investment'] + totals['financing']
+    return {'buckets': buckets, 'totals': totals, 'gm': gm, 'profit': profit, 'net_profit': net_profit}
+
+
+def by_project(period):
+    """Разбивка размеченных операций месяца по "Проект" (только операции, у
+    которых он вообще определён — Проект часто неизвестен, см.
+    RULE_CONFIDENCE_THRESHOLD и set_transaction_splits) — для быстрого
+    обзора, какие проекты уже видны во Flash за месяц."""
+    rows = query(
+        f'''SELECT "Проект", SUM(amount) AS amount, count(*) AS cnt
+           FROM ({_effective_rows_sql()}) AS ft
+           WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
+                 AND "Проект" IS NOT NULL
+           GROUP BY 1 ORDER BY 2 DESC''',
+        (period,)
+    )
+    without_project = query(
+        f'''SELECT SUM(amount) AS amount, count(*) AS cnt
+           FROM ({_effective_rows_sql()}) AS ft
+           WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
+                 AND "Проект" IS NULL''',
+        (period,)
+    )[0]
+    return {
+        'rows': rows,
+        'without_project_amount': float(without_project['amount'] or 0),
+        'without_project_cnt': without_project['cnt'],
+    }
 
 
 def get_unmatched(period=None, limit=500):

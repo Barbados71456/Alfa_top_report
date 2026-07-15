@@ -56,7 +56,7 @@
 
 <div class="d-flex gap-3 flex-wrap mb-3">
     <div class="card p-3 flex-fill kpi-card">
-        <div class="kpi-label">Выручка (размечено)</div>
+        <div class="kpi-label">Выручка</div>
         <div class="kpi-value val-pos">{{ '{:,.0f}'.format(data.totals.revenue).replace(',', ' ') }}</div>
     </div>
     <div class="card p-3 flex-fill kpi-card">
@@ -64,12 +64,28 @@
         <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.totals.variable).replace(',', ' ') }}</div>
     </div>
     <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">GM</div>
+        <div class="kpi-value {% if data.gm > 0 %}val-pos{% elif data.gm < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.gm).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
         <div class="kpi-label">Постоянные</div>
         <div class="kpi-value val-neg">{{ '{:,.0f}'.format(data.totals.fixed).replace(',', ' ') }}</div>
     </div>
     <div class="card p-3 flex-fill kpi-card">
-        <div class="kpi-label">Прибыль (кассовая, по размеченным)</div>
+        <div class="kpi-label">ПРИБЫЛЬ</div>
         <div class="kpi-value {% if data.profit > 0 %}val-pos{% elif data.profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.profit).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Инвестиции в портфели</div>
+        <div class="kpi-value {% if data.totals.investment > 0 %}val-pos{% elif data.totals.investment < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.totals.investment).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Финансирование</div>
+        <div class="kpi-value {% if data.totals.financing > 0 %}val-pos{% elif data.totals.financing < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.totals.financing).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ</div>
+        <div class="kpi-value {% if data.net_profit > 0 %}val-pos{% elif data.net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.net_profit).replace(',', ' ') }}</div>
     </div>
     <div class="card p-3 flex-fill kpi-card">
         <div class="kpi-label">Размечено операций</div>
@@ -79,11 +95,11 @@
 </div>
 
 <div class="card p-3 table-responsive mb-3">
-    <h6 class="mb-3">Разбивка по статьям (только размеченные операции)</h6>
+    <h6 class="mb-3">Разбивка по статьям (только размеченные операции) — секции как в Свод1</h6>
     <table class="table report-table mb-0">
         <thead><tr><th class="label-col">Статья</th><th class="text-end">Сумма</th><th class="text-end">Операций</th></tr></thead>
         <tbody>
-        {% for key, title in [('revenue','Выручка'), ('variable','Переменные'), ('fixed','Постоянные'), ('other','Прочее (инвестиции/финансы/не в П&Л)')] %}
+        {% for key, title in [('revenue','Выручка'), ('variable','Переменные'), ('fixed','Постоянные'), ('investment','Инвестиции в портфели'), ('financing','Финансирование'), ('bonus','Бонусы менеджеров'), ('other','Прочее (вне П&Л)')] %}
         {% if data.buckets[key] %}
         <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
         {% for r in data.buckets[key] %}
@@ -100,6 +116,37 @@
         {% endfor %}
         </tbody>
     </table>
+</div>
+
+<div class="card p-3 table-responsive mb-3">
+    <h6 class="mb-1">Разбивка по проектам</h6>
+    <p class="small text-secondary mb-3">
+        Только размеченные операции, у которых определён "Проект" (не у всех — см.
+        "Разбить" для платежей, распределённых сразу по нескольким проектам).
+    </p>
+    {% if projects_data and projects_data.rows %}
+    <table class="table report-table mb-0">
+        <thead><tr><th class="label-col">Проект</th><th class="text-end">Сумма</th><th class="text-end">Операций</th></tr></thead>
+        <tbody>
+        {% for r in projects_data.rows %}
+        <tr>
+            <td class="label-col">{{ r['Проект'] }}</td>
+            <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
+            <td class="text-end text-secondary">{{ r.cnt }}</td>
+        </tr>
+        {% endfor %}
+        {% if projects_data.without_project_cnt %}
+        <tr>
+            <td class="label-col text-secondary">(без проекта)</td>
+            <td class="text-end text-secondary">{{ '{:,.0f}'.format(projects_data.without_project_amount).replace(',', ' ') }}</td>
+            <td class="text-end text-secondary">{{ projects_data.without_project_cnt }}</td>
+        </tr>
+        {% endif %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary mb-0">Нет операций с определённым проектом за этот период.</p>
+    {% endif %}
 </div>
 
 <div class="card p-3 table-responsive mb-3">
@@ -254,17 +301,13 @@
                     свои Проект/Строка отчета/Статья/Сумма.
                 </p>
                 <div class="row g-2 mb-3">
-                    <div class="col-4">
+                    <div class="col-6">
                         <label class="form-label small mb-1">Признак (общий)</label>
                         <input type="text" id="sp-priznak" class="form-control form-control-sm" list="priznakList">
                     </div>
-                    <div class="col-4">
+                    <div class="col-6">
                         <label class="form-label small mb-1">Категория (общая)</label>
                         <input type="text" id="sp-kategoria" class="form-control form-control-sm" list="kategoriaList">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label small mb-1">Контрагент отчёт (общий)</label>
-                        <input type="text" id="sp-kontragent" class="form-control form-control-sm">
                     </div>
                 </div>
                 <table class="table table-sm mb-2">
@@ -405,7 +448,6 @@ function openSplitEditor(txnId) {
                 clearBtn.style.display = '';
                 document.getElementById('sp-priznak').value = data.splits[0]['Признак'] || '';
                 document.getElementById('sp-kategoria').value = data.splits[0]['Категория'] || '';
-                document.getElementById('sp-kontragent').value = data.splits[0]['Контрагент_report'] || '';
                 data.splits.forEach(s => addSplitRow({
                     amount: s.amount, 'Проект': s['Проект'], 'Статья': s['Статья'], 'Строка отчета': s['Строка отчета'],
                 }));
@@ -413,7 +455,6 @@ function openSplitEditor(txnId) {
                 clearBtn.style.display = 'none';
                 document.getElementById('sp-priznak').value = '';
                 document.getElementById('sp-kategoria').value = '';
-                document.getElementById('sp-kontragent').value = '';
                 addSplitRow({ amount: data.amount });
                 addSplitRow({ amount: 0 });
             }
@@ -426,9 +467,8 @@ function openSplitEditor(txnId) {
 function saveSplit() {
     const priznak = document.getElementById('sp-priznak').value.trim() || null;
     const kategoria = document.getElementById('sp-kategoria').value.trim() || null;
-    const kontragent = document.getElementById('sp-kontragent').value.trim() || null;
     const rows = Array.from(document.querySelectorAll('#splitRowsBody tr')).map(tr => ({
-        'Признак': priznak, 'Категория': kategoria, 'Контрагент_report': kontragent,
+        'Признак': priznak, 'Категория': kategoria,
         'Проект': tr.querySelector('.sp-proekt').value.trim() || null,
         'Строка отчета': tr.querySelector('.sp-stroka').value || null,
         'Статья': tr.querySelector('.sp-statya').value.trim() || null,
