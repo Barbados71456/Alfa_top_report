@@ -118,6 +118,15 @@
             <td class="text-end">{{ '{:,.0f}'.format(data.totals[key]).replace(',', ' ') }}</td><td></td></tr>
         {% endif %}
         {% endfor %}
+        {% if summary.cnt_unmatched %}
+        <tr class="table-danger"><td class="label-col fw-bold" colspan="3">⚠ Неразмеченные операции</td></tr>
+        <tr class="row-bold table-danger flash-drill-row" role="button" style="cursor:pointer"
+            onclick="document.getElementById('unmatched-section').scrollIntoView({behavior:'smooth', block:'start'})">
+            <td class="label-col">Сальдо неразмеченных ({{ summary.cnt_unmatched }} операций)</td>
+            <td class="text-end">{{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</td>
+            <td></td>
+        </tr>
+        {% endif %}
         </tbody>
     </table>
 </div>
@@ -188,7 +197,7 @@
     {% endif %}
 </div>
 
-<div class="card p-3 table-responsive">
+<div class="card p-3 table-responsive" id="unmatched-section">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="mb-0">Не размечено ({{ unmatched|length }}{% if unmatched|length == 200 %}+{% endif %}) — сумма {{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</h6>
     </div>
