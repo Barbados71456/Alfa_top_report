@@ -128,28 +128,28 @@
         Только размеченные операции, у которых определён "Проект" (не у всех — см.
         "Разбить" для платежей, распределённых сразу по нескольким проектам).
     </p>
-    {% if projects_data and projects_data.rows %}
+    {% if projects_data and (projects_data.rows or projects_data.without_project_cnt) %}
     <table class="table report-table mb-0">
         <thead><tr><th class="label-col">Проект</th><th class="text-end">Сумма</th><th class="text-end">Операций</th></tr></thead>
         <tbody>
         {% for r in projects_data.rows %}
-        <tr>
+        <tr class="flash-drill-row" role="button" style="cursor:pointer" onclick='openDrilldownByProject({{ r["Проект"]|tojson }}, {{ r["Проект"]|tojson }})'>
             <td class="label-col">{{ r['Проект'] }}</td>
             <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
             <td class="text-end text-secondary">{{ r.cnt }}</td>
         </tr>
         {% endfor %}
         {% if projects_data.without_project_cnt %}
-        <tr>
-            <td class="label-col text-secondary">(без проекта)</td>
-            <td class="text-end text-secondary">{{ '{:,.0f}'.format(projects_data.without_project_amount).replace(',', ' ') }}</td>
-            <td class="text-end text-secondary">{{ projects_data.without_project_cnt }}</td>
+        <tr class="flash-drill-row table-danger" role="button" style="cursor:pointer" onclick="openDrilldownByProject('__none__', '(без проекта)')">
+            <td class="label-col fw-bold">⚠ без проекта</td>
+            <td class="text-end fw-bold">{{ '{:,.0f}'.format(projects_data.without_project_amount).replace(',', ' ') }}</td>
+            <td class="text-end fw-bold">{{ projects_data.without_project_cnt }}</td>
         </tr>
         {% endif %}
         </tbody>
     </table>
     {% else %}
-    <p class="text-secondary mb-0">Нет операций с определённым проектом за этот период.</p>
+    <p class="text-secondary mb-0">Нет операций за этот период.</p>
     {% endif %}
 </div>
 
@@ -174,7 +174,7 @@
         <tr>
             <td class="label-col"><a href="{{ url_for('wallets_detail', name=w.wallet) }}">{{ w.wallet }}</a></td>
             <td class="text-end">{{ '{:,.0f}'.format(w.opening).replace(',', ' ') }}</td>
-            <td class="text-end {% if w.flash_turnover > 0 %}val-pos{% elif w.flash_turnover < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(w.flash_turnover).replace(',', ' ') }} <span class="text-secondary small">({{ w.cnt }})</span></td>
+            <td class="text-end {% if w.flash_turnover > 0 %}val-pos{% elif w.flash_turnover < 0 %}val-neg{% endif %}" role="button" style="cursor:pointer" onclick='openDrilldownByWallet({{ w.wallet|tojson }})' title="Показать операции Flash по этому кошельку">{{ '{:,.0f}'.format(w.flash_turnover).replace(',', ' ') }} <span class="text-secondary small">({{ w.cnt }})</span></td>
             <td class="text-end fw-bold">{{ '{:,.0f}'.format(w.calculated).replace(',', ' ') }}</td>
             <td class="text-end">{{ '{:,.0f}'.format(w.known_after).replace(',', ' ') if w.known_after is not none else '—' }}</td>
             <td class="text-end {% if w.discrepancy and w.discrepancy|abs > 1 %}val-neg{% elif w.discrepancy is not none %}val-pos{% endif %}">
@@ -197,7 +197,7 @@
         <thead><tr><th>Дата</th><th class="text-end">Сумма</th><th>Контрагент</th><th>Назначение платежа</th><th>Кошелёк</th>{% if session.get('role') in ('admin','accountant') %}<th></th>{% endif %}</tr></thead>
         <tbody>
         {% for t in unmatched %}
-        <tr>
+        <tr class="table-danger">
             <td>{{ t.operation_date.strftime('%d.%m.%Y') }}</td>
             <td class="text-end {% if t.amount > 0 %}val-pos{% elif t.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(t.amount).replace(',', ' ') }}</td>
             <td>{{ t.counterparty_name or '—' }}</td>
@@ -357,14 +357,13 @@ function _escapeHtml(s) {
     return div.innerHTML;
 }
 
-function openDrilldown(statya, stroka) {
-    document.getElementById('drilldownTitle').textContent = 'Операции: ' + (statya || '(без статьи)') + ' — ' + stroka;
+function _openDrilldown(title, extraParams) {
+    document.getElementById('drilldownTitle').textContent = title;
     const body = document.getElementById('drilldownBody');
     body.innerHTML = '<tr><td colspan="6" class="text-secondary">Загрузка…</td></tr>';
     new bootstrap.Modal(document.getElementById('drilldownModal')).show();
 
-    const params = new URLSearchParams({ period: '{{ period.isoformat() }}', stroka: stroka });
-    if (statya) params.set('statya', statya);
+    const params = new URLSearchParams({ period: '{{ period.isoformat() }}', ...extraParams });
     fetch('/api/flash_transactions?' + params.toString())
         .then(r => r.json())
         .then(rows => {
@@ -383,16 +382,31 @@ function openDrilldown(statya, stroka) {
                     }
                 }
                 const badge = row.split_id != null ? ' <span class="badge bg-secondary-subtle text-secondary-emphasis">часть разбивки</span>' : '';
-                return `<tr>
+                const rowCls = !row['Проект'] ? 'table-danger' : '';
+                return `<tr class="${rowCls}">
                     <td>${_escapeHtml(row.operation_date.split('-').reverse().join('.'))}</td>
                     <td class="text-end ${amtCls}">${row.amount.toLocaleString('ru-RU', {maximumFractionDigits:0})}</td>
                     <td style="max-width:220px; white-space:normal; word-break:break-word;">${_escapeHtml(row.counterparty_name || '—')}${badge}</td>
                     <td class="small text-secondary" style="max-width:320px; white-space:normal; word-break:break-word;">${_escapeHtml(row.purpose_text || '')}</td>
-                    <td class="small text-secondary">${_escapeHtml(row.classification_source)}</td>
+                    <td class="small text-secondary">${_escapeHtml(row.classification_source)}${!row['Проект'] ? ' <span class="text-danger">⚠ без проекта</span>' : ''}</td>
                     <td class="text-nowrap">${actions}</td>
                 </tr>`;
             }).join('');
         });
+}
+
+function openDrilldown(statya, stroka) {
+    const params = { stroka: stroka };
+    if (statya) params.statya = statya;
+    _openDrilldown('Операции: ' + (statya || '(без статьи)') + ' — ' + stroka, params);
+}
+
+function openDrilldownByProject(proekt, label) {
+    _openDrilldown('Операции по проекту: ' + (label || proekt), { proekt: proekt });
+}
+
+function openDrilldownByWallet(wallet) {
+    _openDrilldown('Операции Flash по кошельку: ' + wallet, { wallet: wallet });
 }
 
 function editFromDrilldownById(id) {

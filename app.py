@@ -611,7 +611,10 @@ def api_flash_transactions():
     if not period_str:
         return jsonify([])
     period = date.fromisoformat(period_str)
-    rows = flr.get_transactions(period, statya=request.args.get('statya') or None, stroka=request.args.get('stroka') or None)
+    rows = flr.get_transactions(
+        period, statya=request.args.get('statya') or None, stroka=request.args.get('stroka') or None,
+        proekt=request.args.get('proekt') or None, wallet=request.args.get('wallet') or None,
+    )
     return jsonify([{
         'id': r['id'], 'split_id': r['split_id'], 'operation_date': r['operation_date'].isoformat(), 'amount': float(r['amount']),
         'counterparty_name': r['counterparty_name'], 'purpose_text': r['purpose_text'], 'wallet': r['wallet'],

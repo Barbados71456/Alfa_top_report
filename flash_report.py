@@ -854,14 +854,19 @@ def get_unmatched(period=None, limit=500):
     )
 
 
-def get_transactions(period, statya=None, stroka=None):
-    """Список операций за период — для drill-down по строке отчёта
-    (statya/stroka) с странице /flash: и уже размеченные, и нет, чтобы можно
-    было провалиться в любую агрегированную строку и отредактировать любую
-    отдельную операцию, а не только явно "неразмеченные". split_id — часть
-    ручного разбиения (см. set_transaction_splits) или NULL для обычной
-    операции; id — всегда id самой транзакции (для разбитых операций
-    указывает на исходную flash.transactions, split_id — на конкретную часть)."""
+NO_PROJECT = '__none__'  # сентинел для проекта в drill-down: "без проекта" (Проект IS NULL), не путать с пустой строкой
+
+
+def get_transactions(period, statya=None, stroka=None, proekt=None, wallet=None):
+    """Список операций за период — для drill-down (по строке отчёта, проекту
+    или кошельку — из любой сводной таблицы на /flash) и уже размеченные, и
+    нет, чтобы можно было провалиться в любую агрегированную строку и
+    отредактировать любую отдельную операцию, а не только явно
+    "неразмеченные". proekt=NO_PROJECT — операции без определённого проекта.
+    split_id — часть ручного разбиения (см. set_transaction_splits) или NULL
+    для обычной операции; id — всегда id самой транзакции (для разбитых
+    операций указывает на исходную flash.transactions, split_id — на
+    конкретную часть)."""
     where = ["date_trunc('month', operation_date) = %s"]
     params = [period]
     if statya is not None:
@@ -870,6 +875,14 @@ def get_transactions(period, statya=None, stroka=None):
     if stroka is not None:
         where.append('"Строка отчета" = %s')
         params.append(stroka)
+    if proekt == NO_PROJECT:
+        where.append('"Проект" IS NULL')
+    elif proekt is not None:
+        where.append('"Проект" = %s')
+        params.append(proekt)
+    if wallet is not None:
+        where.append('wallet = %s')
+        params.append(wallet)
     return query(
         f'''SELECT id, split_id, operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet,
                    "Признак", "Категория", "Статья", "Проект", "Контрагент_report", "Строка отчета",
