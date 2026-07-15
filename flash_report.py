@@ -671,13 +671,67 @@ def get_unmatched(period=None, limit=500):
     )
 
 
+def get_transactions(period, statya=None, stroka=None):
+    """Список операций за период — для drill-down по строке отчёта
+    (statya/stroka) с странице /flash: и уже размеченные, и нет, чтобы можно
+    было провалиться в любую агрегированную строку и отредактировать любую
+    отдельную операцию, а не только явно "неразмеченные"."""
+    where = ["date_trunc('month', operation_date) = %s"]
+    params = [period]
+    if statya is not None:
+        where.append('"Статья" = %s')
+        params.append(statya)
+    if stroka is not None:
+        where.append('"Строка отчета" = %s')
+        params.append(stroka)
+    return query(
+        f'''SELECT id, operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet,
+                   "Признак", "Категория", "Статья", "Проект", "Контрагент_report", "Строка отчета",
+                   classification_source
+           FROM flash.transactions WHERE {" AND ".join(where)}
+           ORDER BY abs(amount) DESC''',
+        tuple(params)
+    )
+
+
+def export_for_review(period):
+    """Полный дамп операций месяца (размеченные и нет, все поля) — для ручной
+    проверки бухгалтером в Excel, в отличие от export_for_load(), который
+    отдаёт только размеченные строки в узком формате листа "загрузка"."""
+    rows = query(
+        '''SELECT operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet,
+                  bank_format, source_file, "Признак", "Категория", "Статья", "Проект",
+                  "Контрагент_report", "Строка отчета", classification_source
+           FROM flash.transactions WHERE date_trunc('month', operation_date) = %s
+           ORDER BY operation_date, id''',
+        (period,)
+    )
+    headers = [
+        'Дата', 'Сумма', 'Контрагент (банк)', 'ИНН', 'Назначение платежа', 'Кошелёк',
+        'Формат выписки', 'Файл', 'Признак', 'Категория', 'Статья', 'Проект',
+        'Контрагент (отчёт)', 'Строка отчета', 'Источник разметки',
+    ]
+    out_rows = [[
+        r['operation_date'], float(r['amount']), r['counterparty_name'], r['counterparty_inn'],
+        r['purpose_text'], r['wallet'], r['bank_format'], r['source_file'],
+        r['Признак'], r['Категория'], r['Статья'], r['Проект'],
+        r['Контрагент_report'], r['Строка отчета'], r['classification_source'],
+    ] for r in rows]
+    return headers, out_rows
+
+
 def set_manual_classification(txn_id, fields, username):
     """Ручная правка одной операции бухгалтером — заодно заводит/обновляет
-    правило по ИНН (или по назначению платежа, если ИНН нет), чтобы это же
-    правило подхватило все будущие похожие операции. fields: Признак,
-    Категория, Статья, Проект, Контрагент_report, Строка отчета (последнее —
-    из фиксированного списка pl_report.ALL_LINES, оно определяет, куда строка
-    попадёт в Выручка/Переменные/Постоянные при подсчёте — см. month_breakdown)."""
+    правило по ИНН (или по назначению платежа, если ИНН нет) и СРАЗУ ЖЕ
+    применяет его ко всем остальным ещё неразмеченным операциям (по всем
+    периодам, не только текущему) — не только будущие загрузки подхватят
+    правило, но и уже загруженные "соседние" операции того же контрагента
+    доразмечаются мгновенно, без re-upload. fields: Признак, Категория,
+    Статья, Проект, Контрагент_report, Строка отчета (последнее — из
+    фиксированного списка pl_report.ALL_LINES, определяет, куда строка
+    попадёт в Выручка/Переменные/Постоянные — см. month_breakdown).
+    Возвращает число дополнительно доразмеченных операций (без учёта самой
+    txn_id)."""
     txn = query_one('SELECT counterparty_inn, purpose_text FROM flash.transactions WHERE id = %s', (txn_id,))
     if txn is None:
         raise ValueError('Операция не найдена')
@@ -696,7 +750,7 @@ def set_manual_classification(txn_id, fields, username):
     elif txn['purpose_text']:
         match_type, match_value = 'purpose_contains', txn['purpose_text'][:60].strip()
     else:
-        return
+        return 0
 
     existing = query_one(
         'SELECT id FROM flash.classification_rules WHERE match_type = %s AND match_value = %s',
@@ -718,6 +772,37 @@ def set_manual_classification(txn_id, fields, username):
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 10, 'manual', %s)''',
             (match_type, match_value) + values + (username,)
         )
+
+    if match_type == 'inn':
+        pending = query_one(
+            '''SELECT count(*) AS c FROM flash.transactions
+               WHERE classification_source='unmatched' AND counterparty_inn = %s''',
+            (match_value,)
+        )
+        execute(
+            '''UPDATE flash.transactions SET "Признак"=%s, "Категория"=%s, "Статья"=%s, "Проект"=%s,
+               "Контрагент_report"=%s, "Строка отчета"=%s, classification_source='rule'
+               WHERE classification_source='unmatched' AND counterparty_inn = %s''',
+            values + (match_value,)
+        )
+    else:
+        # strpos(), не LIKE — совпадение той же чистой Python-подстрокой, что
+        # использует _match_rule(), без риска, что "%"/"_" внутри match_value
+        # (реальные суммы в тексте платежа) сработают как LIKE-wildcard.
+        pending = query_one(
+            '''SELECT count(*) AS c FROM flash.transactions
+               WHERE classification_source='unmatched' AND purpose_text IS NOT NULL
+                     AND strpos(purpose_text, %s) > 0''',
+            (match_value,)
+        )
+        execute(
+            '''UPDATE flash.transactions SET "Признак"=%s, "Категория"=%s, "Статья"=%s, "Проект"=%s,
+               "Контрагент_report"=%s, "Строка отчета"=%s, classification_source='rule'
+               WHERE classification_source='unmatched' AND purpose_text IS NOT NULL
+                     AND strpos(purpose_text, %s) > 0''',
+            values + (match_value,)
+        )
+    return pending['c']
 
 
 _MONTH_NAMES_RU = [

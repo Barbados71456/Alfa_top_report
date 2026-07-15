@@ -28,6 +28,7 @@
         </form>
         {% endif %}
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_load') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Файл для загрузки в FinancialData</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_review') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Выгрузить всё для проверки</a>
     </div>
     {% endif %}
 </div>
@@ -86,7 +87,8 @@
         {% if data.buckets[key] %}
         <tr><td class="label-col fw-bold" colspan="3">{{ title }}</td></tr>
         {% for r in data.buckets[key] %}
-        <tr>
+        <tr class="flash-drill-row" role="button" style="cursor:pointer"
+            onclick="openDrilldown({{ (r['Статья'] or '')|tojson }}, {{ (r['Строка отчета'] or '')|tojson }})">
             <td class="label-col ps-3">{{ r['Статья'] or '(без статьи)' }} <span class="text-secondary small">— {{ r['Строка отчета'] }}</span></td>
             <td class="text-end {% if r.amount > 0 %}val-pos{% elif r.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(r.amount).replace(',', ' ') }}</td>
             <td class="text-end text-secondary">{{ r.cnt }}</td>
@@ -152,7 +154,7 @@
             <td>{{ t.wallet or '—' }}</td>
             {% if session.get('role') in ('admin','accountant') %}
             <td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#classifyModal"
-                onclick="fillClassifyModal({{ t.id }}, {{ (t.counterparty_name or '')|tojson }}, {{ (t.purpose_text or '')|tojson }})">Разметить</button></td>
+                onclick='fillClassifyModal({{ {"id": t.id, "counterparty_name": t.counterparty_name, "purpose_text": t.purpose_text, "Признак": None, "Категория": None, "Статья": None, "Проект": None, "Контрагент_report": None, "Строка отчета": None}|tojson }})'>Разметить</button></td>
             {% endif %}
         </tr>
         {% endfor %}
@@ -163,13 +165,12 @@
     {% endif %}
 </div>
 
-{% if session.get('role') in ('admin','accountant') %}
 <div class="modal fade" id="classifyModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="post" id="classifyForm">
                 <div class="modal-header">
-                    <h5 class="modal-title">Разметить операцию</h5>
+                    <h5 class="modal-title" id="classifyTitle">Разметить операцию</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -177,31 +178,31 @@
                     <input type="hidden" name="period" value="{{ period.strftime('%Y-%m') }}">
                     <div class="mb-2">
                         <label class="form-label small mb-1">Признак</label>
-                        <input type="text" name="priznak" class="form-control form-control-sm" list="priznakList">
+                        <input type="text" name="priznak" id="cf-priznak" class="form-control form-control-sm" list="priznakList">
                         <datalist id="priznakList">{% for v in priznaki %}<option value="{{ v }}">{% endfor %}</datalist>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Категория</label>
-                        <input type="text" name="kategoria" class="form-control form-control-sm" list="kategoriaList">
+                        <input type="text" name="kategoria" id="cf-kategoria" class="form-control form-control-sm" list="kategoriaList">
                         <datalist id="kategoriaList">{% for v in kategorii %}<option value="{{ v }}">{% endfor %}</datalist>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Статья</label>
-                        <input type="text" name="statya" class="form-control form-control-sm" list="statyaList">
+                        <input type="text" name="statya" id="cf-statya" class="form-control form-control-sm" list="statyaList">
                         <datalist id="statyaList">{% for v in statyi %}<option value="{{ v }}">{% endfor %}</datalist>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Проект</label>
-                        <input type="text" name="proekt" class="form-control form-control-sm" list="projectList">
+                        <input type="text" name="proekt" id="cf-proekt" class="form-control form-control-sm" list="projectList">
                         <datalist id="projectList">{% for v in projects %}<option value="{{ v }}">{% endfor %}</datalist>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Контрагент (для отчёта)</label>
-                        <input type="text" name="kontragent" class="form-control form-control-sm">
+                        <input type="text" name="kontragent" id="cf-kontragent" class="form-control form-control-sm">
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-1">Строка отчета <span class="text-danger">*</span></label>
-                        <select name="stroka" class="form-select form-select-sm" required>
+                        <select name="stroka" id="cf-stroka" class="form-select form-select-sm" required>
                             <option value=""></option>
                             {% for l in all_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
                         </select>
@@ -215,13 +216,84 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="drilldownModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="drilldownTitle">Операции по статье</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body table-responsive">
+                <table class="table report-table mb-0">
+                    <thead><tr><th>Дата</th><th class="text-end">Сумма</th><th>Контрагент</th><th>Назначение платежа</th><th>Источник</th><th></th></tr></thead>
+                    <tbody id="drilldownBody"><tr><td colspan="6" class="text-secondary">Загрузка…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-function fillClassifyModal(id, counterparty, purpose) {
-    document.getElementById('classifyForm').action = '/flash/classify/' + id;
-    document.getElementById('classifyInfo').textContent = (counterparty || '(без контрагента)') + ' — ' + (purpose || '');
+function fillClassifyModal(row) {
+    document.getElementById('classifyForm').action = '/flash/classify/' + row.id;
+    document.getElementById('classifyInfo').textContent = (row.counterparty_name || '(без контрагента)') + ' — ' + (row.purpose_text || '');
+    document.getElementById('classifyTitle').textContent = row.classification_source ? 'Изменить разметку операции' : 'Разметить операцию';
+    document.getElementById('cf-priznak').value = row['Признак'] || '';
+    document.getElementById('cf-kategoria').value = row['Категория'] || '';
+    document.getElementById('cf-statya').value = row['Статья'] || '';
+    document.getElementById('cf-proekt').value = row['Проект'] || '';
+    document.getElementById('cf-kontragent').value = row['Контрагент_report'] || '';
+    document.getElementById('cf-stroka').value = row['Строка отчета'] || '';
+}
+
+let _drilldownRows = [];
+
+function _escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : String(s);
+    return div.innerHTML;
+}
+
+function openDrilldown(statya, stroka) {
+    document.getElementById('drilldownTitle').textContent = 'Операции: ' + (statya || '(без статьи)') + ' — ' + stroka;
+    const body = document.getElementById('drilldownBody');
+    body.innerHTML = '<tr><td colspan="6" class="text-secondary">Загрузка…</td></tr>';
+    new bootstrap.Modal(document.getElementById('drilldownModal')).show();
+
+    const params = new URLSearchParams({ period: '{{ period.isoformat() }}', stroka: stroka });
+    if (statya) params.set('statya', statya);
+    fetch('/api/flash_transactions?' + params.toString())
+        .then(r => r.json())
+        .then(rows => {
+            _drilldownRows = rows;
+            if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="text-secondary">Нет операций</td></tr>'; return; }
+            const canEdit = {{ 'true' if session.get('role') in ('admin','accountant') else 'false' }};
+            body.innerHTML = rows.map(row => {
+                const amtCls = row.amount > 0 ? 'val-pos' : (row.amount < 0 ? 'val-neg' : '');
+                const editBtn = canEdit
+                    ? `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="editFromDrilldownById(${row.id})">Изменить</button>`
+                    : '';
+                return `<tr>
+                    <td>${_escapeHtml(row.operation_date.split('-').reverse().join('.'))}</td>
+                    <td class="text-end ${amtCls}">${row.amount.toLocaleString('ru-RU', {maximumFractionDigits:0})}</td>
+                    <td>${_escapeHtml(row.counterparty_name || '—')}</td>
+                    <td class="small text-secondary" style="max-width:320px; white-space:normal; word-break:break-word;">${_escapeHtml(row.purpose_text || '')}</td>
+                    <td class="small text-secondary">${_escapeHtml(row.classification_source)}</td>
+                    <td>${editBtn}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+function editFromDrilldownById(id) {
+    const row = _drilldownRows.find(r => r.id === id);
+    if (!row) return;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('drilldownModal')).hide();
+    fillClassifyModal(row);
+    new bootstrap.Modal(document.getElementById('classifyModal')).show();
 }
 </script>
-{% endif %}
 
 {% endif %}
 {% endblock %}

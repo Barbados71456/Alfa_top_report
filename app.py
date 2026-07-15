@@ -588,10 +588,30 @@ def flash_classify(txn_id):
         'Контрагент_report': (request.form.get('kontragent') or '').strip() or None,
         'Строка отчета': (request.form.get('stroka') or '').strip() or None,
     }
-    flr.set_manual_classification(txn_id, fields, session.get('username'))
-    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}')
-    flash('Операция размечена', 'success')
+    also_updated = flr.set_manual_classification(txn_id, fields, session.get('username'))
+    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}, ещё доразмечено: {also_updated}')
+    if also_updated:
+        flash(f'Операция размечена, заодно доразмечено ещё {also_updated} похожих операций', 'success')
+    else:
+        flash('Операция размечена', 'success')
     return redirect(url_for('flash_page', period=request.form.get('period')))
+
+
+@app.route('/api/flash_transactions')
+@report_required
+def api_flash_transactions():
+    period_str = request.args.get('period')
+    if not period_str:
+        return jsonify([])
+    period = date.fromisoformat(period_str)
+    rows = flr.get_transactions(period, statya=request.args.get('statya') or None, stroka=request.args.get('stroka') or None)
+    return jsonify([{
+        'id': r['id'], 'operation_date': r['operation_date'].isoformat(), 'amount': float(r['amount']),
+        'counterparty_name': r['counterparty_name'], 'purpose_text': r['purpose_text'], 'wallet': r['wallet'],
+        'Признак': r['Признак'], 'Категория': r['Категория'], 'Статья': r['Статья'], 'Проект': r['Проект'],
+        'Контрагент_report': r['Контрагент_report'], 'Строка отчета': r['Строка отчета'],
+        'classification_source': r['classification_source'],
+    } for r in rows])
 
 
 @app.route('/investment')
@@ -1125,6 +1145,13 @@ def export_report(kind):
             period = date.fromisoformat(period_str)
             rows = flr.export_for_load(period)
             sheets = [('загрузка', etl.FACT_COLUMNS, [[r[c] for c in etl.FACT_COLUMNS] for r in rows])]
+        elif kind == 'flash_review':
+            period_str = request.args.get('period')
+            if not period_str:
+                return {'error': 'period обязателен'}, 400
+            period = date.fromisoformat(period_str)
+            headers, rows = flr.export_for_review(period)
+            sheets = [('flash', headers, rows)]
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
     except Exception:
