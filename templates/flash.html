@@ -88,6 +88,10 @@
         <div class="kpi-value {% if data.net_profit > 0 %}val-pos{% elif data.net_profit < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(data.net_profit).replace(',', ' ') }}</div>
     </div>
     <div class="card p-3 flex-fill kpi-card">
+        <div class="kpi-label">Сальдо неразмеченных</div>
+        <div class="kpi-value {% if summary.total_unmatched > 0 %}val-pos{% elif summary.total_unmatched < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(summary.total_unmatched).replace(',', ' ') }}</div>
+    </div>
+    <div class="card p-3 flex-fill kpi-card">
         <div class="kpi-label">Размечено операций</div>
         <div class="kpi-value">{{ summary.cnt_matched }} / {{ summary.cnt_matched + summary.cnt_unmatched }}
             <span class="small text-secondary">({{ '%.1f'|format(100 * summary.cnt_matched / (summary.cnt_matched + summary.cnt_unmatched)) if (summary.cnt_matched + summary.cnt_unmatched) else 0 }}%)</span></div>
