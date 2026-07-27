@@ -8,7 +8,8 @@
         <p class="page-subtitle mb-0">
             Предварительная (неаудированная) картина месяца прямо по выпискам — без ожидания
             ежемесячного бухгалтерского закрытия. Классификация выучена по уже готовым данным
-            <code>FinancialData</code>; часть статей (распределение затрат, начисления, займы
+            <code>FinancialData</code>, а проект поступлений определяется по ДО или ФИО
+            в назначении платежа через CRM; часть статей (распределение затрат, начисления, займы
             агрегатом) сюда не попадает по конструкции и будет отличаться от финального П&Л.
         </p>
     </div>
@@ -25,6 +26,10 @@
         <form method="post" action="{{ url_for('flash_relearn') }}">
             <input type="hidden" name="period" value="{{ period.isoformat() }}">
             <button type="submit" class="btn btn-sm btn-outline-secondary" title="Пересчитать правила классификации по этому периоду против актуальной FinancialData — не требует новой загрузки файлов">Дообучить классификацию</button>
+        </form>
+        <form method="post" action="{{ url_for('flash_sync_crm_projects') }}">
+            <input type="hidden" name="period" value="{{ period.isoformat() }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Повторно извлечь ДО/ФИО из назначений всех поступлений месяца и взять актуальный проект из CRM">Сверить проекты с CRM</button>
         </form>
         {% endif %}
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_load') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Файл для загрузки в FinancialData</a>
@@ -246,7 +251,7 @@
     </div>
     {% if unmatched %}
     <table class="table report-table mb-0">
-        <thead><tr><th>Дата</th><th class="text-end">Сумма</th><th>Контрагент</th><th>Назначение платежа</th><th>Кошелёк</th>{% if session.get('role') in ('admin','accountant') %}<th></th>{% endif %}</tr></thead>
+        <thead><tr><th>Дата</th><th class="text-end">Сумма</th><th>Контрагент</th><th>Назначение платежа</th><th>Проект CRM</th><th>Кошелёк</th>{% if session.get('role') in ('admin','accountant') %}<th></th>{% endif %}</tr></thead>
         <tbody>
         {% for t in unmatched %}
         <tr class="table-danger">
@@ -254,11 +259,12 @@
             <td class="text-end {% if t.amount > 0 %}val-pos{% elif t.amount < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(t.amount).replace(',', ' ') }}</td>
             <td>{{ t.counterparty_name or '—' }}</td>
             <td class="small text-secondary" style="max-width:360px; white-space:normal; word-break:break-word;">{{ t.purpose_text or '' }}</td>
+            <td>{{ t['Проект'] or '—' }}</td>
             <td>{{ t.wallet or '—' }}</td>
             {% if session.get('role') in ('admin','accountant') %}
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#classifyModal"
-                    onclick='fillClassifyModal({{ {"id": t.id, "counterparty_name": t.counterparty_name, "purpose_text": t.purpose_text, "Признак": None, "Категория": None, "Статья": None, "Проект": None, "Контрагент_report": None, "Строка отчета": None}|tojson }})'>Разметить</button>
+                    onclick='fillClassifyModal({{ {"id": t.id, "counterparty_name": t.counterparty_name, "purpose_text": t.purpose_text, "Признак": None, "Категория": None, "Статья": None, "Проект": t["Проект"], "Контрагент_report": None, "Строка отчета": None}|tojson }})'>Разметить</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSplitEditor({{ t.id }})">Разбить</button>
             </td>
             {% endif %}

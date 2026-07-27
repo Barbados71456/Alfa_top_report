@@ -534,22 +534,41 @@ def flash_upload():
     files = request.files.getlist('statements')
     period_str = request.form.get('period')
     results, errors = [], []
+    crm_index = None
     for f in files:
         if not f or not f.filename:
             continue
         try:
-            res = flr.import_statement(f.stream, f.filename, session.get('username'))
+            if crm_index is None:
+                crm_index = flr.load_crm_project_index()
+            res = flr.import_statement(
+                f.stream, f.filename, session.get('username'),
+                crm_index=crm_index,
+            )
             results.append((f.filename, res))
         except Exception as e:
             errors.append((f.filename, str(e)))
 
+    crm_stats = {
+        'matched': sum(r.get('crm_case_matched', 0) for _, r in results),
+        'with_project': sum(r.get('crm_project_matched', 0) for _, r in results),
+        'updated': 0,
+    }
     if period_str and results:
-        period = date.fromisoformat(period_str)
+        period = date.fromisoformat(
+            period_str + '-01' if len(period_str) == 7 else period_str
+        )
         learned = flr.learn_rules(period, created_by=session.get('username'))
         wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
+        # learn_rules берёт старый проект из FinancialData; CRM должна остаться
+        # финальным источником проекта для всех поступлений.
+        crm_stats = flr.apply_crm_projects(period, crm_index=crm_index)
         audit.log_action(
             session.get('username'), 'flash_upload',
-            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, кошельков: {wallets_learned}'
+            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, '
+            f'кошельков: {wallets_learned}, CRM совпадений: {crm_stats["matched"]}, '
+            f'CRM проектов: {crm_stats["with_project"]}, '
+            f'CRM обновлений проекта: {crm_stats["updated"]}'
         )
 
     if errors:
@@ -557,7 +576,13 @@ def flash_upload():
     if results:
         total = sum(r['total'] for _, r in results)
         matched = sum(r['matched'] for _, r in results)
-        flash(f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}', 'success')
+        flash(
+            f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}. '
+            f'По ДО/ФИО найдено в CRM {crm_stats["matched"]} поступлений, '
+            f'проект получен у {crm_stats["with_project"]}, '
+            f'обновлён у {crm_stats["updated"]}.',
+            'success'
+        )
     elif not errors:
         flash('Выберите хотя бы один файл выписки', 'danger')
 
@@ -575,13 +600,47 @@ def flash_relearn():
     learned = flr.learn_rules(period, created_by=session.get('username'))
     wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
     reclassified = flr.reclassify_unmatched(period)
+    crm_stats = flr.apply_crm_projects(period)
     audit.log_action(
         session.get('username'), 'flash_relearn',
-        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, доразмечено по правилам: {reclassified}'
+        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, '
+        f'доразмечено по правилам: {reclassified}, CRM совпадений: {crm_stats["matched"]}, '
+        f'CRM проектов: {crm_stats["with_project"]}, '
+        f'CRM обновлений проекта: {crm_stats["updated"]}'
     )
     flash(
         f'Классификация пересчитана против FinancialData (новых правил: {learned}, кошельков: {wallets_learned}) '
-        f'и по уже известным правилам доразмечено ещё {reclassified} операций.',
+        f'и по уже известным правилам доразмечено ещё {reclassified} операций. '
+        f'По ДО/ФИО найдено в CRM {crm_stats["matched"]} поступлений, '
+        f'проект получен у {crm_stats["with_project"]}, '
+        f'обновлён у {crm_stats["updated"]}.',
+        'success'
+    )
+    return redirect(url_for('flash_page', period=period_str))
+
+
+@app.route('/flash/sync-crm-projects', methods=['POST'])
+@classifier_required
+def flash_sync_crm_projects():
+    period_str = request.form.get('period')
+    if not period_str:
+        flash('Не выбран период', 'danger')
+        return redirect(url_for('flash_page'))
+    period = date.fromisoformat(period_str)
+    stats = flr.apply_crm_projects(period)
+    audit.log_action(
+        session.get('username'), 'flash_sync_crm_projects',
+        f'период: {period}, проверено: {stats["scanned"]}, CRM совпадений: '
+        f'{stats["matched"]}, CRM проектов: {stats["with_project"]}, '
+        f'обновлений проекта: {stats["updated"]}, '
+        f'неоднозначных: {stats["ambiguous"]}'
+    )
+    flash(
+        f'Проекты сверены с CRM: проверено поступлений {stats["scanned"]}, '
+        f'найдено по ДО/ФИО {stats["matched"]}, проект получен у '
+        f'{stats["with_project"]}, обновлено {stats["updated"]}. '
+        f'Без проекта в CRM: {stats["without_project"]}, '
+        f'неоднозначных совпадений: {stats["ambiguous"]}.',
         'success'
     )
     return redirect(url_for('flash_page', period=period_str))

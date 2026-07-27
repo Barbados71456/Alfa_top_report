@@ -9,7 +9,10 @@
 за тот же период по (Дата, Сумма, Контрагент) — см. learn_rules(). Новые
 контрагенты/формулировки, которых ещё не было в истории, остаются
 "не размечено" и ждут точечной правки бухгалтера (см. flash.classification_rules,
-source='manual').
+source='manual'). Для положительных операций поле "Проект" уточняется
+отдельно: из назначения извлекается точный ДО или ФИО должника, затем проект
+берётся из crm_alfa.v_case_reporting. Неоднозначный результат существующий
+проект не стирает.
 
 Поддерживаемые форматы выписок (определяются по структуре листа, см. detect_format):
   alfabank      — "_Выписка_<счёт>_<период>.xlsx", шапка + двухстрочный заголовок
@@ -30,6 +33,218 @@ from db import execute, execute_values, query, query_one
 _XML_NS = {'ss': 'urn:schemas-microsoft-com:office:spreadsheet'}
 
 BONUS_LINES = None  # зарезервировано, не используется — flash не размечает бонусы
+
+_CRM_TOKEN_RE = re.compile(r'[0-9A-ZА-Я]+')
+_CRM_SHORT_DO_CUES = {'ДО', 'ДЕЛО', 'ДОГОВОР', 'ДОГОВОРА', 'ДОГОВОРУ', 'КД'}
+
+
+def _crm_tokens(value):
+    """Нормализует ДО/ФИО и назначение платежа для точного поиска по словам.
+
+    Пунктуация банковских назначений нестабильна (№, кавычки, слэши,
+    подчёркивания), поэтому сравниваем последовательности буквенно-цифровых
+    токенов. Ё и Е считаем одной буквой, регистр не учитываем.
+    """
+    return tuple(_CRM_TOKEN_RE.findall(str(value or '').upper().replace('Ё', 'Е')))
+
+
+def _build_crm_project_index(rows):
+    """Строит индекс ДО/ФИО из crm_alfa.v_case_reporting.
+
+    В индекс попадают и дела без проекта: это важно для контроля
+    неоднозначности — одно одноимённое размеченное дело не должно перетянуть
+    на свой проект другое дело без настроенной связи.
+    """
+    do_index = defaultdict(list)
+    fio_index = defaultdict(list)
+    for row in rows:
+        record = {
+            'case_id': row.get('case_id'),
+            'project': (row.get('project') or '').strip() or None,
+            'do_number': (row.get('do_number') or '').strip() or None,
+            'debtor_name': (row.get('debtor_name') or '').strip() or None,
+        }
+        do_key = _crm_tokens(record['do_number'])
+        fio_key = _crm_tokens(record['debtor_name'])
+        if do_key:
+            do_index[do_key].append(record)
+        # Однословные значения слишком легко случайно встретить в назначении.
+        if 2 <= len(fio_key) <= 6:
+            fio_index[fio_key].append(record)
+    return {
+        'do': do_index,
+        'fio': fio_index,
+        'do_lengths': sorted({len(key) for key in do_index}, reverse=True),
+        'fio_lengths': sorted({len(key) for key in fio_index}, reverse=True),
+    }
+
+
+def load_crm_project_index():
+    """Загружает актуальные ДО, ФИО и проекты из read-витрины CRM."""
+    return _build_crm_project_index(query(
+        '''SELECT case_id, do_number, debtor_name, project
+           FROM crm_alfa.v_case_reporting'''
+    ))
+
+
+def _window_matches(tokens, lookup, lengths, *, do_mode=False):
+    """Находит точные последовательности токенов без частичных совпадений."""
+    matches = []
+    seen = set()
+    for size in lengths:
+        if size > len(tokens):
+            continue
+        for start in range(len(tokens) - size + 1):
+            key = tokens[start:start + size]
+            records = lookup.get(key)
+            if not records:
+                continue
+            if do_mode and size == 1 and len(key[0]) < 8:
+                previous = tokens[start - 1] if start else None
+                if previous not in _CRM_SHORT_DO_CUES:
+                    continue
+            marker = (start, key)
+            if marker not in seen:
+                seen.add(marker)
+                matches.append((start, key, records))
+
+    # Если полное ФИО/ДО содержит более короткий ключ другой CRM-карточки,
+    # полное совпадение сильнее. Непересекающиеся ключи (например должник и
+    # ФИО пристава в одном назначении) сохраняем для контроля неоднозначности.
+    selected = []
+    selected_spans = []
+    for match in sorted(matches, key=lambda item: (-len(item[1]), item[0])):
+        start, key, _records = match
+        end = start + len(key)
+        if any(start >= kept_start and end <= kept_end
+               for kept_start, kept_end in selected_spans):
+            continue
+        selected.append(match)
+        selected_spans.append((start, end))
+    return selected
+
+
+def _crm_match_result(matches, match_type):
+    records = {
+        (record['case_id'], record['project'], record['do_number'], record['debtor_name'])
+        for _start, _key, found in matches
+        for record in found
+    }
+    if not records:
+        return None
+
+    projects = {record[1] for record in records if record[1]}
+    case_ids = {record[0] for record in records if record[0] is not None}
+    has_unmapped_case = any(record[1] is None for record in records)
+    ambiguous = (
+        len(projects) > 1
+        or (match_type == 'fio' and len(case_ids) > 1 and has_unmapped_case)
+    )
+    values = {
+        record[2] if match_type == 'do' else record[3]
+        for record in records
+        if (record[2] if match_type == 'do' else record[3])
+    }
+    return {
+        'matched': True,
+        'project': next(iter(projects)) if len(projects) == 1 and not ambiguous else None,
+        'ambiguous': ambiguous,
+        'match_type': match_type,
+        'match_value': ', '.join(sorted(values)),
+        'case_id': next(iter(case_ids)) if len(case_ids) == 1 else None,
+    }
+
+
+def resolve_crm_project(purpose_text, crm_index):
+    """Определяет проект поступления по назначению платежа через CRM.
+
+    Приоритет:
+      1. точный номер ДО;
+      2. точное нормализованное ФИО должника.
+
+    Проект возвращается только для одной карточки с заполненным проектом
+    либо нескольких карточек с одинаковым заполненным проектом. Карточки
+    одноимённого должника без проекта делают результат неоднозначным.
+    Совпавший ДО считается более сильным сигналом и не подменяется ФИО из
+    того же текста.
+    """
+    tokens = _crm_tokens(purpose_text)
+    if not tokens:
+        return {
+            'matched': False, 'project': None, 'ambiguous': False,
+            'match_type': None, 'match_value': None, 'case_id': None,
+        }
+
+    do_matches = _window_matches(
+        tokens, crm_index['do'], crm_index['do_lengths'], do_mode=True
+    )
+    do_result = _crm_match_result(do_matches, 'do')
+    if do_result:
+        return do_result
+
+    fio_matches = _window_matches(
+        tokens, crm_index['fio'], crm_index['fio_lengths']
+    )
+    fio_result = _crm_match_result(fio_matches, 'fio')
+    if fio_result:
+        return fio_result
+
+    return {
+        'matched': False, 'project': None, 'ambiguous': False,
+        'match_type': None, 'match_value': None, 'case_id': None,
+    }
+
+
+def apply_crm_projects(period=None, crm_index=None):
+    """Пересчитывает проекты всех поступлений из назначения платежа и CRM.
+
+    Меняется только "Проект"; статья и прочая классификация остаются из
+    Flash. Если CRM не дала один однозначный непустой проект, существующее
+    значение не стирается. Ручные разбиения не трогаются, поскольку одна
+    банковская операция там намеренно распределена по нескольким проектам.
+    """
+    crm_index = crm_index or load_crm_project_index()
+    where = ["amount > 0", "classification_source IS DISTINCT FROM 'split'"]
+    params = []
+    if period is not None:
+        where.append("date_trunc('month', operation_date) = %s")
+        params.append(period)
+    transactions = query(
+        f'''SELECT id, purpose_text, "Проект"
+            FROM flash.transactions
+            WHERE {" AND ".join(where)}''',
+        tuple(params),
+    )
+
+    stats = {
+        'scanned': len(transactions), 'matched': 0, 'updated': 0,
+        'with_project': 0, 'without_project': 0, 'ambiguous': 0,
+    }
+    updates = []
+    for txn in transactions:
+        result = resolve_crm_project(txn['purpose_text'], crm_index)
+        if not result['matched']:
+            continue
+        stats['matched'] += 1
+        if result['ambiguous']:
+            stats['ambiguous'] += 1
+        if not result['project']:
+            stats['without_project'] += 1
+            continue
+        stats['with_project'] += 1
+        if result['project'] != txn['Проект']:
+            updates.append((result['project'], txn['id']))
+
+    if updates:
+        execute_values(
+            '''UPDATE flash.transactions AS t
+               SET "Проект" = v.project
+               FROM (VALUES %s) AS v(project, id)
+               WHERE t.id = v.id''',
+            updates,
+        )
+    stats['updated'] = len(updates)
+    return stats
 
 
 def _norm_amount(v):
@@ -651,7 +866,7 @@ def wallet_reconciliation(period):
     return rows
 
 
-def import_statement(file_obj, filename, username):
+def import_statement(file_obj, filename, username, crm_index=None):
     """Разбирает один файл выписки, классифицирует построчно по уже выученным
     правилам и сохраняет в flash.transactions. ON CONFLICT — по содержимому
     операции (bank_format, account_number, document_number, дата, сумма, ИНН,
@@ -666,18 +881,21 @@ def import_statement(file_obj, filename, username):
     проверено на живых данных: повторная загрузка того же файла задвоила
     ровно те 2 строки, где ИНН плательщика отсутствовал.
 
-    Правила/алиасы кошельков грузятся один раз на файл и классификация идёт
-    в памяти (не по запросу на строку) — на файле в тысячи операций на
-    удалённой Render Postgres это разница между минутами и секундами.
-    Возвращает {bank_format, total, matched}."""
+    Правила, алиасы кошельков и CRM-индекс грузятся один раз на файл,
+    классификация идёт в памяти (не по запросу на строку) — на файле в
+    тысячи операций на удалённой Render Postgres это разница между минутами
+    и секундами. Возвращает счётчики разбора, классификации и CRM-поиска."""
     bank_format, rows = detect_and_parse(file_obj, filename)
     if not rows:
         raise ValueError(f'В файле "{filename}" не найдено ни одной операции — проверь формат.')
 
     inn_rules, purpose_rules = _load_classification_rules()
     wallet_by_account = _load_wallet_aliases()
+    crm_index = crm_index or load_crm_project_index()
 
     matched = 0
+    crm_case_matched = 0
+    crm_project_matched = 0
     hit_rule_ids = []
     values = []
     for r in rows:
@@ -686,17 +904,30 @@ def import_statement(file_obj, filename, username):
             source = 'rule'
             matched += 1
             hit_rule_ids.append(rule_id)
-            fields = (rule['Признак'], rule['Категория'], rule['Статья'], rule['Проект'], rule['Контрагент_report'],
-                      rule['Строка отчета'])
+            fields = [
+                rule['Признак'], rule['Категория'], rule['Статья'],
+                rule['Проект'], rule['Контрагент_report'], rule['Строка отчета'],
+            ]
         else:
             source = 'unmatched'
-            fields = (None, None, None, None, None, None)
+            fields = [None, None, None, None, None, None]
+
+        # Для любого поступления проект берётся из CRM по ДО/ФИО в назначении
+        # платежа. Если CRM не дала однозначный проект, сохраняем прежний
+        # результат правила (или NULL для неразмеченной операции).
+        if r['amount'] > 0:
+            crm_result = resolve_crm_project(r['purpose_text'], crm_index)
+            if crm_result['matched']:
+                crm_case_matched += 1
+            if crm_result['project']:
+                fields[3] = crm_result['project']
+                crm_project_matched += 1
 
         wallet = wallet_by_account.get(r['account_number'])
         values.append((
             filename, bank_format, r['account_number'], wallet, r['operation_date'], r['document_number'], r['amount'],
             r['counterparty_name'], r['counterparty_inn'], r['purpose_text'],
-        ) + fields + (source, username))
+        ) + tuple(fields) + (source, username))
 
     execute_values(
         '''INSERT INTO flash.transactions
@@ -713,7 +944,13 @@ def import_statement(file_obj, filename, username):
     if hit_rule_ids:
         execute('UPDATE flash.classification_rules SET hits = hits + 1 WHERE id = ANY(%s)', (hit_rule_ids,))
 
-    return {'bank_format': bank_format, 'total': len(rows), 'matched': matched}
+    return {
+        'bank_format': bank_format,
+        'total': len(rows),
+        'matched': matched,
+        'crm_case_matched': crm_case_matched,
+        'crm_project_matched': crm_project_matched,
+    }
 
 
 def _effective_rows_sql():
@@ -847,7 +1084,8 @@ def get_unmatched(period=None, limit=500):
     else:
         where = 'WHERE'
     return query(
-        f'''SELECT id, operation_date, amount, counterparty_name, counterparty_inn, purpose_text, wallet
+        f'''SELECT id, operation_date, amount, counterparty_name, counterparty_inn,
+                   purpose_text, wallet, "Проект"
            FROM flash.transactions {where} classification_source = 'unmatched'
            ORDER BY abs(amount) DESC LIMIT %s''',
         params + (limit,)
