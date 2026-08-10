@@ -1,0 +1,14 @@
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: 3.11
+
+build:
+  requirementsPath: requirements.txt
+  useCache: false
+
+run:
+  command: gunicorn app:app --bind 0.0.0.0:80 --timeout 120
+  persistenceMount: /data
+  containerPort: 80

@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import psycopg2
 import psycopg2.extras
 from flask import g, has_app_context
@@ -29,6 +31,22 @@ def close_connection(exc=None):
     conn = g.pop('db_conn', None)
     if conn is not None:
         conn.close()
+
+
+@contextmanager
+def transaction():
+    """Одна атомарная транзакция для составных операций."""
+    app_connection = has_app_context()
+    conn = _request_connection() if app_connection else _connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if not app_connection:
+            conn.close()
 
 
 def query(sql, params=None):

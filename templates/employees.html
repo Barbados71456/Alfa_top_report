@@ -10,6 +10,27 @@
         указать должность и статус — эти правки уже не будут перезаписаны.
     </p>
 </div>
+<div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-end gap-2">
+        <a class="btn btn-dark" href="{{ url_for('employees_export') }}">
+            Скачать Excel
+        </a>
+        <form method="post" action="{{ url_for('employees_import') }}" enctype="multipart/form-data"
+              class="d-flex flex-wrap align-items-end gap-2 mb-0">
+            <input type="hidden" name="q" value="{{ search }}">
+            <div>
+                <label for="employees-xlsx" class="form-label small mb-1">Исправленный XLSX-файл</label>
+                <input id="employees-xlsx" type="file" name="file" class="form-control form-control-sm"
+                       accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+            </div>
+            <button class="btn btn-outline-dark" type="submit">Загрузить изменения</button>
+        </form>
+    </div>
+    <div class="small text-muted mt-2">
+        Скачайте актуальный файл, исправьте голубые столбцы и загрузите его обратно.
+        Импорт сначала проверит весь файл; при ошибке данные не изменятся.
+    </div>
+</div>
 <form class="mb-3" method="get">
     <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по ФИО" value="{{ search }}">
 </form>
