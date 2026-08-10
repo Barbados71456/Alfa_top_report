@@ -1,0 +1,32 @@
+<div class="d-flex justify-content-between mb-3">
+    <div>
+        <button class="btn btn-primary" onclick="showAddModal('credits')">
+            <i class="bi bi-plus-circle"></i> Добавить кредит/займ
+        </button>
+        <button class="btn btn-success" onclick="exportSection('credits')">
+            <i class="bi bi-download"></i> Экспорт
+        </button>
+    </div>
+    <input type="file" id="importFileCredits" accept=".xlsx,.xls" style="display:none" onchange="importSection('credits', this.files[0])">
+    <button class="btn btn-info" onclick="document.getElementById('importFileCredits').click()">
+        <i class="bi bi-upload"></i> Импорт
+    </button>
+</div>
+<div class="table-responsive">
+    <table class="table table-hover" id="creditsTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Дата</th>
+                <th>Контрагент</th>
+                <th>Назначение</th>
+                <th>Тип услуги</th>
+                <th>Портфель</th>
+                <th>Сумма</th>
+                <th>Ответственный</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>

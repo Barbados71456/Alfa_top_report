@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 style="font-weight: 600; color: #1d1d1f;">
+                    <i class="bi bi-book" style="color: #0071e3;"></i> Управление справочниками
+                </h2>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Назад
+                </a>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-sign-turn-right"></i> Признаки</h5>
+                            <a href="{{ url_for('export_reference', ref_type='signs') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление признаками (IN/OUT)</p>
+                            <a href="{{ url_for('manage_signs') }}" class="btn btn-primary w-100">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #34c759, #30b0c0);">
+                            <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Категории</h5>
+                            <a href="{{ url_for('export_reference', ref_type='categories') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление категориями</p>
+                            <a href="{{ url_for('manage_categories') }}" class="btn w-100" style="background: linear-gradient(135deg, #34c759, #30b0c0); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #5ac8fa, #0071e3);">
+                            <h5 class="mb-0"><i class="bi bi-file-text"></i> Статьи</h5>
+                            <a href="{{ url_for('export_reference', ref_type='articles') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление статьями</p>
+                            <a href="{{ url_for('manage_articles') }}" class="btn w-100" style="background: linear-gradient(135deg, #5ac8fa, #0071e3); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #ff9f0a, #ffcc00);">
+                            <h5 class="mb-0"><i class="bi bi-briefcase"></i> Проекты</h5>
+                            <a href="{{ url_for('export_reference', ref_type='projects') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление проектами</p>
+                            <a href="{{ url_for('manage_projects') }}" class="btn w-100" style="background: linear-gradient(135deg, #ff9f0a, #ffcc00); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #8e8e93, #aeaeb2);">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Контрагенты</h5>
+                            <a href="{{ url_for('export_reference', ref_type='counterparties') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление контрагентами</p>
+                            <a href="{{ url_for('manage_counterparties') }}" class="btn w-100" style="background: linear-gradient(135deg, #8e8e93, #aeaeb2); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #1d1d1f, #3a3a3c);">
+                            <h5 class="mb-0"><i class="bi bi-wallet2"></i> Типы кошельков</h5>
+                            <a href="{{ url_for('export_reference', ref_type='wallet_types') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление типами кошельков</p>
+                            <a href="{{ url_for('manage_wallet_types') }}" class="btn w-100" style="background: linear-gradient(135deg, #1d1d1f, #3a3a3c); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #6f42c1, #9b6be6);">
+                            <h5 class="mb-0"><i class="bi bi-wallet"></i> Кошельки</h5>
+                            <a href="{{ url_for('export_reference', ref_type='wallets') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление кошельками</p>
+                            <a href="{{ url_for('manage_wallets') }}" class="btn w-100" style="background: linear-gradient(135deg, #6f42c1, #9b6be6); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #9b59b6, #8e44ad);">
+                            <h5 class="mb-0"><i class="bi bi-person-workspace"></i> Штатное расписание</h5>
+                            <a href="{{ url_for('export_shr') }}" class="btn btn-sm btn-light" title="Экспорт в Excel">
+                                <i class="bi bi-download"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: #86868b;">Управление штатным расписанием</p>
+                            <a href="{{ url_for('manage_shr') }}" class="btn w-100" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white;">
+                                <i class="bi bi-arrow-right"></i> Перейти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+<div class="d-flex justify-content-between mb-3">
+    <div>
+        <button class="btn btn-primary" onclick="showAddModal('rent_inf')">
+            <i class="bi bi-plus-circle"></i> Добавить услугу
+        </button>
+        <button class="btn btn-success" onclick="exportSection('rent_inf')">
+            <i class="bi bi-download"></i> Экспорт
+        </button>
+    </div>
+    <input type="file" id="importFileRentInf" accept=".xlsx,.xls" style="display:none" onchange="importSection('rent_inf', this.files[0])">
+    <button class="btn btn-info" onclick="document.getElementById('importFileRentInf').click()">
+        <i class="bi bi-upload"></i> Импорт
+    </button>
+</div>
+<div class="table-responsive">
+    <table class="table table-hover" id="rent_infTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Дата</th>
+                <th>Контрагент</th>
+                <th>Назначение</th>
+                <th>Тип услуги</th>
+                <th>Портфель</th>
+                <th>Сумма</th>
+                <th>Ответственный</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>

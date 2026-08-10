@@ -1,1246 +1,2292 @@
-import logging
 import os
-import threading
-from datetime import date
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
+from functools import wraps
+from datetime import datetime
+import hashlib
+from dotenv import load_dotenv
+import pandas as pd
+import io
+import csv
+import tempfile
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
-
-from config import Config
-from auth import admin_required, report_required, classifier_required, login_required, authenticate_user, set_password
-from auth import hash_password as auth_hash_password
-from db import query, query_one, execute, close_connection
-from reporting_refresh import refresh_all
-import pl_report as pr
-import fot_report as fr
-import loans_report as lr
-import investment_report as ir
-import cbr_report as cr
-import wallet_report as wr
-import audit
-import chat_assistant
-import export
-import monthly_etl as etl
-import flash_report as flr
-
-logging.basicConfig(level=logging.INFO)
+# Загружаем переменные из .env файла
+load_dotenv()
 
 app = Flask(__name__)
-app.config.from_object(Config)
-app.teardown_appcontext(close_connection)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Database configuration - берем из переменных окружения
+DB_CONFIG = {
+    'host': os.environ.get('POSTGRES_HOST'),
+    'port': os.environ.get('POSTGRES_PORT', '5432'),
+    'dbname': os.environ.get('POSTGRES_DB'),
+    'user': os.environ.get('POSTGRES_USER'),
+    'password': os.environ.get('POSTGRES_PASSWORD')
+}
+
+# Проверяем, что все параметры БД заданы
+if not all([DB_CONFIG['host'], DB_CONFIG['dbname'], DB_CONFIG['user'], DB_CONFIG['password']]):
+    print("ОШИБКА: Не все параметры подключения к БД заданы в .env файле!")
+    print("Текущие параметры:", {k: v if k != 'password' else '***' for k, v in DB_CONFIG.items()})
+
+def get_db():
+    """Get database connection"""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+        return conn
+    except psycopg2.OperationalError as e:
+        print(f"Ошибка подключения к БД: {e}")
+        print("Проверьте параметры подключения в .env файле")
+        raise
+
+def init_db():
+    """Initialize database tables"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Create users table with password_hash instead of password
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password_hash VARCHAR(200) NOT NULL,
+                role VARCHAR(20) DEFAULT 'user',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create periods table for editing control
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS periods (
+                id SERIAL PRIMARY KEY,
+                year INTEGER,
+                month INTEGER,
+                is_closed BOOLEAN DEFAULT FALSE,
+                closed_by_user_id INTEGER REFERENCES users(id),
+                closed_at TIMESTAMP,
+                UNIQUE(year, month)
+            )
+        ''')
+        
+        # Create reference tables
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS signs (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                sign_id INTEGER REFERENCES signs(id) ON DELETE CASCADE,
+                UNIQUE(name, sign_id)
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS articles (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+                UNIQUE(name, category_id)
+            )
+        ''')
+        
+        # Обновленная таблица projects с новыми полями
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                tip_project_1 VARCHAR(100),
+                tip_project_2 VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS counterparties (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS wallet_types (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            )
+        ''')
+        
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS wallets (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                wallet_type_id INTEGER REFERENCES wallet_types(id) ON DELETE CASCADE,
+                UNIQUE(name, wallet_type_id)
+            )
+        ''')
+        
+        # Create dim_shr table for staffing table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS "dim_ШР" (
+                id SERIAL PRIMARY KEY,
+                "Контрагент" VARCHAR(255) NOT NULL,
+                "Драйвер" VARCHAR(255),
+                "Должность" VARCHAR(255),
+                "Отдел" VARCHAR(255),
+                "Статус" VARCHAR(50) DEFAULT 'Активен',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create main expenses table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                year INTEGER,
+                month INTEGER,
+                sign_id INTEGER REFERENCES signs(id),
+                category_id INTEGER REFERENCES categories(id),
+                article_id INTEGER REFERENCES articles(id),
+                project_id INTEGER REFERENCES projects(id),
+                counterparty_id INTEGER REFERENCES counterparties(id),
+                wallet_type_id INTEGER REFERENCES wallet_types(id),
+                wallet_id INTEGER REFERENCES wallets(id),
+                amount DECIMAL(10,2) NOT NULL,
+                comments TEXT,
+                pl VARCHAR(255),
+                user_id INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Создаем финансовые таблицы
+        try:
+            with open('migrations/create_financial_tables.sql', 'r', encoding='utf-8') as f:
+                sql_script = f.read()
+                cur.execute(sql_script)
+                print("Финансовые таблицы созданы/обновлены")
+        except FileNotFoundError:
+            print("Файл migrations/create_financial_tables.sql не найден, пропускаем создание финансовых таблиц")
+        except Exception as e:
+            print(f"Ошибка при создании финансовых таблиц: {e}")
+        
+        # Insert default data if not exists
+        cur.execute("SELECT COUNT(*) FROM users")
+        user_count = cur.fetchone()['count']
+        if user_count == 0:
+            admin_password = hashlib.sha256(os.environ.get('ADMIN_PASSWORD', 'admin123').encode()).hexdigest()
+            cur.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+                (os.environ.get('ADMIN_USERNAME', 'admin'), admin_password, 'admin')
+            )
+            print("Создан пользователь admin")
+        
+        # Insert default reference data
+        default_signs = ['IN', 'OUT']
+        for sign in default_signs:
+            cur.execute("INSERT INTO signs (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (sign,))
+        
+        default_categories = [
+            ('Доходы', 'IN'),
+            ('Расходы', 'OUT')
+        ]
+        for cat_name, sign_name in default_categories:
+            cur.execute("SELECT id FROM signs WHERE name = %s", (sign_name,))
+            sign_row = cur.fetchone()
+            if sign_row:
+                cur.execute(
+                    "INSERT INTO categories (name, sign_id) VALUES (%s, %s) ON CONFLICT (name, sign_id) DO NOTHING",
+                    (cat_name, sign_row['id'])
+                )
+        
+        default_projects = [
+            ('Основной', 'Внутренний', 'Стандартный'),
+            ('Личный', 'Внутренний', 'Малый'),
+            ('Бизнес', 'Внешний', 'Крупный')
+        ]
+        for project, tip1, tip2 in default_projects:
+            cur.execute(
+                "INSERT INTO projects (name, tip_project_1, tip_project_2) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+                (project, tip1, tip2)
+            )
+        
+        default_counterparties = ['Клиент 1', 'Поставщик 1', 'Сотрудник']
+        for counterparty in default_counterparties:
+            cur.execute("INSERT INTO counterparties (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (counterparty,))
+        
+        default_wallet_types = ['Наличные', 'Банковская карта', 'Электронный кошелек']
+        for wt in default_wallet_types:
+            cur.execute("INSERT INTO wallet_types (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (wt,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("База данных успешно инициализирована")
+    except Exception as e:
+        print(f"Ошибка при инициализации БД: {e}")
+        raise
+
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Пожалуйста, войдите в систему', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Admin required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') != 'admin':
+            flash('Доступ запрещен', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Check if period is editable
+def is_period_editable(date):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT is_closed FROM periods WHERE year = %s AND month = %s",
+        (date.year, date.month)
+    )
+    period = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if period and period['is_closed']:
+        return False
+    return True
+
+def get_month_name(month_num):
+    """Возвращает название месяца на русском"""
+    months = {
+        1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель',
+        5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
+        9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
+    }
+    return months.get(month_num, '')
+
+# Регистрируем финансовый blueprint
 try:
-    Config.validate()
-except ValueError:
-    app.logger.exception('Некорректная конфигурация окружения')
-    raise
-
-# Автообновление reporting.* — без участия пользователя: сразу при старте процесса
-# (в фоновом потоке, чтобы не блокировать старт сервера) и затем каждые 10 минут.
-threading.Thread(target=refresh_all, daemon=True).start()
-
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(refresh_all, 'interval', minutes=10)
-scheduler.start()
-
-
-def _pick_year(years, requested):
-    if requested and requested in years:
-        return requested
-    return years[-1] if years else date.today().year
-
-
-def _parse_series(raw):
-    """'факт:2025,прогноз:2026,факт:2026' -> [('факт',2025),('прогноз',2026),('факт',2026)]"""
-    if not raw:
-        return None
-    series = []
-    for part in raw.split(','):
-        pf, _, year = part.partition(':')
-        if pf and year.isdigit():
-            series.append((pf, int(year)))
-    return series or None
-
-
-def _parse_deltas(raw):
-    """'2-0,2-1' -> [(2,0),(2,1)]"""
-    if not raw:
-        return None
-    deltas = []
-    for part in raw.split(','):
-        i, _, j = part.partition('-')
-        if i.isdigit() and j.isdigit():
-            deltas.append((int(i), int(j)))
-    return deltas or None
-
-
-def _format_series(series):
-    return ','.join(f'{pf}:{year}' for pf, year in series)
-
-
-def _format_deltas(deltas):
-    return ','.join(f'{i}-{j}' for i, j in deltas)
-
-
-def _series_deltas_from_request(years):
-    series = _parse_series(request.args.get('series')) or None
-    deltas = _parse_deltas(request.args.get('deltas')) or None
-    if series is None or deltas is None:
-        default_series, default_deltas = pr.default_series_deltas(years)
-        series = series or default_series
-        deltas = deltas or default_deltas
-    return series, deltas
-
+    from financial_routes import financial_bp
+    app.register_blueprint(financial_bp)
+    print("Финансовый модуль зарегистрирован")
+except ImportError as e:
+    print(f"Ошибка импорта финансового модуля: {e}")
+    print("Финансовый модуль не будет доступен")
 
 @app.route('/')
+@login_required
 def index():
-    return redirect(url_for('svod1') if 'user_id' in session else url_for('login'))
-
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if session['role'] == 'admin':
+        cur.execute('''
+            SELECT e.*, u.username, s.name as sign_name, c.name as category_name,
+                   a.name as article_name, p.name as project_name, cp.name as counterparty_name,
+                   wt.name as wallet_type_name, w.name as wallet_name
+            FROM expenses e
+            JOIN users u ON e.user_id = u.id
+            LEFT JOIN signs s ON e.sign_id = s.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            LEFT JOIN articles a ON e.article_id = a.id
+            LEFT JOIN projects p ON e.project_id = p.id
+            LEFT JOIN counterparties cp ON e.counterparty_id = cp.id
+            LEFT JOIN wallet_types wt ON e.wallet_type_id = wt.id
+            LEFT JOIN wallets w ON e.wallet_id = w.id
+            ORDER BY e.date DESC
+        ''')
+        expenses = cur.fetchall()
+        
+        # Подсчет сумм для админа (все записи)
+        cur.execute('''
+            SELECT 
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_out,
+                COALESCE(SUM(amount), 0) as total_balance
+            FROM expenses
+        ''')
+    else:
+        cur.execute('''
+            SELECT e.*, u.username, s.name as sign_name, c.name as category_name,
+                   a.name as article_name, p.name as project_name, cp.name as counterparty_name,
+                   wt.name as wallet_type_name, w.name as wallet_name
+            FROM expenses e
+            JOIN users u ON e.user_id = u.id
+            LEFT JOIN signs s ON e.sign_id = s.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            LEFT JOIN articles a ON e.article_id = a.id
+            LEFT JOIN projects p ON e.project_id = p.id
+            LEFT JOIN counterparties cp ON e.counterparty_id = cp.id
+            LEFT JOIN wallet_types wt ON e.wallet_type_id = wt.id
+            LEFT JOIN wallets w ON e.wallet_id = w.id
+            WHERE e.user_id = %s
+            ORDER BY e.date DESC
+        ''', (session['user_id'],))
+        expenses = cur.fetchall()
+        
+        # Подсчет сумм для конкретного пользователя
+        cur.execute('''
+            SELECT 
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_out,
+                COALESCE(SUM(amount), 0) as total_balance
+            FROM expenses
+            WHERE user_id = %s
+        ''', (session['user_id'],))
+    
+    totals = cur.fetchone()
+    
+    # Добавляем название месяца к каждой записи
+    for expense in expenses:
+        expense['month_name'] = get_month_name(expense['month'])
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('index.html', 
+                         expenses=expenses,
+                         total_in=totals['total_in'],
+                         total_out=totals['total_out'],
+                         total_balance=totals['total_balance'])
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '')
+        username = request.form['username']
+        password = hashlib.sha256(request.form['password'].encode()).hexdigest()
+        
         try:
-            ok, user = authenticate_user(username, password)
-        except Exception:
-            app.logger.exception('Ошибка при обращении к БД во время входа')
-            flash('Ошибка подключения к базе данных. Сообщите администратору.', 'danger')
-            return render_template('login.html')
-        if ok:
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
-            session.permanent = True
-            return redirect(url_for('svod1'))
-        flash('Неверный логин или пароль', 'danger')
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM users WHERE username = %s AND password_hash = %s",
+                (username, password)
+            )
+            user = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if user:
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                session['role'] = user['role']
+                flash('Успешный вход в систему', 'success')
+                return redirect(url_for('index'))
+            else:
+                flash('Неверное имя пользователя или пароль', 'danger')
+        except Exception as e:
+            flash(f'Ошибка подключения к базе данных: {str(e)}', 'danger')
+            print(f"Login error: {e}")
+    
     return render_template('login.html')
-
-
-@app.route('/healthz')
-def healthz():
-    try:
-        query('SELECT 1')
-        return {'status': 'ok'}
-    except Exception as e:
-        app.logger.exception('healthz: БД недоступна')
-        return {'status': 'error', 'detail': str(e)}, 500
-
 
 @app.route('/logout')
 def logout():
     session.clear()
+    flash('Вы вышли из системы', 'info')
     return redirect(url_for('login'))
 
-
-@app.route('/overview')
-@report_required
-def overview():
-    years = pr.get_available_years()
-    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    pf = request.args.get('pf', 'факт')
-    allocation = request.args.get('allocation', 'all')
-    data = pr.overview_data(year, pf, allocation)
-    fot_data = fr.fot1(year, pf)
-    fot_total = next((r for r in fot_data['rows'] if r['label'] == 'ФОТ (всего)'), None)
-    headcount = next((r for r in fot_data['rows'] if r['label'] == 'Численность (всего)'), None)
-    loans_series = lr.loans_balance_series(pf)
-    return render_template(
-        'overview.html', data=data, years=years, year=year, pf=pf, allocation=allocation,
-        fot_total=fot_total, headcount=headcount, loans_series=loans_series,
-    )
-
-
-@app.route('/svod1')
-@report_required
-def svod1():
-    years = pr.get_available_years()
-    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    pf = request.args.get('pf', 'факт')
-    allocation = request.args.get('allocation', 'all')
-    data = pr.svod1(year, pf, allocation)
-    return render_template('svod1.html', data=data, years=years, year=year, pf=pf, allocation=allocation)
-
-
-@app.route('/api/cell_detail')
-@report_required
-def api_cell_detail():
-    lines = request.args.getlist('line')
-    year = request.args.get('year', type=int)
-    month = request.args.get('month', type=int)
-    pf = request.args.get('pf', 'факт')
-    projects = request.args.getlist('project') or None
-    employee = request.args.getlist('employee') or None
-    allocation = request.args.get('allocation', 'all')
-    if not (lines and year and month):
-        return {'error': 'line, year, month обязательны'}, 400
-    try:
-        data = pr.cell_detail(lines, year, month, pf, projects, allocation, contragent=employee)
-    except Exception:
-        app.logger.exception('cell_detail error')
-        return {'error': 'Ошибка при получении детализации'}, 500
-    return data
-
-
-@app.route('/api/cbr_cell_detail')
-@report_required
-def api_cbr_cell_detail():
-    month_str = request.args.get('month')
-    metric = request.args.get('metric')
-    if not (month_str and metric):
-        return {'error': 'month, metric обязательны'}, 400
-    try:
-        month = date.fromisoformat(month_str)
-    except ValueError:
-        return {'error': 'Некорректный month'}, 400
-    creditor = request.args.getlist('exclude_creditor')
-    if creditor:
-        all_creditors = cr.get_filter_options()['creditors']
-        creditor = [c for c in all_creditors if c not in creditor]
-    else:
-        creditor = None
-    debt_type = request.args.getlist('debt_type') or None
-    work_type = request.args.getlist('work_type') or None
-    try:
-        data = cr.cell_detail(month, metric, creditor, debt_type, work_type)
-    except ValueError as e:
-        return {'error': str(e)}, 400
-    except Exception:
-        app.logger.exception('cbr_cell_detail error')
-        return {'error': 'Ошибка при получении детализации'}, 500
-    return data
-
-
-@app.route('/svod2')
-@report_required
-def svod2():
-    years = pr.get_available_years()
-    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    pf = request.args.get('pf', 'факт')
-    allocation = request.args.get('allocation', 'all')
-    data = pr.svod2(year, pf, allocation)
-    return render_template('svod2.html', data=data, years=years, year=year, pf=pf, allocation=allocation)
-
-
-@app.route('/unitpl')
-@report_required
-def unitpl():
-    start = request.args.get('start', type=int)
-    end = request.args.get('end', type=int)
-    allocation = request.args.get('allocation', 'all')
-    data = pr.unit_pl(start=start, end=end, allocation=allocation)
-    return render_template('unitpl.html', data=data, allocation=allocation)
-
-
-@app.route('/api/deviation_detail')
-@report_required
-def api_deviation_detail():
-    lines = request.args.getlist('line')
-    projects = request.args.getlist('project') or None
-    allocation = request.args.get('allocation', 'all')
-    a = request.args.get('a', '')
-    b = request.args.get('b', '')
-    try:
-        a_pf, a_year, a_month = a.split(':')
-        b_pf, b_year, b_month = b.split(':')
-    except ValueError:
-        return {'error': 'Некорректные параметры a/b (ожидается pf:год:месяц)'}, 400
-    if not lines:
-        return {'error': 'line обязателен'}, 400
-    try:
-        data = pr.deviation_detail(
-            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)), projects, allocation=allocation
-        )
-    except Exception:
-        app.logger.exception('deviation_detail error')
-        return {'error': 'Ошибка при получении акт-анализа'}, 500
-    return data
-
-
-@app.route('/dashboard1')
-@report_required
-def dashboard1():
-    years = pr.get_available_years()
-    month = request.args.get('month', type=int) or date.today().month
-    series, deltas = _series_deltas_from_request(years)
-    projects = request.args.getlist('project') or None
-    allocation = request.args.get('allocation', 'all')
-    data = pr.dashboard1(month, series, deltas, projects, allocation=allocation)
-    return render_template(
-        'dashboard1.html', data=data, years=years, month=month, projects=projects, allocation=allocation,
-        all_projects=pr.get_projects_with_type(),
-        series_str=_format_series(series), deltas_str=_format_deltas(deltas),
-    )
-
-
-@app.route('/dashboard2')
-@report_required
-def dashboard2():
-    years = pr.get_available_years()
-    month = request.args.get('month', type=int) or date.today().month
-    series, deltas = _series_deltas_from_request(years)
-    projects = request.args.getlist('project') or None
-    allocation = request.args.get('allocation', 'all')
-    data = pr.dashboard2(month, series, deltas, projects, allocation=allocation)
-    return render_template(
-        'dashboard2.html', data=data, years=years, month=month, projects=projects, allocation=allocation,
-        all_projects=pr.get_projects_with_type(),
-        series_str=_format_series(series), deltas_str=_format_deltas(deltas),
-    )
-
-
-@app.route('/fot1')
-@report_required
-def fot1():
-    years = fr.get_available_years()
-    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    pf = request.args.get('pf', 'факт')
-    data = fr.fot1(year, pf)
-    return render_template('fot1.html', data=data, years=years, year=year, pf=pf)
-
-
-@app.route('/fot2')
-@report_required
-def fot2():
-    years = fr.get_available_years()
-    month = request.args.get('month', type=int) or date.today().month
-    series = _parse_series(request.args.get('series'))
-    deltas = _parse_deltas(request.args.get('deltas'))
-    if series is None or deltas is None:
-        default_series, default_deltas = fr.default_series_deltas(years)
-        series = series or default_series
-        deltas = deltas or default_deltas
-    data = fr.fot2(month, series, deltas)
-    return render_template(
-        'fot2.html', data=data, years=years, month=month,
-        series_str=_format_series(series), deltas_str=_format_deltas(deltas),
-    )
-
-
-@app.route('/fot3')
-@report_required
-def fot3():
-    years = fr.get_available_years()
-    year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-    pf = request.args.get('pf', 'факт')
-    employee = request.args.get('employee', '')
-    data = fr.fot3(employee, year, pf) if employee else None
-    return render_template(
-        'fot3.html', data=data, years=years, year=year, pf=pf,
-        employee=employee, employees=fr.get_employees(),
-    )
-
-
-@app.route('/loans')
-@report_required
-def loans():
-    periods = lr.get_available_periods()
-    years = sorted({p.year for p in periods}) if periods else [date.today().year]
-    year = request.args.get('year', type=int) or years[-1]
-    month = request.args.get('month', type=int) or date.today().month
-    pf = request.args.get('pf', 'факт')
-    data = lr.loans(year, month, pf)
-    series = lr.loans_balance_series(pf)
-    return render_template('loans.html', data=data, series=series, years=years, year=year, month=month, pf=pf)
-
-
-@app.route('/counterparty')
-@report_required
-def counterparty():
-    contragents = request.args.getlist('name')
-    pf = request.args.get('pf', 'факт')
-    projects = request.args.getlist('project') or None
-    allocation = request.args.get('allocation', 'all')
-    default_from, default_to = pr.default_counterparty_range(pf)
-    date_from = request.args.get('date_from') or default_from.isoformat()
-    date_to = request.args.get('date_to') or default_to.isoformat()
-    data = pr.counterparty_series(contragents, pf, projects, date_from, date_to, allocation) if (contragents or projects) else None
-    return render_template(
-        'counterparty.html', data=data, contragents=contragents, pf=pf, projects=projects,
-        date_from=date_from, date_to=date_to, allocation=allocation,
-        investment_line=pr.INVESTMENT_LINE, financing_lines=pr.FINANCING_LINES,
-        all_projects=pr.get_projects_with_type(),
-    )
-
-
-@app.route('/api/counterparty_search')
-@report_required
-def api_counterparty_search():
-    q = request.args.get('q', '').strip()
-    if not q:
-        return jsonify([])
-    return jsonify(pr.search_counterparties(q))
-
-
-@app.route('/cbr')
-@report_required
-def cbr():
-    dept = request.args.getlist('dept') or None
-    emp_region = request.args.getlist('emp_region') or None
-    employee = request.args.getlist('employee') or None
-    network_param = request.args.get('network', 'network')
-    is_network = {'network': True, 'non_network': False}.get(network_param)  # None => 'all'
-    filter_options = cr.get_filter_options()
-    # "Текущий кредитор" отдаётся в URL списком ИСКЛЮЧЕНИЙ (обычно 0-2 записи из ~50),
-    # а не включений — иначе GET с полным списком выбранных кредиторов превышает лимит
-    # длины request-line на проде (gunicorn limit_request_line=4094) и соединение рвётся
-    # ещё до Flask (см. прод-логи: "Request Line is too large (6281 > 4094)").
-    exclude_creditor = request.args.getlist('exclude_creditor')
-    if exclude_creditor:
-        creditor = [c for c in filter_options['creditors'] if c not in exclude_creditor]
-    else:
-        creditor = None  # cbr_report._core_where по умолчанию сама исключает Займер
-    debt_type = request.args.getlist('debt_type') or None
-    work_type = request.args.getlist('work_type') or None
-
-    table_data = cr.overall_by_month(creditor, debt_type, work_type)
-    creditor_pivot_all = cr.creditor_pivot(creditor=creditor, debt_type=debt_type, work_type=work_type)
-    chart_filtered = cr.filtered_monthly(dept, emp_region, employee, is_network, creditor, debt_type, work_type)
-    creditor_pivot_partners = cr.creditor_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
-    region_dept_pivot = cr.region_department_pivot(is_network=is_network, creditor=creditor, debt_type=debt_type, work_type=work_type)
-
-    legacy_dim = request.args.get('dim', 'department')
-    if legacy_dim not in ('department', 'employee', 'region', 'creditor', 'debt_type'):
-        legacy_dim = 'department'
-    legacy_by_dim = cr.by_dim(legacy_dim, creditor=creditor, debt_type=debt_type, work_type=work_type)
-    months_raw = table_data['months_raw']
-    latest_month = months_raw[-1] if months_raw else None
-    legacy_perf = cr.top_bottom_performers(latest_month, legacy_dim, creditor=creditor, debt_type=debt_type, work_type=work_type) if latest_month else {'top': [], 'bottom': []}
-    legacy_recommendations = cr.analysis_and_recommendations(legacy_dim, creditor, debt_type, work_type)
-
-    return render_template(
-        'cbr.html',
-        table_data=table_data, creditor_pivot_all=creditor_pivot_all,
-        chart_filtered=chart_filtered, creditor_pivot_partners=creditor_pivot_partners,
-        region_dept_pivot=region_dept_pivot, filter_options=filter_options,
-        dept=dept or [], emp_region=emp_region or [], employee=employee or [], network_param=network_param,
-        exclude_creditor=exclude_creditor or [cr._ZAYMER_CREDITOR],
-        debt_type=debt_type or cr.DEFAULT_DEBT_TYPES, work_type=work_type or cr.DEFAULT_WORK_TYPES,
-        legacy_dim=legacy_dim, legacy_by_dim=legacy_by_dim, legacy_perf=legacy_perf,
-        legacy_recommendations=legacy_recommendations, dim_labels=cr.DIM_LABELS,
-    )
-
-
-@app.route('/cbr/admin')
-@classifier_required
-def cbr_admin():
-    rows = cr.get_employee_mapping()
-    return render_template('cbr_admin.html', rows=rows)
-
-
-@app.route('/cbr/admin/<path:employee>', methods=['POST'])
-@classifier_required
-def cbr_admin_update(employee):
-    cr.update_employee_mapping(
-        employee,
-        request.form.get('department', '').strip(),
-        request.form.get('region', '').strip(),
-        request.form.get('is_fired') == 'on',
-        request.form.get('employment_type', '').strip(),
-    )
-    audit.log_action(session.get('username'), 'edit_cbr_employee', employee)
-    flash(f'Данные «{employee}» обновлены', 'success')
-    return redirect(url_for('cbr_admin'))
-
-
-@app.route('/cbr/admin/creditors')
-@classifier_required
-def cbr_admin_creditors():
-    rows = cr.get_creditor_project_mapping()
-    return render_template('cbr_creditor_mapping.html', rows=rows, all_projects=pr.get_projects_with_type())
-
-
-@app.route('/cbr/admin/creditors/<path:creditor>', methods=['POST'])
-@classifier_required
-def cbr_admin_creditors_update(creditor):
-    cr.set_creditor_project(creditor, request.form.get('project', '').strip())
-    audit.log_action(session.get('username'), 'edit_cbr_creditor_mapping', creditor)
-    flash(f'Кредитор «{creditor}» сопоставлен', 'success')
-    return redirect(url_for('cbr_admin_creditors'))
-
-
-@app.route('/cbr/admin/creditors/auto_match', methods=['POST'])
-@classifier_required
-def cbr_admin_creditors_auto_match():
-    matched = cr.auto_match_creditor_projects()
-    audit.log_action(session.get('username'), 'auto_match_cbr_creditors', f'{matched} сопоставлено')
-    flash(f'Автосопоставлено по выручке: {matched}', 'success')
-    return redirect(url_for('cbr_admin_creditors'))
-
-
-@app.route('/admin/monthly_load')
-@classifier_required
-def monthly_load():
-    return render_template('monthly_load.html', runs=etl.get_run_log(), result=None)
-
-
-@app.route('/admin/monthly_load', methods=['POST'])
-@classifier_required
-def monthly_load_run():
-    file = request.files.get('excel_file')
-    if not file or not file.filename:
-        flash('Выберите файл .xlsx', 'danger')
-        return redirect(url_for('monthly_load'))
-
-    try:
-        period, steps = etl.run_pipeline('etl_load', file.stream, session.get('username'))
-        diffs = etl.compare_with_public('etl_load', period)
-        result = {'period': period, 'steps': steps, 'diffs': diffs, 'error': None}
-        audit.log_action(session.get('username'), 'monthly_load_run', f'{period}, шагов: {len(steps)}')
-    except Exception as e:
-        result = {'period': None, 'steps': [], 'diffs': [], 'error': str(e)}
-        audit.log_action(session.get('username'), 'monthly_load_error', str(e))
-
-    return render_template('monthly_load.html', runs=etl.get_run_log(), result=result)
-
-
-@app.route('/flash')
-@report_required
-def flash_page():
-    periods_rows = query(
-        "SELECT DISTINCT date_trunc('month', operation_date)::date AS p FROM flash.transactions ORDER BY 1 DESC"
-    )
-    periods = [r['p'] for r in periods_rows]
-    period_str = request.args.get('period')
-    if period_str:
-        period = date.fromisoformat(period_str)
-    elif periods:
-        period = periods[0]
-    else:
-        period = date.today().replace(day=1)
-
-    data = flr.month_breakdown(period) if periods else None
-    smry = flr.summary(period) if periods else None
-    unmatched = flr.get_unmatched(period, limit=200) if periods else []
-    wallets_recon = flr.wallet_reconciliation(period) if periods else []
-    projects_data = flr.by_project(period) if periods else None
-    dim_rows = query('SELECT DISTINCT "Признак", "Категория", "Статья" FROM dim_level_report')
-    projects = [p for _, names in pr.get_projects_with_type() for p in names]
-    return render_template(
-        'flash.html', data=data, summary=smry, unmatched=unmatched, wallets_recon=wallets_recon,
-        projects_data=projects_data,
-        period=period, periods=periods, all_lines=pr.ALL_LINES,
-        priznaki=sorted({r['Признак'] for r in dim_rows if r['Признак']}),
-        kategorii=sorted({r['Категория'] for r in dim_rows if r['Категория']}),
-        statyi=sorted({r['Статья'] for r in dim_rows if r['Статья']}),
-        projects=sorted(set(projects)),
-    )
-
-
-@app.route('/flash/upload', methods=['POST'])
-@classifier_required
-def flash_upload():
-    files = request.files.getlist('statements')
-    period_str = request.form.get('period')
-    results, errors = [], []
-    for f in files:
-        if not f or not f.filename:
-            continue
+@app.route('/register', methods=['GET', 'POST'])
+@admin_required
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = hashlib.sha256(request.form['password'].encode()).hexdigest()
+        
         try:
-            res = flr.import_statement(f.stream, f.filename, session.get('username'))
-            results.append((f.filename, res))
+            conn = get_db()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, 'user')",
+                    (username, password)
+                )
+                conn.commit()
+                flash(f'Пользователь {username} успешно создан', 'success')
+                return redirect(url_for('manage_users'))
+            except psycopg2.IntegrityError:
+                conn.rollback()
+                flash('Пользователь с таким именем уже существует', 'danger')
+            finally:
+                cur.close()
+                conn.close()
         except Exception as e:
-            errors.append((f.filename, str(e)))
+            flash(f'Ошибка подключения к базе данных: {str(e)}', 'danger')
+            print(f"Register error: {e}")
+    
+    return render_template('register.html')
 
-    if period_str and results:
-        period = date.fromisoformat(period_str)
-        learned = flr.learn_rules(period, created_by=session.get('username'))
-        wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
-        audit.log_action(
-            session.get('username'), 'flash_upload',
-            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, кошельков: {wallets_learned}'
+@app.route('/add', methods=['GET', 'POST'])
+@login_required
+def add_expense():
+    if request.method == 'POST':
+        date = datetime.strptime(request.form['date'], '%Y-%m-%d')
+        
+        if not is_period_editable(date):
+            flash('Этот период закрыт для редактирования', 'danger')
+            return redirect(url_for('index'))
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        try:
+            cur.execute('''
+                INSERT INTO expenses (
+                    date, year, month, sign_id, category_id, article_id,
+                    project_id, counterparty_id, wallet_type_id, wallet_id,
+                    amount, comments, pl, user_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                date, date.year, date.month,
+                request.form['sign_id'] or None,
+                request.form['category_id'] or None,
+                request.form['article_id'] or None,
+                request.form['project_id'] or None,
+                request.form['counterparty_id'] or None,
+                request.form['wallet_type_id'] or None,
+                request.form['wallet_id'] or None,
+                request.form['amount'],
+                request.form['comments'],
+                request.form['pl'],
+                session['user_id']
+            ))
+            conn.commit()
+            flash('Запись успешно добавлена', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'Ошибка при добавлении: {str(e)}', 'danger')
+        finally:
+            cur.close()
+            conn.close()
+        
+        return redirect(url_for('index'))
+    
+    # GET request - show form
+    conn = get_db()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * FROM signs ORDER BY name")
+    signs = cur.fetchall()
+    
+    cur.execute("SELECT * FROM categories ORDER BY name")
+    categories = cur.fetchall()
+    
+    cur.execute("SELECT * FROM articles ORDER BY name")
+    articles = cur.fetchall()
+    
+    cur.execute("SELECT * FROM projects ORDER BY name")
+    projects = cur.fetchall()
+    
+    cur.execute("SELECT * FROM counterparties ORDER BY name")
+    counterparties = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallet_types ORDER BY name")
+    wallet_types = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallets ORDER BY name")
+    wallets = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    return render_template('add_expense.html', 
+                         signs=signs, categories=categories, articles=articles,
+                         projects=projects, counterparties=counterparties,
+                         wallet_types=wallet_types, wallets=wallets,
+                         today=today)
+
+@app.route('/edit/<int:expense_id>', methods=['GET', 'POST'])
+@login_required
+def edit_expense(expense_id):
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Get expense data
+    cur.execute('''
+        SELECT e.*, s.name as sign_name, c.name as category_name,
+               a.name as article_name, p.name as project_name,
+               cp.name as counterparty_name, wt.name as wallet_type_name,
+               w.name as wallet_name
+        FROM expenses e
+        LEFT JOIN signs s ON e.sign_id = s.id
+        LEFT JOIN categories c ON e.category_id = c.id
+        LEFT JOIN articles a ON e.article_id = a.id
+        LEFT JOIN projects p ON e.project_id = p.id
+        LEFT JOIN counterparties cp ON e.counterparty_id = cp.id
+        LEFT JOIN wallet_types wt ON e.wallet_type_id = wt.id
+        LEFT JOIN wallets w ON e.wallet_id = w.id
+        WHERE e.id = %s
+    ''', (expense_id,))
+    expense = cur.fetchone()
+    
+    if not expense:
+        flash('Запись не найдена', 'danger')
+        return redirect(url_for('index'))
+    
+    # Check permissions
+    if session['role'] != 'admin' and expense['user_id'] != session['user_id']:
+        flash('У вас нет прав на редактирование этой записи', 'danger')
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        date = datetime.strptime(request.form['date'], '%Y-%m-%d')
+        
+        if not is_period_editable(date) and session['role'] != 'admin':
+            flash('Этот период закрыт для редактирования', 'danger')
+            return redirect(url_for('index'))
+        
+        try:
+            cur.execute('''
+                UPDATE expenses SET
+                    date = %s, year = %s, month = %s,
+                    sign_id = %s, category_id = %s, article_id = %s,
+                    project_id = %s, counterparty_id = %s,
+                    wallet_type_id = %s, wallet_id = %s,
+                    amount = %s, comments = %s, pl = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            ''', (
+                date, date.year, date.month,
+                request.form['sign_id'] or None,
+                request.form['category_id'] or None,
+                request.form['article_id'] or None,
+                request.form['project_id'] or None,
+                request.form['counterparty_id'] or None,
+                request.form['wallet_type_id'] or None,
+                request.form['wallet_id'] or None,
+                request.form['amount'],
+                request.form['comments'],
+                request.form['pl'],
+                expense_id
+            ))
+            conn.commit()
+            flash('Запись успешно обновлена', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'Ошибка при обновлении: {str(e)}', 'danger')
+        
+        return redirect(url_for('index'))
+    
+    # GET request - show edit form
+    cur.execute("SELECT * FROM signs ORDER BY name")
+    signs = cur.fetchall()
+    
+    cur.execute("SELECT * FROM categories ORDER BY name")
+    categories = cur.fetchall()
+    
+    cur.execute("SELECT * FROM articles ORDER BY name")
+    articles = cur.fetchall()
+    
+    cur.execute("SELECT * FROM projects ORDER BY name")
+    projects = cur.fetchall()
+    
+    cur.execute("SELECT * FROM counterparties ORDER BY name")
+    counterparties = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallet_types ORDER BY name")
+    wallet_types = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallets ORDER BY name")
+    wallets = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    expense['date'] = expense['date'].strftime('%Y-%m-%d')
+    
+    return render_template('edit_expense.html',
+                         expense=expense, signs=signs,
+                         categories=categories, articles=articles,
+                         projects=projects, counterparties=counterparties,
+                         wallet_types=wallet_types, wallets=wallets)
+
+@app.route('/delete/<int:expense_id>')
+@login_required
+def delete_expense(expense_id):
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Get expense data to check permissions
+    cur.execute("SELECT user_id, date FROM expenses WHERE id = %s", (expense_id,))
+    expense = cur.fetchone()
+    
+    if not expense:
+        flash('Запись не найдена', 'danger')
+        return redirect(url_for('index'))
+    
+    # Check permissions
+    if session['role'] != 'admin' and expense['user_id'] != session['user_id']:
+        flash('У вас нет прав на удаление этой записи', 'danger')
+        return redirect(url_for('index'))
+    
+    if session['role'] != 'admin' and not is_period_editable(expense['date']):
+        flash('Этот период закрыт для редактирования', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        cur.execute("DELETE FROM expenses WHERE id = %s", (expense_id,))
+        conn.commit()
+        flash('Запись успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('index'))
+
+# ==================== УПРАВЛЕНИЕ СПРАВОЧНИКАМИ ====================
+
+@app.route('/admin/references')
+@admin_required
+def manage_references():
+    """Главная страница управления справочниками"""
+    return render_template('manage_references.html')
+
+# ---- Управление признаками (signs) ----
+@app.route('/admin/references/signs')
+@admin_required
+def manage_signs():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT s.*, COUNT(c.id) as categories_count 
+        FROM signs s 
+        LEFT JOIN categories c ON s.id = c.sign_id 
+        GROUP BY s.id 
+        ORDER BY s.name
+    ''')
+    signs = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_signs.html', signs=signs)
+
+@app.route('/admin/references/signs/add', methods=['POST'])
+@admin_required
+def add_sign():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO signs (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Признак успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Признак с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_signs'))
+
+@app.route('/admin/references/signs/delete/<int:sign_id>')
+@admin_required
+def delete_sign(sign_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли признак
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE sign_id = %s", (sign_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить признак, который используется в записях', 'danger')
+            return redirect(url_for('manage_signs'))
+        
+        cur.execute("DELETE FROM signs WHERE id = %s", (sign_id,))
+        conn.commit()
+        flash('Признак успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_signs'))
+
+# ---- Управление категориями ----
+@app.route('/admin/references/categories')
+@admin_required
+def manage_categories():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT c.*, s.name as sign_name, COUNT(a.id) as articles_count 
+        FROM categories c 
+        JOIN signs s ON c.sign_id = s.id 
+        LEFT JOIN articles a ON c.id = a.category_id 
+        GROUP BY c.id, s.name 
+        ORDER BY s.name, c.name
+    ''')
+    categories = cur.fetchall()
+    
+    cur.execute("SELECT * FROM signs ORDER BY name")
+    signs = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_categories.html', categories=categories, signs=signs)
+
+@app.route('/admin/references/categories/add', methods=['POST'])
+@admin_required
+def add_category():
+    name = request.form['name']
+    sign_id = request.form['sign_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO categories (name, sign_id) VALUES (%s, %s)",
+            (name, sign_id)
         )
+        conn.commit()
+        flash('Категория успешно добавлена', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Категория с таким именем уже существует для данного признака', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_categories'))
 
-    if errors:
-        flash('Ошибки при загрузке: ' + '; '.join(f'{fn}: {e}' for fn, e in errors), 'danger')
-    if results:
-        total = sum(r['total'] for _, r in results)
-        matched = sum(r['matched'] for _, r in results)
-        flash(f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}', 'success')
-    elif not errors:
-        flash('Выберите хотя бы один файл выписки', 'danger')
+@app.route('/admin/references/categories/delete/<int:category_id>')
+@admin_required
+def delete_category(category_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли категория
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE category_id = %s", (category_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить категорию, которая используется в записях', 'danger')
+            return redirect(url_for('manage_categories'))
+        
+        cur.execute("DELETE FROM categories WHERE id = %s", (category_id,))
+        conn.commit()
+        flash('Категория успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_categories'))
 
-    return redirect(url_for('flash_page', period=period_str))
+# ---- Управление статьями ----
+@app.route('/admin/references/articles')
+@admin_required
+def manage_articles():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT a.*, c.name as category_name, s.name as sign_name,
+               COUNT(e.id) as expenses_count 
+        FROM articles a 
+        JOIN categories c ON a.category_id = c.id 
+        JOIN signs s ON c.sign_id = s.id 
+        LEFT JOIN expenses e ON a.id = e.article_id 
+        GROUP BY a.id, c.name, s.name 
+        ORDER BY s.name, c.name, a.name
+    ''')
+    articles = cur.fetchall()
+    
+    cur.execute('''
+        SELECT c.*, s.name as sign_name 
+        FROM categories c 
+        JOIN signs s ON c.sign_id = s.id 
+        ORDER BY s.name, c.name
+    ''')
+    categories = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_articles.html', articles=articles, categories=categories)
 
+@app.route('/admin/references/articles/add', methods=['POST'])
+@admin_required
+def add_article():
+    name = request.form['name']
+    category_id = request.form['category_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO articles (name, category_id) VALUES (%s, %s)",
+            (name, category_id)
+        )
+        conn.commit()
+        flash('Статья успешно добавлена', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Статья с таким именем уже существует для данной категории', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_articles'))
 
-@app.route('/flash/relearn', methods=['POST'])
-@classifier_required
-def flash_relearn():
-    period_str = request.form.get('period')
-    if not period_str:
-        flash('Не выбран период', 'danger')
-        return redirect(url_for('flash_page'))
-    period = date.fromisoformat(period_str)
-    learned = flr.learn_rules(period, created_by=session.get('username'))
-    wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
-    reclassified = flr.reclassify_unmatched(period)
-    audit.log_action(
-        session.get('username'), 'flash_relearn',
-        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, доразмечено по правилам: {reclassified}'
-    )
-    flash(
-        f'Классификация пересчитана против FinancialData (новых правил: {learned}, кошельков: {wallets_learned}) '
-        f'и по уже известным правилам доразмечено ещё {reclassified} операций.',
-        'success'
-    )
-    return redirect(url_for('flash_page', period=period_str))
+@app.route('/admin/references/articles/delete/<int:article_id>')
+@admin_required
+def delete_article(article_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли статья
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE article_id = %s", (article_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить статью, которая используется в записях', 'danger')
+            return redirect(url_for('manage_articles'))
+        
+        cur.execute("DELETE FROM articles WHERE id = %s", (article_id,))
+        conn.commit()
+        flash('Статья успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_articles'))
 
+# ---- Управление проектами ----
+@app.route('/admin/references/projects')
+@admin_required
+def manage_projects():
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Проверяем, существуют ли новые колонки, если нет - добавляем
+    cur.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='projects' AND column_name='tip_project_1'
+    """)
+    if not cur.fetchone():
+        cur.execute("ALTER TABLE projects ADD COLUMN tip_project_1 VARCHAR(100)")
+        cur.execute("ALTER TABLE projects ADD COLUMN tip_project_2 VARCHAR(100)")
+        cur.execute("ALTER TABLE projects ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        conn.commit()
+        print("Добавлены новые колонки в таблицу projects")
+    
+    cur.execute('''
+        SELECT p.id, p.name, p.tip_project_1, p.tip_project_2, p.created_at,
+               COUNT(e.id) as expenses_count 
+        FROM projects p 
+        LEFT JOIN expenses e ON p.id = e.project_id 
+        GROUP BY p.id 
+        ORDER BY p.name
+    ''')
+    projects = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_projects.html', projects=projects)
 
-@app.route('/flash/classify/<int:txn_id>', methods=['POST'])
-@classifier_required
-def flash_classify(txn_id):
-    fields = {
-        'Признак': (request.form.get('priznak') or '').strip() or None,
-        'Категория': (request.form.get('kategoria') or '').strip() or None,
-        'Статья': (request.form.get('statya') or '').strip() or None,
-        'Проект': (request.form.get('proekt') or '').strip() or None,
-        'Контрагент_report': (request.form.get('kontragent') or '').strip() or None,
-        'Строка отчета': (request.form.get('stroka') or '').strip() or None,
-    }
-    flr.set_manual_classification(txn_id, fields, session.get('username'))
-    audit.log_action(session.get('username'), 'flash_classify', f'txn_id={txn_id}')
-    flash('Операция размечена. Правило заведено для будущих загрузок, но на уже загруженные похожие операции не распространяется — их нужно проверить и разметить отдельно.', 'success')
-    return redirect(url_for('flash_page', period=request.form.get('period')))
+@app.route('/admin/references/projects/add', methods=['POST'])
+@admin_required
+def add_project():
+    name = request.form['name']
+    tip_project_1 = request.form.get('tip_project_1', '')
+    tip_project_2 = request.form.get('tip_project_2', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO projects (name, tip_project_1, tip_project_2) VALUES (%s, %s, %s)",
+            (name, tip_project_1 if tip_project_1 else None, tip_project_2 if tip_project_2 else None)
+        )
+        conn.commit()
+        flash('Проект успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Проект с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
 
+@app.route('/admin/references/projects/edit/<int:project_id>', methods=['POST'])
+@admin_required
+def edit_project(project_id):
+    name = request.form['name']
+    tip_project_1 = request.form.get('tip_project_1', '')
+    tip_project_2 = request.form.get('tip_project_2', '')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE projects 
+            SET name = %s, tip_project_1 = %s, tip_project_2 = %s
+            WHERE id = %s
+        """, (name, tip_project_1 if tip_project_1 else None, tip_project_2 if tip_project_2 else None, project_id))
+        conn.commit()
+        flash('Проект успешно обновлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Проект с таким именем уже существует', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при обновлении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
 
-@app.route('/api/flash_transactions')
-@report_required
-def api_flash_transactions():
-    period_str = request.args.get('period')
-    if not period_str:
-        return jsonify([])
-    period = date.fromisoformat(period_str)
-    rows = flr.get_transactions(
-        period, statya=request.args.get('statya') or None, stroka=request.args.get('stroka') or None,
-        proekt=request.args.get('proekt') or None, wallet=request.args.get('wallet') or None,
-    )
-    return jsonify([{
-        'id': r['id'], 'split_id': r['split_id'], 'operation_date': r['operation_date'].isoformat(), 'amount': float(r['amount']),
-        'counterparty_name': r['counterparty_name'], 'purpose_text': r['purpose_text'], 'wallet': r['wallet'],
-        'Признак': r['Признак'], 'Категория': r['Категория'], 'Статья': r['Статья'], 'Проект': r['Проект'],
-        'Контрагент_report': r['Контрагент_report'], 'Строка отчета': r['Строка отчета'],
-        'classification_source': r['classification_source'],
-    } for r in rows])
+@app.route('/admin/references/projects/delete/<int:project_id>')
+@admin_required
+def delete_project(project_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли проект
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE project_id = %s", (project_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить проект, который используется в записях', 'danger')
+            return redirect(url_for('manage_projects'))
+        
+        cur.execute("DELETE FROM projects WHERE id = %s", (project_id,))
+        conn.commit()
+        flash('Проект успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_projects'))
 
+# ---- Управление контрагентами ----
+@app.route('/admin/references/counterparties')
+@admin_required
+def manage_counterparties():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT c.*, COUNT(e.id) as expenses_count 
+        FROM counterparties c 
+        LEFT JOIN expenses e ON c.id = e.counterparty_id 
+        GROUP BY c.id 
+        ORDER BY c.name
+    ''')
+    counterparties = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_counterparties.html', counterparties=counterparties)
 
-@app.route('/api/flash_transactions/<int:txn_id>')
-@report_required
-def api_flash_transaction_one(txn_id):
-    txn = query_one(
-        '''SELECT id, operation_date, amount, counterparty_name, purpose_text
-           FROM flash.transactions WHERE id = %s''',
-        (txn_id,)
-    )
-    if txn is None:
-        return {'error': 'Операция не найдена'}, 404
-    splits = flr.get_transaction_splits(txn_id)
+@app.route('/admin/references/counterparties/add', methods=['POST'])
+@admin_required
+def add_counterparty():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO counterparties (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Контрагент успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Контрагент с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_counterparties'))
+
+@app.route('/admin/references/counterparties/delete/<int:counterparty_id>')
+@admin_required
+def delete_counterparty(counterparty_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли контрагент
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE counterparty_id = %s", (counterparty_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить контрагента, который используется в записях', 'danger')
+            return redirect(url_for('manage_counterparties'))
+        
+        cur.execute("DELETE FROM counterparties WHERE id = %s", (counterparty_id,))
+        conn.commit()
+        flash('Контрагент успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_counterparties'))
+
+# ---- Управление типами кошельков ----
+@app.route('/admin/references/wallet_types')
+@admin_required
+def manage_wallet_types():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT wt.*, COUNT(w.id) as wallets_count 
+        FROM wallet_types wt 
+        LEFT JOIN wallets w ON wt.id = w.wallet_type_id 
+        GROUP BY wt.id 
+        ORDER BY wt.name
+    ''')
+    wallet_types = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('manage_wallet_types.html', wallet_types=wallet_types)
+
+@app.route('/admin/references/wallet_types/add', methods=['POST'])
+@admin_required
+def add_wallet_type():
+    name = request.form['name']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO wallet_types (name) VALUES (%s)", (name,))
+        conn.commit()
+        flash('Тип кошелька успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Тип кошелька с таким именем уже существует', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallet_types'))
+
+@app.route('/admin/references/wallet_types/delete/<int:wallet_type_id>')
+@admin_required
+def delete_wallet_type(wallet_type_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли тип кошелька
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE wallet_type_id = %s", (wallet_type_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить тип кошелька, который используется в записях', 'danger')
+            return redirect(url_for('manage_wallet_types'))
+        
+        cur.execute("DELETE FROM wallet_types WHERE id = %s", (wallet_type_id,))
+        conn.commit()
+        flash('Тип кошелька успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallet_types'))
+
+# ---- Управление кошельками ----
+@app.route('/admin/references/wallets')
+@admin_required
+def manage_wallets():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT w.*, wt.name as wallet_type_name, COUNT(e.id) as expenses_count 
+        FROM wallets w 
+        JOIN wallet_types wt ON w.wallet_type_id = wt.id 
+        LEFT JOIN expenses e ON w.id = e.wallet_id 
+        GROUP BY w.id, wt.name 
+        ORDER BY wt.name, w.name
+    ''')
+    wallets = cur.fetchall()
+    
+    cur.execute("SELECT * FROM wallet_types ORDER BY name")
+    wallet_types = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    return render_template('manage_wallets.html', wallets=wallets, wallet_types=wallet_types)
+
+@app.route('/admin/references/wallets/add', methods=['POST'])
+@admin_required
+def add_wallet():
+    name = request.form['name']
+    wallet_type_id = request.form['wallet_type_id']
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO wallets (name, wallet_type_id) VALUES (%s, %s)",
+            (name, wallet_type_id)
+        )
+        conn.commit()
+        flash('Кошелек успешно добавлен', 'success')
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        flash('Кошелек с таким именем уже существует для данного типа', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallets'))
+
+@app.route('/admin/references/wallets/delete/<int:wallet_id>')
+@admin_required
+def delete_wallet(wallet_id):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Проверяем, используется ли кошелек
+        cur.execute("SELECT COUNT(*) FROM expenses WHERE wallet_id = %s", (wallet_id,))
+        if cur.fetchone()['count'] > 0:
+            flash('Нельзя удалить кошелек, который используется в записях', 'danger')
+            return redirect(url_for('manage_wallets'))
+        
+        cur.execute("DELETE FROM wallets WHERE id = %s", (wallet_id,))
+        conn.commit()
+        flash('Кошелек успешно удален', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('manage_wallets'))
+
+# ==================== УПРАВЛЕНИЕ ШТАТНЫМ РАСПИСАНИЕМ ====================
+
+@app.route('/admin/references/shr')
+@admin_required
+def manage_shr():
+    """Управление штатным расписанием"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Проверяем, существует ли таблица public."dim_ШР"
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'dim_ШР'
+        );
+    """)
+    table_exists = cur.fetchone()['exists']
+    
+    if not table_exists:
+        # Если таблицы нет, создаем новую с правильными именами колонок
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS "dim_ШР" (
+                id SERIAL PRIMARY KEY,
+                "Контрагент" VARCHAR(255) NOT NULL,
+                "Драйвер" VARCHAR(255),
+                "Должность" VARCHAR(255),
+                "Отдел" VARCHAR(255),
+                "Статус" VARCHAR(50) DEFAULT 'Активен',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        flash('Создана новая таблица "dim_ШР"', 'info')
+    
+    # Получаем все записи из таблицы public."dim_ШР"
+    try:
+        cur.execute('''
+            SELECT id, "Контрагент", "Драйвер", "Должность", "Отдел", "Статус"
+            FROM public."dim_ШР"
+            ORDER BY "Контрагент", "Драйвер", "Должность"
+        ''')
+        shr_list = cur.fetchall()
+        
+        # Преобразуем имена колонок для шаблона
+        for item in shr_list:
+            # Переименовываем ключи для совместимости с шаблоном
+            item['counterparty'] = item['Контрагент']
+            item['driver'] = item['Драйвер']
+            item['position'] = item['Должность']
+            item['department'] = item['Отдел']
+            item['status'] = item['Статус']
+            
+    except Exception as e:
+        print(f"Ошибка при получении данных: {e}")
+        shr_list = []
+        flash(f'Ошибка при загрузке данных: {str(e)}', 'danger')
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('manage_shr.html', shr_list=shr_list)
+
+@app.route('/admin/references/shr/add', methods=['POST'])
+@admin_required
+def add_shr():
+    """Добавление записи в штатное расписание"""
+    counterparty = request.form['counterparty']
+    driver = request.form.get('driver', '')
+    position = request.form.get('position', '')
+    department = request.form.get('department', '')
+    status = request.form.get('status', 'Активен')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            INSERT INTO public."dim_ШР" ("Контрагент", "Драйвер", "Должность", "Отдел", "Статус")
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (counterparty, driver, position, department, status))
+        conn.commit()
+        flash('Запись успешно добавлена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при добавлении: {str(e)}', 'danger')
+        print(f"Error adding record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/edit/<int:shr_id>', methods=['POST'])
+@admin_required
+def edit_shr(shr_id):
+    """Редактирование записи в штатном расписании"""
+    counterparty = request.form['counterparty']
+    driver = request.form.get('driver', '')
+    position = request.form.get('position', '')
+    department = request.form.get('department', '')
+    status = request.form.get('status', 'Активен')
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            UPDATE public."dim_ШР" 
+            SET "Контрагент" = %s, "Драйвер" = %s, "Должность" = %s, 
+                "Отдел" = %s, "Статус" = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        ''', (counterparty, driver, position, department, status, shr_id))
+        conn.commit()
+        flash('Запись успешно обновлена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при обновлении: {str(e)}', 'danger')
+        print(f"Error updating record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/delete/<int:shr_id>')
+@admin_required
+def delete_shr(shr_id):
+    """Удаление записи из штатного расписания"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('DELETE FROM public."dim_ШР" WHERE id = %s', (shr_id,))
+        conn.commit()
+        flash('Запись успешно удалена', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+        print(f"Error deleting record: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/export')
+@admin_required
+def export_shr():
+    """Экспорт штатного расписания в Excel"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            SELECT id, "Контрагент", "Драйвер", "Должность", "Отдел", "Статус"
+            FROM public."dim_ШР"
+            ORDER BY "Контрагент", "Драйвер", "Должность"
+        ''')
+        data = cur.fetchall()
+        
+        # Преобразуем для DataFrame
+        df_data = []
+        for row in data:
+            df_data.append({
+                'ID': row['id'],
+                'Контрагент': row['Контрагент'],
+                'Драйвер': row['Драйвер'] or '',
+                'Должность': row['Должность'] or '',
+                'Отдел': row['Отдел'] or '',
+                'Статус': row['Статус']
+            })
+        
+        df = pd.DataFrame(df_data)
+        filename = f"shr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # Создаем временный файл
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            df.to_excel(tmp.name, index=False)
+            tmp_path = tmp.name
+        
+        cur.close()
+        conn.close()
+        
+        # Отправляем файл
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        flash(f'Ошибка при экспорте: {str(e)}', 'danger')
+        print(f"Export error: {e}")
+        cur.close()
+        conn.close()
+        return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/import', methods=['POST'])
+@admin_required
+def import_shr():
+    """Импорт штатного расписания из Excel"""
+    if 'file' not in request.files:
+        flash('Файл не выбран', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('Файл не выбран', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls)', 'danger')
+        return redirect(url_for('manage_shr'))
+    
+    try:
+        # Читаем файл
+        df = pd.read_excel(file)
+        
+        # Проверяем наличие необходимых колонок
+        required_columns = ['Контрагент']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            flash(f'В файле отсутствуют обязательные колонки: {", ".join(missing_columns)}', 'danger')
+            return redirect(url_for('manage_shr'))
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        successful = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                counterparty = row['Контрагент']
+                driver = row.get('Драйвер', '') if pd.notna(row.get('Драйвер', '')) else ''
+                position = row.get('Должность', '') if pd.notna(row.get('Должность', '')) else ''
+                department = row.get('Отдел', '') if pd.notna(row.get('Отдел', '')) else ''
+                status = row.get('Статус', 'Активен') if pd.notna(row.get('Статус', '')) else 'Активен'
+                
+                cur.execute('''
+                    INSERT INTO public."dim_ШР" ("Контрагент", "Драйвер", "Должность", "Отдел", "Статус")
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (counterparty, driver, position, department, status))
+                
+                successful += 1
+                
+            except Exception as e:
+                errors.append(f"Строка {index + 2}: {str(e)}")
+                print(f"Import error at row {index + 2}: {e}")
+        
+        conn.commit()
+        
+        flash(f'Успешно импортировано записей: {successful}', 'success')
+        if errors:
+            for error in errors[:5]:
+                flash(error, 'warning')
+                print(error)
+        
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+        print(f"Import SHR error: {e}")
+    
+    return redirect(url_for('manage_shr'))
+
+@app.route('/admin/references/shr/debug')
+@admin_required
+def debug_shr():
+    """Отладка - показать структуру таблицы и данные"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Получаем информацию о таблице
+    cur.execute("""
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'dim_ШР'
+        ORDER BY ordinal_position
+    """)
+    columns = cur.fetchall()
+    
+    # Получаем данные
+    cur.execute('SELECT * FROM public."dim_ШР" LIMIT 5')
+    sample_data = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
     return jsonify({
-        'id': txn['id'], 'operation_date': txn['operation_date'].isoformat(), 'amount': float(txn['amount']),
-        'counterparty_name': txn['counterparty_name'], 'purpose_text': txn['purpose_text'],
-        'splits': [{
-            'id': s['id'], 'amount': float(s['amount']), 'Признак': s['Признак'], 'Категория': s['Категория'],
-            'Статья': s['Статья'], 'Проект': s['Проект'], 'Контрагент_report': s['Контрагент_report'],
-            'Строка отчета': s['Строка отчета'],
-        } for s in splits],
+        'columns': columns,
+        'sample_data': sample_data,
+        'count': len(sample_data)
     })
 
+# ==================== ИМПОРТ ИЗ EXCEL ====================
 
-@app.route('/flash/split/<int:txn_id>', methods=['POST'])
-@classifier_required
-def flash_split(txn_id):
-    payload = request.get_json(silent=True) or {}
-    splits = payload.get('splits') or []
-    period_str = payload.get('period')
-    try:
-        flr.set_transaction_splits(txn_id, splits, session.get('username'))
-    except ValueError as e:
-        return {'error': str(e)}, 400
-    audit.log_action(session.get('username'), 'flash_split', f'txn_id={txn_id}, частей: {len(splits)}')
-    return {'ok': True}
-
-
-@app.route('/flash/split/<int:txn_id>/clear', methods=['POST'])
-@classifier_required
-def flash_split_clear(txn_id):
-    flr.clear_transaction_splits(txn_id)
-    audit.log_action(session.get('username'), 'flash_split_clear', f'txn_id={txn_id}')
-    return {'ok': True}
-
-
-@app.route('/investment')
-@report_required
-def investment():
-    rows = ir.all_dp_summary()
-    return render_template('investment_summary.html', rows=rows)
-
-
-@app.route('/investment/<path:name>')
-@report_required
-def investment_detail(name):
-    include_allocation = request.args.get('allocation', '1') != '0'
-    data = ir.portfolio_detail(name, include_allocation)
-    if data is None:
-        flash(f'Портфель «{name}» не найден', 'danger')
-        return redirect(url_for('investment'))
-    return render_template('investment_detail.html', data=data, name=name, include_allocation=include_allocation)
-
-
-@app.route('/investment/admin')
-@classifier_required
-def investment_admin():
-    portfolios = ir.get_dp_portfolios()
-    for p in portfolios:
-        p['aliases'] = ir.get_portfolio_aliases(p['id'])
-    unmatched = ir.get_unmatched_dp_projects()
-    return render_template('investment_admin.html', portfolios=portfolios, unmatched=unmatched)
-
-
-@app.route('/investment/admin/<int:portfolio_id>', methods=['POST'])
-@classifier_required
-def investment_admin_update(portfolio_id):
-    ir.update_portfolio(
-        portfolio_id,
-        request.form.get('purchase_date') or None,
-        request.form.get('units') or None,
-        request.form.get('face_value_rub') or None,
-        request.form.get('price_rub') or None,
-        request.form.get('notes', '').strip(),
-    )
-    audit.log_action(session.get('username'), 'edit_investment_portfolio', f'portfolio_id={portfolio_id}')
-    flash('Карточка портфеля обновлена', 'success')
-    return redirect(url_for('investment_admin'))
-
-
-@app.route('/investment/admin/new', methods=['POST'])
-@classifier_required
-def investment_admin_new():
-    name = request.form.get('canonical_name', '').strip()
-    if name:
-        ir.create_portfolio(
-            name,
-            request.form.get('purchase_date') or None,
-            request.form.get('units') or None,
-            request.form.get('face_value_rub') or None,
-            request.form.get('price_rub') or None,
-            request.form.get('notes', '').strip(),
-        )
-        alias_for = request.form.get('alias_for_project', '').strip()
-        if alias_for:
-            portfolio = query('SELECT id FROM reporting.dp_portfolios WHERE canonical_name = %s', (name,))
-            if portfolio:
-                ir.add_alias(portfolio[0]['id'], alias_for)
-        audit.log_action(session.get('username'), 'create_investment_portfolio', name)
-        flash(f'Портфель «{name}» создан', 'success')
-    return redirect(url_for('investment_admin'))
-
-
-@app.route('/investment/admin/alias', methods=['POST'])
-@classifier_required
-def investment_admin_add_alias():
-    portfolio_id = request.form.get('portfolio_id', type=int)
-    project_name = request.form.get('project_name', '').strip()
-    if portfolio_id and project_name:
-        ir.add_alias(portfolio_id, project_name)
-        audit.log_action(session.get('username'), 'add_investment_alias', f'{project_name} -> portfolio_id={portfolio_id}')
-        flash(f'«{project_name}» привязан к портфелю', 'success')
-    return redirect(url_for('investment_admin'))
-
-
-@app.route('/investment/admin/alias/remove', methods=['POST'])
-@classifier_required
-def investment_admin_remove_alias():
-    project_name = request.form.get('project_name', '').strip()
-    if project_name:
-        ir.remove_alias(project_name)
-        audit.log_action(session.get('username'), 'remove_investment_alias', project_name)
-        flash(f'«{project_name}» отвязан', 'success')
-    return redirect(url_for('investment_admin'))
-
-
-@app.route('/wallets')
-@report_required
-def wallets():
-    data = wr.all_wallets_reconciliation()
-    foreign_money = wr.foreign_money_reconciliation()
-    return render_template('wallets_summary.html', data=data, foreign_money=foreign_money)
-
-
-@app.route('/wallets/foreign_money/opening', methods=['POST'])
-@classifier_required
-def wallets_foreign_money_opening():
-    year = request.form.get('year', type=int) or date.today().year
-    balance = request.form.get('balance')
-    if balance:
-        wr.add_foreign_money_balance(date(year, 1, 1), balance, None, session.get('username'))
-        audit.log_action(session.get('username'), 'foreign_money_opening', f'01.01.{year} = {balance}')
-        flash('Входящий остаток «Чужие деньги» сохранён', 'success')
-    return redirect(url_for('wallets'))
-
-
-@app.route('/wallets/foreign_money/current', methods=['POST'])
-@classifier_required
-def wallets_foreign_money_current():
-    balance = request.form.get('balance')
-    if balance:
-        period = date.today().replace(day=1)
-        wr.add_foreign_money_balance(period, balance, None, session.get('username'))
-        audit.log_action(session.get('username'), 'foreign_money_reconcile', f'{period} = {balance}')
-        flash('Точка сверки «Чужие деньги» сохранена', 'success')
-    return redirect(url_for('wallets'))
-
-
-@app.route('/wallets/reconcile', methods=['POST'])
-@classifier_required
-def wallets_reconcile():
-    entries = {k[len('balance_'):]: v for k, v in request.form.items() if k.startswith('balance_')}
-    saved, period = wr.save_reconciliation(entries, session.get('username'))
-    if saved:
-        audit.log_action(session.get('username'), 'wallets_reconcile', f'{saved} кошельков на {period}')
-        flash(f'Сохранено точек сверки: {saved}', 'success')
-    return redirect(url_for('wallets'))
-
-
-@app.route('/wallets/<path:name>')
-@report_required
-def wallets_detail(name):
-    year = request.args.get('year', type=int)
-    data = wr.wallet_detail(name, year)
-    if data is None:
-        flash(f'Кошелёк «{name}» не найден', 'danger')
-        return redirect(url_for('wallets'))
-    return render_template('wallets_detail.html', data=data, name=name)
-
-
-@app.route('/wallets/<path:name>/balance', methods=['POST'])
-@classifier_required
-def wallets_add_balance(name):
-    wallet = query('SELECT id FROM reporting.wallets WHERE canonical_name = %s', (name,))
-    if not wallet:
-        flash(f'Кошелёк «{name}» не найден', 'danger')
-        return redirect(url_for('wallets'))
-    period_month = request.form.get('period_month')
-    period = f'{period_month}-01' if period_month else None
-    balance = request.form.get('balance')
-    year = request.form.get('year', type=int)
-    if period and balance:
-        wr.add_balance_entry(wallet[0]['id'], period, balance, request.form.get('notes', '').strip(), session.get('username'))
-        audit.log_action(session.get('username'), 'add_wallet_balance', f'{name} @ {period} = {balance}')
-        flash('Точка сверки сохранена', 'success')
-    if request.form.get('return_to') == 'summary':
-        return redirect(url_for('wallets'))
-    return redirect(url_for('wallets_detail', name=name, year=year))
-
-
-@app.route('/wallets/ledger')
-@report_required
-def wallets_ledger():
-    today = date.today()
-    name = request.args.get('name', '')
-    date_from = request.args.get('date_from') or f'{today.year}-01-01'
-    date_to = request.args.get('date_to') or today.isoformat()
-    data = wr.wallet_ledger(name, date_from, date_to) if name else None
-    if name and data is None:
-        flash(f'Кошелёк «{name}» не найден', 'danger')
-        name = ''
-    wallets = wr.get_wallets()
-    return render_template('wallets_ledger.html', data=data, name=name, date_from=date_from, date_to=date_to, wallets=wallets)
-
-
-@app.route('/wallets/admin')
-@classifier_required
-def wallets_admin():
-    wallets_list = wr.get_wallets()
-    for w in wallets_list:
-        w['aliases'] = wr.get_wallet_aliases(w['id'])
-    unmatched = wr.get_unmatched_wallets()
-    return render_template('wallets_admin.html', wallets=wallets_list, unmatched=unmatched, group_order=wr.GROUP_ORDER)
-
-
-@app.route('/wallets/admin/<int:wallet_id>', methods=['POST'])
-@classifier_required
-def wallets_admin_update(wallet_id):
-    wr.update_wallet(wallet_id, request.form.get('group_name', '').strip(), request.form.get('notes', '').strip())
-    audit.log_action(session.get('username'), 'edit_wallet', f'wallet_id={wallet_id}')
-    flash('Карточка кошелька обновлена', 'success')
-    return redirect(url_for('wallets_admin'))
-
-
-@app.route('/wallets/admin/new', methods=['POST'])
-@classifier_required
-def wallets_admin_new():
-    name = request.form.get('canonical_name', '').strip()
-    if name:
-        wr.create_wallet(name, request.form.get('group_name', '').strip(), request.form.get('notes', '').strip())
-        alias_for = request.form.get('alias_for_raw', '').strip()
-        if alias_for:
-            wallet = query('SELECT id FROM reporting.wallets WHERE canonical_name = %s', (name,))
-            if wallet:
-                wr.add_alias(wallet[0]['id'], alias_for)
-        audit.log_action(session.get('username'), 'create_wallet', name)
-        flash(f'Кошелёк «{name}» создан', 'success')
-    return redirect(url_for('wallets_admin'))
-
-
-@app.route('/wallets/admin/alias', methods=['POST'])
-@classifier_required
-def wallets_admin_add_alias():
-    wallet_id = request.form.get('wallet_id', type=int)
-    raw_name = request.form.get('raw_name', '').strip()
-    if wallet_id and raw_name:
-        wr.add_alias(wallet_id, raw_name)
-        audit.log_action(session.get('username'), 'add_wallet_alias', f'{raw_name} -> wallet_id={wallet_id}')
-        flash(f'«{raw_name}» привязан к кошельку', 'success')
-    return redirect(url_for('wallets_admin'))
-
-
-@app.route('/wallets/admin/alias/remove', methods=['POST'])
-@classifier_required
-def wallets_admin_remove_alias():
-    raw_name = request.form.get('raw_name', '').strip()
-    if raw_name:
-        wr.remove_alias(raw_name)
-        audit.log_action(session.get('username'), 'remove_wallet_alias', raw_name)
-        flash(f'«{raw_name}» отвязан', 'success')
-    return redirect(url_for('wallets_admin'))
-
-
-@app.route('/employees')
-@classifier_required
-def employees():
-    search = request.args.get('q', '').strip()
-    sql = 'SELECT contragent, department, position, status FROM reporting.employees'
-    params = ()
-    if search:
-        sql += ' WHERE contragent ILIKE %s'
-        params = (f'%{search}%',)
-    sql += ' ORDER BY department NULLS LAST, contragent'
-    rows = query(sql, params)
-    return render_template('employees.html', rows=rows, search=search, dept_order=fr.DEPT_ORDER)
-
-
-@app.route('/employees/<contragent>', methods=['POST'])
-@classifier_required
-def employees_update(contragent):
-    department = request.form.get('department', '').strip()
-    if department == '__custom__':
-        department = request.form.get('department_custom', '').strip()
-    execute(
-        '''UPDATE reporting.employees SET department = %s, position = %s, status = %s, updated_at = now()
-           WHERE contragent = %s''',
-        (department or None, request.form.get('position', '').strip() or None,
-         request.form.get('status', 'Работает'), contragent)
-    )
-    audit.log_action(session.get('username'), 'edit_employee', contragent)
-    flash(f'Данные сотрудника «{contragent}» обновлены', 'success')
-    return redirect(url_for('employees', q=request.form.get('q', '')))
-
-
-@app.route('/classifier')
-@classifier_required
-def classifier():
-    search = request.args.get('q', '').strip()
-    sql = 'SELECT * FROM dim_level_report'
-    params = ()
-    if search:
-        sql += ' WHERE "Статья" ILIKE %s OR "Категория" ILIKE %s'
-        params = (f'%{search}%', f'%{search}%')
-    sql += ' ORDER BY id'
-    rows = query(sql, params)
-    return render_template('classifier.html', rows=rows, search=search)
-
-
-@app.route('/classifier/<int:row_id>', methods=['POST'])
-@classifier_required
-def classifier_update(row_id):
-    execute(
-        '''UPDATE dim_level_report
-           SET "СтатьяУровень0" = %s, "СтатьяУровень1" = %s, "СтатьяУровень2" = %s, "СтатьяУровень3" = %s
-           WHERE id = %s''',
-        (
-            request.form.get('u0', '').strip(),
-            request.form.get('u1', '').strip(),
-            request.form.get('u2', '').strip(),
-            request.form.get('u3', '').strip(),
-            row_id,
-        )
-    )
-    audit.log_action(session.get('username'), 'edit_classifier', f'row_id={row_id}')
-    flash('Строка обновлена', 'success')
-    return redirect(url_for('classifier', q=request.form.get('q', '')))
-
-
-@app.route('/admin/log')
-@admin_required
-def admin_log():
-    search = request.args.get('q', '').strip()
-    rows = audit.get_log(search)
-    return render_template('admin_log.html', rows=rows, search=search)
-
-
-@app.route('/admin/users')
-@admin_required
-def admin_users():
-    rows = query('SELECT id, username, email, role, is_active, created_at FROM users ORDER BY username')
-    return render_template('admin_users.html', rows=rows)
-
-
-@app.route('/admin/refresh_views', methods=['POST'])
-@admin_required
-def admin_refresh_views():
-    refresh_all()
-    audit.log_action(session.get('username'), 'refresh_views', 'Ручное обновление reporting.*')
-    flash('Все reporting-вьюшки обновлены', 'success')
-    return redirect(url_for('admin_users'))
-
-
-@app.route('/admin/users/create', methods=['POST'])
-@admin_required
-def admin_users_create():
-    username = request.form.get('username', '').strip()
-    password = request.form.get('password', '')
-    role = request.form.get('role', 'shareholder')
-    email = request.form.get('email', '').strip() or None
-    if username and password:
-        execute(
-            'INSERT INTO users (username, password_hash, email, role, is_active) VALUES (%s, %s, %s, %s, true)',
-            (username, auth_hash_password(password), email, role)
-        )
-        audit.log_action(session.get('username'), 'create_user', f'{username} ({role})')
-        flash(f'Пользователь «{username}» создан', 'success')
-    return redirect(url_for('admin_users'))
-
-
-@app.route('/admin/users/<int:user_id>/update', methods=['POST'])
-@admin_required
-def admin_users_update(user_id):
-    role = request.form.get('role')
-    is_active = request.form.get('is_active') == 'on'
-    execute('UPDATE users SET role = %s, is_active = %s WHERE id = %s', (role, is_active, user_id))
-    audit.log_action(session.get('username'), 'update_user', f'user_id={user_id} role={role} is_active={is_active}')
-    flash('Пользователь обновлён', 'success')
-    return redirect(url_for('admin_users'))
-
-
-@app.route('/admin/users/<int:user_id>/password', methods=['POST'])
-@admin_required
-def admin_users_password(user_id):
-    new_password = request.form.get('password', '')
-    user = query('SELECT username FROM users WHERE id = %s', (user_id,))
-    if user and new_password:
-        set_password(user[0]['username'], new_password)
-        audit.log_action(session.get('username'), 'reset_password', f'user_id={user_id}')
-        flash(f'Пароль для «{user[0]["username"]}» обновлён', 'success')
-    return redirect(url_for('admin_users'))
-
-
-@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
-@admin_required
-def admin_users_delete(user_id):
-    if user_id == session.get('user_id'):
-        flash('Нельзя удалить свою же учётную запись', 'danger')
-        return redirect(url_for('admin_users'))
-    user = query('SELECT username FROM users WHERE id = %s', (user_id,))
-    if user:
-        execute('DELETE FROM users WHERE id = %s', (user_id,))
-        audit.log_action(session.get('username'), 'delete_user', f'user_id={user_id} username={user[0]["username"]}')
-        flash(f'Пользователь «{user[0]["username"]}» удалён', 'success')
-    return redirect(url_for('admin_users'))
-
-
-@app.route('/my/profile')
+@app.route('/import', methods=['GET', 'POST'])
 @login_required
-def my_profile():
-    user = query_one('SELECT id, username, email, full_name, role, created_at FROM users WHERE id = %s', (session['user_id'],))
-    return render_template('my_profile.html', user=user)
-
-
-@app.route('/my/profile', methods=['POST'])
-@login_required
-def my_profile_update():
-    email = request.form.get('email', '').strip() or None
-    full_name = request.form.get('full_name', '').strip() or None
-    execute('UPDATE users SET email = %s, full_name = %s WHERE id = %s', (email, full_name, session['user_id']))
-    audit.log_action(session.get('username'), 'update_own_profile', f'email={email} full_name={full_name}')
-    flash('Профиль обновлён', 'success')
-    return redirect(url_for('my_profile'))
-
-
-@app.route('/my/password', methods=['POST'])
-@login_required
-def my_password_update():
-    current_password = request.form.get('current_password', '')
-    new_password = request.form.get('new_password', '')
-    confirm_password = request.form.get('confirm_password', '')
-    ok, _ = authenticate_user(session['username'], current_password)
-    if not ok:
-        flash('Текущий пароль неверен', 'danger')
-    elif not new_password or new_password != confirm_password:
-        flash('Новый пароль и подтверждение не совпадают', 'danger')
-    else:
-        set_password(session['username'], new_password)
-        audit.log_action(session.get('username'), 'change_own_password', '')
-        flash('Пароль изменён', 'success')
-    return redirect(url_for('my_profile'))
-
-
-@app.route('/export/<kind>')
-@report_required
-def export_report(kind):
-    try:
-        if kind == 'svod1':
-            years = pr.get_available_years()
-            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-            pf = request.args.get('pf', 'факт')
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_svod1(pr.svod1(year, pf, allocation))
-        elif kind == 'svod2':
-            years = pr.get_available_years()
-            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-            pf = request.args.get('pf', 'факт')
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_svod2(pr.svod2(year, pf, allocation))
-        elif kind == 'dashboard1':
-            years = pr.get_available_years()
-            month = request.args.get('month', type=int) or date.today().month
-            series, deltas = _series_deltas_from_request(years)
-            projects = request.args.getlist('project') or None
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_dashboard(pr.dashboard1(month, series, deltas, projects, allocation=allocation), 'Dashboard1')
-        elif kind == 'dashboard2':
-            years = pr.get_available_years()
-            month = request.args.get('month', type=int) or date.today().month
-            series, deltas = _series_deltas_from_request(years)
-            projects = request.args.getlist('project') or None
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_dashboard(pr.dashboard2(month, series, deltas, projects, allocation=allocation), 'Dashboard2')
-        elif kind == 'unitpl':
-            start = request.args.get('start', type=int)
-            end = request.args.get('end', type=int)
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_unitpl(pr.unit_pl(start=start, end=end, allocation=allocation))
-        elif kind == 'fot1':
-            years = fr.get_available_years()
-            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-            pf = request.args.get('pf', 'факт')
-            sheets = fr.export_fot1(fr.fot1(year, pf))
-        elif kind == 'fot2':
-            years = fr.get_available_years()
-            month = request.args.get('month', type=int) or date.today().month
-            series = _parse_series(request.args.get('series'))
-            deltas = _parse_deltas(request.args.get('deltas'))
-            if series is None or deltas is None:
-                default_series, default_deltas = fr.default_series_deltas(years)
-                series = series or default_series
-                deltas = deltas or default_deltas
-            sheets = fr.export_fot2(fr.fot2(month, series, deltas))
-        elif kind == 'loans':
-            periods = lr.get_available_periods()
-            years = sorted({p.year for p in periods}) if periods else [date.today().year]
-            year = request.args.get('year', type=int) or years[-1]
-            month = request.args.get('month', type=int) or date.today().month
-            pf = request.args.get('pf', 'факт')
-            sheets = lr.export_loans(lr.loans(year, month, pf))
-        elif kind == 'counterparty':
-            contragents = request.args.getlist('name')
-            if not contragents:
-                return {'error': 'name обязателен'}, 400
-            pf = request.args.get('pf', 'факт')
-            projects = request.args.getlist('project') or None
-            default_from, default_to = pr.default_counterparty_range(pf)
-            date_from = request.args.get('date_from') or default_from.isoformat()
-            date_to = request.args.get('date_to') or default_to.isoformat()
-            sheets = pr.export_counterparty(pr.counterparty_series(contragents, pf, projects, date_from, date_to))
-        elif kind == 'overview':
-            years = pr.get_available_years()
-            year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)
-            pf = request.args.get('pf', 'факт')
-            allocation = request.args.get('allocation', 'all')
-            sheets = pr.export_overview(pr.overview_data(year, pf, allocation))
-        elif kind == 'investment':
-            sheets = ir.export_summary(ir.all_dp_summary())
-        elif kind == 'investment_detail':
-            name = request.args.get('name', '')
-            include_allocation = request.args.get('allocation', '1') != '0'
-            data = ir.portfolio_detail(name, include_allocation)
-            if data is None:
-                return {'error': 'Портфель не найден'}, 404
-            sheets = ir.export_detail(data)
-        elif kind == 'cbr':
-            exclude_creditor = request.args.getlist('exclude_creditor')
-            if exclude_creditor:
-                all_creditors = cr.get_filter_options()['creditors']
-                creditor = [c for c in all_creditors if c not in exclude_creditor]
+def import_expenses():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('Файл не выбран', 'danger')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        if file.filename == '':
+            flash('Файл не выбран', 'danger')
+            return redirect(request.url)
+        
+        if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls') or file.filename.endswith('.csv')):
+            flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls) или CSV', 'danger')
+            return redirect(request.url)
+        
+        try:
+            # Читаем файл
+            if file.filename.endswith('.csv'):
+                df = pd.read_csv(file)
             else:
-                creditor = None
-            debt_type = request.args.getlist('debt_type') or None
-            work_type = request.args.getlist('work_type') or None
-            sheets = cr.export_rows(cr.overall_by_month(creditor, debt_type, work_type))
-        elif kind == 'wallets':
-            sheets = wr.export_summary(wr.all_wallets_reconciliation())
-        elif kind == 'wallets_detail':
-            name = request.args.get('name', '')
-            data = wr.wallet_detail(name, year='all')
-            if data is None:
-                return {'error': 'Кошелёк не найден'}, 404
-            sheets = wr.export_detail(data)
-        elif kind == 'wallets_ledger':
-            name = request.args.get('name', '')
-            date_from = request.args.get('date_from') or None
-            date_to = request.args.get('date_to') or None
-            data = wr.wallet_ledger(name, date_from, date_to)
-            if data is None:
-                return {'error': 'Кошелёк не найден'}, 404
-            sheets = wr.export_ledger(data)
-        elif kind == 'flash_load':
-            period_str = request.args.get('period')
-            if not period_str:
-                return {'error': 'period обязателен'}, 400
-            period = date.fromisoformat(period_str)
-            rows = flr.export_for_load(period)
-            sheets = [('загрузка', etl.FACT_COLUMNS, [[r[c] for c in etl.FACT_COLUMNS] for r in rows])]
-        elif kind == 'flash_review':
-            period_str = request.args.get('period')
-            if not period_str:
-                return {'error': 'period обязателен'}, 400
-            period = date.fromisoformat(period_str)
-            headers, rows = flr.export_for_review(period)
-            sheets = [('flash', headers, rows)]
-        else:
-            return {'error': f'Неизвестный отчёт: {kind}'}, 404
-    except Exception:
-        app.logger.exception('Ошибка экспорта kind=%s', kind)
-        return {'error': 'Ошибка при формировании отчёта'}, 500
+                df = pd.read_excel(file)
+            
+            # Проверяем наличие колонки sign, если нет - определяем по сумме
+            if 'sign' not in df.columns:
+                df['sign'] = df['amount'].apply(lambda x: 'IN' if float(x) >= 0 else 'OUT')
+                flash('Колонка "sign" не найдена. Признак определен автоматически по сумме (IN для положительных, OUT для отрицательных)', 'info')
+            
+            # Ожидаемые колонки
+            expected_columns = ['date', 'amount', 'sign', 'category', 'article', 
+                               'project', 'counterparty', 'wallet_type', 'wallet', 
+                               'comments', 'pl']
+            
+            # Проверяем наличие необходимых колонок
+            required_columns = ['date', 'amount']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                flash(f'В файле отсутствуют обязательные колонки: {", ".join(missing_columns)}', 'danger')
+                return redirect(request.url)
+            
+            conn = get_db()
+            cur = conn.cursor()
+            
+            # Получаем все справочники для маппинга
+            cur.execute("SELECT id, name FROM signs")
+            signs = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT c.id, c.name, s.name as sign_name FROM categories c JOIN signs s ON c.sign_id = s.id")
+            categories = {(row['name'], row['sign_name']): row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT a.id, a.name, c.name as category_name FROM articles a JOIN categories c ON a.category_id = c.id")
+            articles = {(row['name'], row['category_name']): row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM projects")
+            projects = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM counterparties")
+            counterparties = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT id, name FROM wallet_types")
+            wallet_types = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            cur.execute("SELECT w.id, w.name, wt.name as wallet_type_name FROM wallets w JOIN wallet_types wt ON w.wallet_type_id = wt.id")
+            wallets = {(row['name'], row['wallet_type_name']): row['id'] for row in cur.fetchall()}
+            
+            successful = 0
+            failed = 0
+            errors = []
+            
+            for index, row in df.iterrows():
+                try:
+                    # Парсим дату
+                    if isinstance(row['date'], str):
+                        date = datetime.strptime(row['date'], '%Y-%m-%d')
+                    else:
+                        date = pd.to_datetime(row['date']).to_pydatetime()
+                    
+                    # Проверяем, открыт ли период
+                    if not is_period_editable(date) and session['role'] != 'admin':
+                        failed += 1
+                        errors.append(f"Строка {index + 2}: Период {date.year}-{date.month:02d} закрыт")
+                        continue
+                    
+                    # Получаем ID справочников
+                    sign_id = None
+                    if 'sign' in row and pd.notna(row['sign']):
+                        sign_id = signs.get(row['sign'])
+                    
+                    category_id = None
+                    if 'category' in row and pd.notna(row['category']) and sign_id:
+                        sign_name = next((s for s, id in signs.items() if id == sign_id), None)
+                        if sign_name:
+                            category_id = categories.get((row['category'], sign_name))
+                    
+                    article_id = None
+                    if 'article' in row and pd.notna(row['article']) and category_id:
+                        category_name = next((c for (c, s), id in categories.items() if id == category_id), None)
+                        if category_name:
+                            article_id = articles.get((row['article'], category_name))
+                    
+                    project_id = None
+                    if 'project' in row and pd.notna(row['project']):
+                        project_id = projects.get(row['project'])
+                    
+                    counterparty_id = None
+                    if 'counterparty' in row and pd.notna(row['counterparty']):
+                        counterparty_id = counterparties.get(row['counterparty'])
+                    
+                    wallet_type_id = None
+                    if 'wallet_type' in row and pd.notna(row['wallet_type']):
+                        wallet_type_id = wallet_types.get(row['wallet_type'])
+                    
+                    wallet_id = None
+                    if 'wallet' in row and pd.notna(row['wallet']) and wallet_type_id:
+                        wallet_type_name = next((wt for wt, id in wallet_types.items() if id == wallet_type_id), None)
+                        if wallet_type_name:
+                            wallet_id = wallets.get((row['wallet'], wallet_type_name))
+                    
+                    # Вставляем запись
+                    cur.execute('''
+                        INSERT INTO expenses (
+                            date, year, month, sign_id, category_id, article_id,
+                            project_id, counterparty_id, wallet_type_id, wallet_id,
+                            amount, comments, pl, user_id
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ''', (
+                        date, date.year, date.month,
+                        sign_id,
+                        category_id,
+                        article_id,
+                        project_id,
+                        counterparty_id,
+                        wallet_type_id,
+                        wallet_id,
+                        row['amount'],
+                        row.get('comments', '') if pd.notna(row.get('comments', '')) else '',
+                        row.get('pl', '') if pd.notna(row.get('pl', '')) else '',
+                        session['user_id']
+                    ))
+                    
+                    successful += 1
+                    
+                except Exception as e:
+                    failed += 1
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            conn.commit()
+            
+            if successful > 0:
+                flash(f'Успешно импортировано: {successful} записей', 'success')
+            if failed > 0:
+                flash(f'Ошибок при импорте: {failed}. Подробности в консоли', 'warning')
+                for error in errors[:5]:  # Показываем первые 5 ошибок
+                    print(error)
+            
+            cur.close()
+            conn.close()
+            
+        except Exception as e:
+            flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+            print(f"Import error: {e}")
+        
+        return redirect(url_for('index'))
+    
+    return render_template('import.html')
 
-    audit.log_action(session.get('username'), 'export', kind)
-    buf = export.build_workbook(sheets)
+# ==================== ЭКСПОРТ СПРАВОЧНИКОВ ====================
+
+@app.route('/admin/references/export/<string:ref_type>')
+@admin_required
+def export_reference(ref_type):
+    """Экспорт справочника в Excel"""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Определяем данные для экспорта в зависимости от типа справочника
+    if ref_type == 'signs':
+        cur.execute('''
+            SELECT s.id, s.name as "Признак",
+                   COUNT(c.id) as "Количество категорий"
+            FROM signs s
+            LEFT JOIN categories c ON s.id = c.sign_id
+            GROUP BY s.id
+            ORDER BY s.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"priznaki_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'categories':
+        cur.execute('''
+            SELECT c.id, c.name as "Категория",
+                   s.name as "Признак",
+                   COUNT(a.id) as "Количество статей"
+            FROM categories c
+            JOIN signs s ON c.sign_id = s.id
+            LEFT JOIN articles a ON c.id = a.category_id
+            GROUP BY c.id, s.name
+            ORDER BY s.name, c.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"kategorii_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'articles':
+        cur.execute('''
+            SELECT a.id, a.name as "Статья",
+                   c.name as "Категория",
+                   s.name as "Признак",
+                   COUNT(e.id) as "Использований"
+            FROM articles a
+            JOIN categories c ON a.category_id = c.id
+            JOIN signs s ON c.sign_id = s.id
+            LEFT JOIN expenses e ON a.id = e.article_id
+            GROUP BY a.id, c.name, s.name
+            ORDER BY s.name, c.name, a.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"stati_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'projects':
+        cur.execute('''
+            SELECT p.id, p.name as "Проект", 
+                   p.tip_project_1 as "Тип проекта 1",
+                   p.tip_project_2 as "Тип проекта 2",
+                   p.created_at as "Дата создания",
+                   COUNT(e.id) as "Использований"
+            FROM projects p
+            LEFT JOIN expenses e ON p.id = e.project_id
+            GROUP BY p.id
+            ORDER BY p.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"proekty_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'counterparties':
+        cur.execute('''
+            SELECT c.id, c.name as "Контрагент",
+                   COUNT(e.id) as "Использований"
+            FROM counterparties c
+            LEFT JOIN expenses e ON c.id = e.counterparty_id
+            GROUP BY c.id
+            ORDER BY c.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"kontragenty_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'wallet_types':
+        cur.execute('''
+            SELECT wt.id, wt.name as "Тип кошелька",
+                   COUNT(w.id) as "Количество кошельков"
+            FROM wallet_types wt
+            LEFT JOIN wallets w ON wt.id = w.wallet_type_id
+            GROUP BY wt.id
+            ORDER BY wt.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"tipy_koshelkov_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+    elif ref_type == 'wallets':
+        cur.execute('''
+            SELECT w.id, w.name as "Кошелек",
+                   wt.name as "Тип кошелька",
+                   COUNT(e.id) as "Использований"
+            FROM wallets w
+            JOIN wallet_types wt ON w.wallet_type_id = wt.id
+            LEFT JOIN expenses e ON w.id = e.wallet_id
+            GROUP BY w.id, wt.name
+            ORDER BY wt.name, w.name
+        ''')
+        data = cur.fetchall()
+        df = pd.DataFrame(data)
+        filename = f"koshelki_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    else:
+        flash('Неизвестный тип справочника', 'danger')
+        return redirect(url_for('manage_references'))
+    
+    cur.close()
+    conn.close()
+    
+    # Создаем временный файл
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        df.to_excel(tmp.name, index=False)
+        tmp_path = tmp.name
+    
+    # Отправляем файл
     return send_file(
-        buf, as_attachment=True, download_name=f'{kind}.xlsx',
+        tmp_path,
+        as_attachment=True,
+        download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
+# ==================== ИМПОРТ СПРАВОЧНИКОВ ====================
 
-@app.route('/chat')
-@report_required
-def chat():
-    return render_template('chat.html', configured=bool(Config.POLZA_AI_API_KEY))
+@app.route('/admin/references/import/<string:ref_type>', methods=['POST'])
+@admin_required
+def import_reference(ref_type):
+    """Импорт справочника из Excel"""
+    if 'file' not in request.files:
+        flash('Файл не выбран', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('Файл не выбран', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        flash('Пожалуйста, загрузите файл Excel (.xlsx, .xls)', 'danger')
+        return redirect(request.referrer or url_for('manage_references'))
+    
+    try:
+        # Читаем файл
+        df = pd.read_excel(file)
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        successful = 0
+        errors = []
+        
+        if ref_type == 'signs':
+            # Ожидаемые колонки: Признак
+            if 'Признак' not in df.columns:
+                flash('В файле отсутствует колонка "Признак"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Признак']
+                    cur.execute(
+                        "INSERT INTO signs (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано признаков: {successful}', 'success')
+            
+        elif ref_type == 'categories':
+            # Ожидаемые колонки: Категория, Признак
+            if 'Категория' not in df.columns or 'Признак' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Категория", "Признак")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем словарь признаков
+            cur.execute("SELECT id, name FROM signs")
+            signs = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Категория']
+                    sign_name = row['Признак']
+                    
+                    if sign_name not in signs:
+                        errors.append(f"Строка {index + 2}: Признак '{sign_name}' не найден")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO categories (name, sign_id) VALUES (%s, %s) ON CONFLICT (name, sign_id) DO NOTHING",
+                        (name, signs[sign_name])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано категорий: {successful}', 'success')
+            
+        elif ref_type == 'articles':
+            # Ожидаемые колонки: Статья, Категория, Признак
+            if 'Статья' not in df.columns or 'Категория' not in df.columns or 'Признак' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Статья", "Категория", "Признак")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем соответствия категорий
+            cur.execute("""
+                SELECT c.id, c.name, s.name as sign_name 
+                FROM categories c
+                JOIN signs s ON c.sign_id = s.id
+            """)
+            categories = {(row['name'], row['sign_name']): row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Статья']
+                    category_name = row['Категория']
+                    sign_name = row['Признак']
+                    
+                    category_key = (category_name, sign_name)
+                    if category_key not in categories:
+                        errors.append(f"Строка {index + 2}: Категория '{category_name}' с признаком '{sign_name}' не найдена")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO articles (name, category_id) VALUES (%s, %s) ON CONFLICT (name, category_id) DO NOTHING",
+                        (name, categories[category_key])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано статей: {successful}', 'success')
+            
+        elif ref_type == 'projects':
+            # Ожидаемые колонки: Проект, Тип проекта 1, Тип проекта 2
+            if 'Проект' not in df.columns:
+                flash('В файле отсутствует колонка "Проект"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Проект']
+                    tip_project_1 = row.get('Тип проекта 1', '') if pd.notna(row.get('Тип проекта 1', '')) else None
+                    tip_project_2 = row.get('Тип проекта 2', '') if pd.notna(row.get('Тип проекта 2', '')) else None
+                    
+                    cur.execute("""
+                        INSERT INTO projects (name, tip_project_1, tip_project_2) 
+                        VALUES (%s, %s, %s) 
+                        ON CONFLICT (name) DO UPDATE SET 
+                            tip_project_1 = EXCLUDED.tip_project_1,
+                            tip_project_2 = EXCLUDED.tip_project_2
+                    """, (name, tip_project_1, tip_project_2))
+                    
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано проектов: {successful}', 'success')
+            
+        elif ref_type == 'counterparties':
+            # Ожидаемые колонки: Контрагент
+            if 'Контрагент' not in df.columns:
+                flash('В файле отсутствует колонка "Контрагент"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Контрагент']
+                    cur.execute(
+                        "INSERT INTO counterparties (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано контрагентов: {successful}', 'success')
+            
+        elif ref_type == 'wallet_types':
+            # Ожидаемые колонки: Тип кошелька
+            if 'Тип кошелька' not in df.columns:
+                flash('В файле отсутствует колонка "Тип кошелька"', 'danger')
+                return redirect(request.referrer)
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Тип кошелька']
+                    cur.execute(
+                        "INSERT INTO wallet_types (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                        (name,)
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано типов кошельков: {successful}', 'success')
+            
+        elif ref_type == 'wallets':
+            # Ожидаемые колонки: Кошелек, Тип кошелька
+            if 'Кошелек' not in df.columns or 'Тип кошелька' not in df.columns:
+                flash('В файле отсутствуют необходимые колонки ("Кошелек", "Тип кошелька")', 'danger')
+                return redirect(request.referrer)
+            
+            # Получаем словарь типов кошельков
+            cur.execute("SELECT id, name FROM wallet_types")
+            wallet_types = {row['name']: row['id'] for row in cur.fetchall()}
+            
+            for index, row in df.iterrows():
+                try:
+                    name = row['Кошелек']
+                    wallet_type_name = row['Тип кошелька']
+                    
+                    if wallet_type_name not in wallet_types:
+                        errors.append(f"Строка {index + 2}: Тип кошелька '{wallet_type_name}' не найден")
+                        continue
+                    
+                    cur.execute(
+                        "INSERT INTO wallets (name, wallet_type_id) VALUES (%s, %s) ON CONFLICT (name, wallet_type_id) DO NOTHING",
+                        (name, wallet_types[wallet_type_name])
+                    )
+                    if cur.rowcount > 0:
+                        successful += 1
+                except Exception as e:
+                    errors.append(f"Строка {index + 2}: {str(e)}")
+            
+            flash(f'Успешно импортировано кошельков: {successful}', 'success')
+        
+        else:
+            flash('Неизвестный тип справочника', 'danger')
+            return redirect(url_for('manage_references'))
+        
+        conn.commit()
+        
+        if errors:
+            for error in errors[:5]:
+                flash(error, 'warning')
+                print(error)
+        
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        flash(f'Ошибка при обработке файла: {str(e)}', 'danger')
+        print(f"Import reference error: {e}")
+    
+    return redirect(request.referrer or url_for('manage_references'))
 
+@app.route('/download_template')
+@login_required
+def download_template():
+    """Скачать шаблон Excel для импорта"""
+    import tempfile
+    import os
+    
+    # Создаем DataFrame с примером данных
+    data = {
+        'date': ['2024-01-15', '2024-01-16'],
+        'amount': [1000.50, -500.25],
+        'sign': ['IN', 'OUT'],
+        'category': ['Доходы', 'Расходы'],
+        'article': ['Зарплата', 'Продукты'],
+        'project': ['Основной', 'Личный'],
+        'counterparty': ['Клиент 1', 'Магазин'],
+        'wallet_type': ['Банковская карта', 'Наличные'],
+        'wallet': ['Основная карта', 'Кошелек'],
+        'comments': ['Зарплата за январь', 'Покупка продуктов'],
+        'pl': ['PL1', 'PL2']
+    }
+    
+    df = pd.DataFrame(data)
+    
+    # Создаем временный файл
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+        df.to_excel(tmp.name, index=False)
+        tmp_path = tmp.name
+    
+    # Читаем файл для отправки
+    with open(tmp_path, 'rb') as f:
+        content = f.read()
+    
+    # Удаляем временный файл
+    os.unlink(tmp_path)
+    
+    # Отправляем файл
+    response = app.response_class(
+        content,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment;filename=import_template.xlsx'}
+    )
+    return response
 
-@app.route('/api/chat', methods=['POST'])
-@report_required
-def api_chat():
-    payload = request.get_json(silent=True) or {}
-    question = (payload.get('question') or '').strip()
-    history = payload.get('history') or []
-    if not question:
-        return jsonify({'error': 'Пустой вопрос'}), 400
-    result = chat_assistant.ask(question, history)
-    audit.log_action(session.get('username'), 'chat', question[:500])
-    if 'error' in result:
-        return jsonify(result), 200
-    return jsonify(result)
+@app.route('/admin/periods')
+@admin_required
+def manage_periods():
+    conn = get_db()
+    cur = conn.cursor()
+    
+    cur.execute('''
+        SELECT p.*, u.username as closed_by_username
+        FROM periods p
+        LEFT JOIN users u ON p.closed_by_user_id = u.id
+        ORDER BY p.year DESC, p.month DESC
+    ''')
+    periods = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('manage_periods.html', periods=periods)
 
+@app.route('/admin/period/toggle/<int:year>/<int:month>')
+@admin_required
+def toggle_period(year, month):
+    conn = get_db()
+    cur = conn.cursor()
+    
+    cur.execute(
+        "SELECT is_closed FROM periods WHERE year = %s AND month = %s",
+        (year, month)
+    )
+    period = cur.fetchone()
+    
+    if period:
+        new_status = not period['is_closed']
+        cur.execute(
+            "UPDATE periods SET is_closed = %s, closed_by_user_id = %s, closed_at = CURRENT_TIMESTAMP WHERE year = %s AND month = %s",
+            (new_status, session['user_id'] if new_status else None, year, month)
+        )
+    else:
+        cur.execute(
+            "INSERT INTO periods (year, month, is_closed, closed_by_user_id, closed_at) VALUES (%s, %s, %s, %s, %s)",
+            (year, month, True, session['user_id'], datetime.now())
+        )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    status = "закрыт" if new_status else "открыт"
+    flash(f'Период {year}-{month:02d} {status}', 'success')
+    return redirect(url_for('manage_periods'))
+
+@app.route('/admin/users')
+@admin_required
+def manage_users():
+    conn = get_db()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT id, username, role, created_at FROM users ORDER BY created_at DESC")
+    users = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('manage_users.html', users=users)
+
+@app.route('/admin/user/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_user(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if request.method == 'POST':
+        role = request.form['role']
+        cur.execute("UPDATE users SET role = %s WHERE id = %s", (role, user_id))
+        conn.commit()
+        flash('Роль пользователя обновлена', 'success')
+        return redirect(url_for('manage_users'))
+    
+    cur.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
+    user = cur.fetchone()
+    
+    cur.close()
+    conn.close()
+    
+    return render_template('edit_user.html', user=user)
+
+@app.route('/admin/user/delete/<int:user_id>')
+@admin_required
+def delete_user(user_id):
+    if user_id == session['user_id']:
+        flash('Нельзя удалить самого себя', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("DELETE FROM expenses WHERE user_id = %s", (user_id,))
+        cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
+        flash('Пользователь и его записи удалены', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Ошибка при удалении: {str(e)}', 'danger')
+    finally:
+        cur.close()
+        conn.close()
+    
+    return redirect(url_for('manage_users'))
+
+@app.route('/get_categories/<int:sign_id>')
+def get_categories(sign_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM categories WHERE sign_id = %s ORDER BY name", (sign_id,))
+    categories = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {'categories': categories}
+
+@app.route('/get_articles/<int:category_id>')
+def get_articles(category_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM articles WHERE category_id = %s ORDER BY name", (category_id,))
+    articles = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {'articles': articles}
+
+@app.route('/get_wallets/<int:wallet_type_id>')
+def get_wallets(wallet_type_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM wallets WHERE wallet_type_id = %s ORDER BY name", (wallet_type_id,))
+    wallets = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {'wallets': wallets}
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Смена пароля пользователя"""
+    if request.method == 'POST':
+        current_password = hashlib.sha256(request.form['current_password'].encode()).hexdigest()
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+        
+        # Проверяем, что новый пароль и подтверждение совпадают
+        if new_password != confirm_password:
+            flash('Новый пароль и подтверждение не совпадают', 'danger')
+            return redirect(url_for('change_password'))
+        
+        # Проверяем минимальную длину пароля
+        if len(new_password) < 6:
+            flash('Пароль должен содержать не менее 6 символов', 'danger')
+            return redirect(url_for('change_password'))
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Проверяем текущий пароль
+        cur.execute(
+            "SELECT * FROM users WHERE id = %s AND password_hash = %s",
+            (session['user_id'], current_password)
+        )
+        user = cur.fetchone()
+        
+        if not user:
+            flash('Текущий пароль указан неверно', 'danger')
+            cur.close()
+            conn.close()
+            return redirect(url_for('change_password'))
+        
+        # Обновляем пароль
+        new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        cur.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (new_password_hash, session['user_id'])
+        )
+        conn.commit()
+        
+        cur.close()
+        conn.close()
+        
+        flash('Пароль успешно изменен', 'success')
+        return redirect(url_for('index'))
+    
+    return render_template('change_password.html')
+
+@app.route('/admin/reset_password', methods=['POST'])
+@admin_required
+def reset_password():
+    """Сброс пароля пользователя администратором"""
+    user_id = request.form['user_id']
+    new_password = request.form['new_password']
+    confirm_password = request.form['confirm_password']
+    
+    if new_password != confirm_password:
+        flash('Пароли не совпадают', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    if len(new_password) < 6:
+        flash('Пароль должен содержать не менее 6 символов', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    conn = get_db()
+    cur = conn.cursor()
+    
+    new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    cur.execute(
+        "UPDATE users SET password_hash = %s WHERE id = %s",
+        (new_password_hash, user_id)
+    )
+    conn.commit()
+    
+    cur.close()
+    conn.close()
+    
+    flash('Пароль пользователя успешно сброшен', 'success')
+    return redirect(url_for('manage_users'))
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": str(e)}, 500
 
 if __name__ == '__main__':
-    Config.validate()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001)), debug=True, use_reloader=False)
+    print("Запуск приложения...")
+    print("Параметры подключения к БД:")
+    print(f"Host: {DB_CONFIG['host']}")
+    print(f"Database: {DB_CONFIG['dbname']}")
+    print(f"User: {DB_CONFIG['user']}")
+    print(f"Password: {'***' if DB_CONFIG['password'] else 'НЕ ЗАДАН!'}")
+    
+    try:
+        init_db()
+        debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
+        app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    except Exception as e:
+        print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        print("Проверьте:")
+        print("1. Наличие файла .env в корневой директории")
+        print("2. Правильность пароля в .env файле")
+        print("3. Доступность хоста PostgreSQL")
