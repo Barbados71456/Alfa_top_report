@@ -1,37 +1,26 @@
 {% extends "base.html" %}
-
+{% block title %}Вход — Alfa Top Report{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
-        <div class="card">
-            <div class="card-header text-center">
-                <h4 class="mb-0"><i class="bi bi-box-arrow-in-right"></i> Вход в систему</h4>
+<div class="d-flex justify-content-center align-items-center" style="min-height:75vh;">
+    <div class="card p-4" style="width:100%; max-width:380px;">
+        <div class="text-center mb-4">
+            <div class="d-inline-flex align-items-center justify-content-center mb-3" style="width:52px; height:52px; border-radius:14px; background-color:var(--accent-soft);">
+                <i class="bi bi-bar-chart-line-fill" style="font-size:1.4rem; color:var(--accent);"></i>
             </div>
-            <div class="card-body">
-                <form method="POST">
-                    <div class="mb-4">
-                        <label for="username" class="form-label">Имя пользователя</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-person"></i></span>
-                            <input type="text" class="form-control" id="username" name="username" required>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <label for="password" class="form-label">Пароль</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                            <input type="password" class="form-control" id="password" name="password" required>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2">
-                        <i class="bi bi-box-arrow-in-right"></i> Войти
-                    </button>
-                </form>
+            <div class="page-eyebrow">Портал отчётности</div>
+            <h1 class="page-title">Alfa Top Report</h1>
+        </div>
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Логин</label>
+                <input type="text" class="form-control" name="username" required autofocus>
             </div>
-        </div>
-        <div class="text-center mt-4">
-            <small style="color: #86868b;">Доступ только для администратора</small>
-        </div>
+            <div class="mb-3">
+                <label class="form-label">Пароль</label>
+                <input type="password" class="form-control" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-dark w-100">Войти</button>
+        </form>
     </div>
 </div>
 {% endblock %}
