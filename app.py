@@ -1202,6 +1202,14 @@ def export_report(kind):
                 series = series or default_series
                 deltas = deltas or default_deltas
             sheets = fr.export_fot2(fr.fot2(month, series, deltas))
+        elif kind == 'fot3':
+            employee = request.args.get('employee', '').strip()
+            if not employee:
+                return {'error': 'employee обязателен'}, 400
+            years = fr.get_available_years()
+            year = _pick_year(years, request.args.get('year', type=int))
+            pf = request.args.get('pf', 'факт')
+            sheets = fr.export_fot3(fr.fot3(employee, year, pf), year=year, pf=pf)
         elif kind == 'loans':
             periods = lr.get_available_periods()
             years = sorted({p.year for p in periods}) if periods else [date.today().year]
@@ -1215,10 +1223,13 @@ def export_report(kind):
                 return {'error': 'name обязателен'}, 400
             pf = request.args.get('pf', 'факт')
             projects = request.args.getlist('project') or None
+            allocation = request.args.get('allocation', 'all')
             default_from, default_to = pr.default_counterparty_range(pf)
             date_from = request.args.get('date_from') or default_from.isoformat()
             date_to = request.args.get('date_to') or default_to.isoformat()
-            sheets = pr.export_counterparty(pr.counterparty_series(contragents, pf, projects, date_from, date_to))
+            sheets = pr.export_counterparty(
+                pr.counterparty_series(contragents, pf, projects, date_from, date_to, allocation)
+            )
         elif kind == 'overview':
             years = pr.get_available_years()
             year = request.args.get('year', type=int) or (years[-1] if years else date.today().year)

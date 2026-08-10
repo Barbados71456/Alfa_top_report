@@ -259,3 +259,23 @@ def export_fot2(data):
     month_rows = export.flatten_rows(data['rows'], ('series_month', 'delta_month'))
     ytd_rows = export.flatten_rows(data['rows'], ('series_ytd', 'delta_ytd'))
     return [('ФОТ v2 Месяц', headers, month_rows), ('ФОТ v2 Накопительно', headers, ytd_rows)]
+
+
+def export_fot3(data, year=None, pf=None):
+    """Экспорт карточки сотрудника: параметры и помесячная структура ФОТ."""
+    headers = ['Показатель'] + data['months'] + ['Итого']
+    rows = [
+        ['ФОТ переменный', *data['variable'], sum(data['variable'])],
+        ['ФОТ постоянный', *data['fixed'], sum(data['fixed'])],
+        ['Итого', *data['total'], data['year_total']],
+    ]
+    parameters = [
+        ['Сотрудник', data['employee']],
+        ['Подразделение', data.get('dept') or '—'],
+        ['Год', year],
+        ['Сценарий', pf],
+    ]
+    return [
+        ('ФОТ v3', headers, rows),
+        ('Параметры', ['Параметр', 'Значение'], parameters),
+    ]
