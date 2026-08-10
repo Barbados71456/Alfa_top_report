@@ -20,6 +20,13 @@ import wallet_report as wr
 import audit
 import chat_assistant
 import export
+from employee_directory import (
+    MAX_FILE_SIZE,
+    EmployeeWorkbookError,
+    apply_employee_updates,
+    build_employee_workbook,
+    parse_employee_workbook,
+)
 import monthly_etl as etl
 import flash_report as flr
 
@@ -917,6 +924,67 @@ def employees():
     sql += ' ORDER BY department NULLS LAST, contragent'
     rows = query(sql, params)
     return render_template('employees.html', rows=rows, search=search, dept_order=fr.DEPT_ORDER)
+
+
+@app.route('/employees/export.xlsx')
+@classifier_required
+def employees_export():
+    rows = query(
+        '''SELECT contragent, department, position, status
+           FROM reporting.employees
+           ORDER BY department NULLS LAST, contragent'''
+    )
+    workbook = build_employee_workbook(rows, fr.DEPT_ORDER)
+    audit.log_action(
+        session.get('username'), 'export_employee_directory', f'rows={len(rows)}'
+    )
+    return send_file(
+        workbook,
+        as_attachment=True,
+        download_name=f'Alfa_Top_Report_employees_{date.today().isoformat()}.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+@app.route('/employees/import.xlsx', methods=['POST'])
+@classifier_required
+def employees_import():
+    if request.content_length and request.content_length > MAX_FILE_SIZE + 1024 * 1024:
+        flash('Файл больше 10 МБ.', 'danger')
+        return redirect(url_for('employees'))
+    uploaded = request.files.get('file')
+    if not uploaded or not uploaded.filename:
+        flash('Выберите XLSX-файл для загрузки.', 'danger')
+        return redirect(url_for('employees', q=request.form.get('q', '')))
+    if not uploaded.filename.lower().endswith('.xlsx'):
+        flash('Поддерживается только формат XLSX.', 'danger')
+        return redirect(url_for('employees', q=request.form.get('q', '')))
+
+    payload = uploaded.stream.read(MAX_FILE_SIZE + 1)
+    try:
+        employees_to_update = parse_employee_workbook(payload)
+        result = apply_employee_updates(employees_to_update)
+    except EmployeeWorkbookError as exc:
+        flash(f'Импорт не выполнен: {exc}', 'danger')
+        return redirect(url_for('employees', q=request.form.get('q', '')))
+    except Exception:
+        app.logger.exception('Ошибка импорта справочника сотрудников')
+        flash('Не удалось импортировать файл. Данные не изменены.', 'danger')
+        return redirect(url_for('employees', q=request.form.get('q', '')))
+
+    safe_filename = os.path.basename(uploaded.filename.replace('\\', '/'))
+    audit.log_action(
+        session.get('username'),
+        'import_employee_directory',
+        f'file={safe_filename}; processed={result["processed"]}; '
+        f'updated={result["updated"]}; unchanged={result["unchanged"]}',
+    )
+    flash(
+        f'Импорт завершён: проверено {result["processed"]}, '
+        f'обновлено {result["updated"]}, без изменений {result["unchanged"]}.',
+        'success',
+    )
+    return redirect(url_for('employees', q=request.form.get('q', '')))
 
 
 @app.route('/employees/<contragent>', methods=['POST'])
