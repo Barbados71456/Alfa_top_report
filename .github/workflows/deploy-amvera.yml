@@ -1,0 +1,43 @@
+name: Deploy to Amvera
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-amvera-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Push main to Amvera
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Amvera SSH key
+        env:
+          AMVERA_SSH_PRIVATE_KEY: ${{ secrets.AMVERA_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$AMVERA_SSH_PRIVATE_KEY" > ~/.ssh/amvera
+          chmod 600 ~/.ssh/amvera
+          ssh-keyscan -H git.msk0.amvera.ru >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Push current commit to Amvera master
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/amvera -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+        run: |
+          git remote add amvera git@git.msk0.amvera.ru:fedbi/al-fa-otcetn566xt6
+          git push amvera HEAD:refs/heads/master
