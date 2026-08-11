@@ -14,6 +14,7 @@ import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 INTERNAL_TRANSFER_LINE = 'Внутренние перемещения (нетто)'
+ONE_OFF_PORTFOLIO_PURCHASE_LINE = 'Покупка портфелей (разовая)'
 
 REVENUE_LINES = [
     'Выручка DP (цессия)',
@@ -47,6 +48,7 @@ VARIABLE_LINES = [
     'Прочие',
     'Налоги на дивиденды',
     'Штрафы',
+    ONE_OFF_PORTFOLIO_PURCHASE_LINE,
 ]
 
 FIXED_LINES = [
