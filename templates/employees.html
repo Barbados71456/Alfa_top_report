@@ -10,6 +10,48 @@
         указать должность и статус — эти правки уже не будут перезаписаны.
     </p>
 </div>
+<div class="card p-3 mb-3" id="employees-summary">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+        <div>
+            <div class="fw-semibold">Распределение сотрудников</div>
+            <div class="small text-muted">
+                По подразделениям и статусам{% if search %} — с учётом поиска «{{ search }}»{% endif %}
+            </div>
+        </div>
+        <div class="small text-muted">Всего: <span class="fw-semibold text-body">{{ employee_summary.grand_total }}</span></div>
+    </div>
+    {% if employee_summary.rows %}
+    <div class="table-responsive">
+        <table class="table table-sm report-table mb-0">
+            <thead>
+            <tr>
+                <th class="label-col">Подразделение</th>
+                {% for status in employee_summary.statuses %}<th class="text-end">{{ status }}</th>{% endfor %}
+                <th class="text-end">Итого</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for summary_row in employee_summary.rows %}
+            <tr>
+                <td class="label-col">{{ summary_row.department }}</td>
+                {% for status in employee_summary.statuses %}<td class="text-end">{{ summary_row.counts[status] }}</td>{% endfor %}
+                <td class="text-end fw-semibold">{{ summary_row.total }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+            <tfoot>
+            <tr class="fw-semibold">
+                <td class="label-col">Итого</td>
+                {% for status in employee_summary.statuses %}<td class="text-end">{{ employee_summary.totals[status] }}</td>{% endfor %}
+                <td class="text-end">{{ employee_summary.grand_total }}</td>
+            </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <div class="small text-muted">Сотрудники не найдены.</div>
+    {% endif %}
+</div>
 <div class="card p-3 mb-3 border-primary" id="employees-excel-tools">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <div>

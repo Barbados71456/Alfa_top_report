@@ -24,6 +24,7 @@ from employee_directory import (
     MAX_FILE_SIZE,
     EmployeeWorkbookError,
     apply_employee_updates,
+    build_employee_summary,
     build_employee_workbook,
     parse_employee_workbook,
 )
@@ -923,7 +924,13 @@ def employees():
         params = (f'%{search}%',)
     sql += ' ORDER BY department NULLS LAST, contragent'
     rows = query(sql, params)
-    return render_template('employees.html', rows=rows, search=search, dept_order=fr.DEPT_ORDER)
+    return render_template(
+        'employees.html',
+        rows=rows,
+        search=search,
+        dept_order=fr.DEPT_ORDER,
+        employee_summary=build_employee_summary(rows, fr.DEPT_ORDER),
+    )
 
 
 @app.route('/employees/export.xlsx')

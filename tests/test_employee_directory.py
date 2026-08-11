@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 from employee_directory import (
     EmployeeWorkbookError,
     apply_employee_updates,
+    build_employee_summary,
     build_employee_workbook,
     parse_employee_workbook,
 )
@@ -51,6 +52,44 @@ class EmployeeWorkbookTests(unittest.TestCase):
 
         parsed = parse_employee_workbook(payload)
         self.assertEqual(parsed, self.rows)
+
+    def test_summary_groups_by_department_and_status_with_totals(self):
+        rows = self.rows + [
+            {
+                'contragent': 'Сидоров Пётр Олегович',
+                'department': 'Продажи',
+                'position': 'Руководитель',
+                'status': None,
+            },
+            {
+                'contragent': 'Ким Анна Олеговна',
+                'department': 'Архив',
+                'position': None,
+                'status': 'Отпуск',
+            },
+        ]
+
+        summary = build_employee_summary(rows, ['Продажи', 'Маркетинг'])
+
+        self.assertEqual(summary['statuses'], ['Работает', 'Уволен', 'Отпуск'])
+        self.assertEqual(
+            [row['department'] for row in summary['rows']],
+            ['Продажи', 'Архив', 'Без подразделения'],
+        )
+        self.assertEqual(summary['rows'][0]['counts'], {
+            'Работает': 2, 'Уволен': 0, 'Отпуск': 0,
+        })
+        self.assertEqual(summary['totals'], {
+            'Работает': 2, 'Уволен': 1, 'Отпуск': 1,
+        })
+        self.assertEqual(summary['grand_total'], 4)
+
+    def test_summary_handles_empty_list(self):
+        summary = build_employee_summary([], ['Продажи'])
+
+        self.assertEqual(summary['rows'], [])
+        self.assertEqual(summary['totals'], {'Работает': 0, 'Уволен': 0})
+        self.assertEqual(summary['grand_total'], 0)
 
     def test_import_rejects_duplicate_employee(self):
         rows = [self.rows[0], dict(self.rows[0])]

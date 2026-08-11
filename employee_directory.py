@@ -1,5 +1,6 @@
 """Импорт и экспорт справочника сотрудников в безопасном XLSX-формате."""
 
+from collections import Counter
 from io import BytesIO
 from zipfile import BadZipFile, ZipFile, is_zipfile
 
@@ -18,6 +19,7 @@ SHEET_NAME = 'Сотрудники'
 LOOKUP_SHEET_NAME = 'Справочники'
 HEADERS = ('Контрагент', 'Подразделение', 'Должность', 'Статус')
 ALLOWED_STATUSES = ('Работает', 'Уволен')
+UNASSIGNED_DEPARTMENT = 'Без подразделения'
 MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_UNCOMPRESSED_SIZE = 40 * 1024 * 1024
 MAX_ROWS = 5000
@@ -27,6 +29,58 @@ MAX_TEXT_LENGTH = 500
 
 class EmployeeWorkbookError(ValueError):
     """Понятная пользователю ошибка структуры или данных книги."""
+
+
+def build_employee_summary(rows, department_order=()):
+    """Считает распределение сотрудников по подразделениям и статусам."""
+    counts = Counter()
+    known_departments = []
+    known_statuses = []
+
+    for row in rows:
+        department = _clean_text(row.get('department')) or UNASSIGNED_DEPARTMENT
+        status = _clean_text(row.get('status')) or ALLOWED_STATUSES[0]
+        counts[(department, status)] += 1
+        known_departments.append(department)
+        known_statuses.append(status)
+
+    department_rank = {
+        department: index
+        for index, department in enumerate(_unique(department_order))
+    }
+    departments = sorted(
+        set(known_departments),
+        key=lambda department: (
+            department == UNASSIGNED_DEPARTMENT,
+            department_rank.get(department, len(department_rank)),
+            department.casefold(),
+        ),
+    )
+    extra_statuses = sorted(
+        set(known_statuses) - set(ALLOWED_STATUSES),
+        key=str.casefold,
+    )
+    statuses = list(ALLOWED_STATUSES) + extra_statuses
+    totals = {
+        status: sum(counts[(department, status)] for department in departments)
+        for status in statuses
+    }
+
+    return {
+        'statuses': statuses,
+        'rows': [
+            {
+                'department': department,
+                'counts': {
+                    status: counts[(department, status)] for status in statuses
+                },
+                'total': sum(counts[(department, status)] for status in statuses),
+            }
+            for department in departments
+        ],
+        'totals': totals,
+        'grand_total': sum(totals.values()),
+    }
 
 
 def _clean_text(value):
