@@ -17,6 +17,7 @@
             <div class="small text-muted">
                 По подразделениям и статусам{% if search %} — с учётом поиска «{{ search }}»{% endif %}
             </div>
+            <div class="small text-primary">Нажмите на подразделение, статус или число, чтобы открыть сотрудников для редактирования.</div>
         </div>
         <div class="small text-muted">Всего: <span class="fw-semibold text-body">{{ employee_summary.grand_total }}</span></div>
     </div>
@@ -26,24 +27,50 @@
             <thead>
             <tr>
                 <th class="label-col">Подразделение</th>
-                {% for status in employee_summary.statuses %}<th class="text-end">{{ status }}</th>{% endfor %}
+                {% for status in employee_summary.statuses %}
+                <th class="text-end">
+                    <a href="{{ url_for('employees', q=search or None, status=status, _anchor='employees-directory') }}"
+                       class="link-dark text-decoration-none" title="Показать всех сотрудников со статусом «{{ status }}»">{{ status }}</a>
+                </th>
+                {% endfor %}
                 <th class="text-end">Итого</th>
             </tr>
             </thead>
             <tbody>
             {% for summary_row in employee_summary.rows %}
             <tr>
-                <td class="label-col">{{ summary_row.department }}</td>
-                {% for status in employee_summary.statuses %}<td class="text-end">{{ summary_row.counts[status] }}</td>{% endfor %}
-                <td class="text-end fw-semibold">{{ summary_row.total }}</td>
+                <td class="label-col">
+                    <a href="{{ url_for('employees', q=search or None, department=summary_row.department, _anchor='employees-directory') }}"
+                       class="link-dark text-decoration-none" title="Показать сотрудников подразделения">{{ summary_row.department }}</a>
+                </td>
+                {% for status in employee_summary.statuses %}
+                <td class="text-end">
+                    {% if summary_row.counts[status] %}
+                    <a href="{{ url_for('employees', q=search or None, department=summary_row.department, status=status, _anchor='employees-directory') }}"
+                       class="badge rounded-pill text-bg-light text-decoration-none" title="Показать и редактировать сотрудников">{{ summary_row.counts[status] }}</a>
+                    {% else %}—{% endif %}
+                </td>
+                {% endfor %}
+                <td class="text-end fw-semibold">
+                    <a href="{{ url_for('employees', q=search or None, department=summary_row.department, _anchor='employees-directory') }}"
+                       class="link-dark text-decoration-none">{{ summary_row.total }}</a>
+                </td>
             </tr>
             {% endfor %}
             </tbody>
             <tfoot>
             <tr class="fw-semibold">
                 <td class="label-col">Итого</td>
-                {% for status in employee_summary.statuses %}<td class="text-end">{{ employee_summary.totals[status] }}</td>{% endfor %}
-                <td class="text-end">{{ employee_summary.grand_total }}</td>
+                {% for status in employee_summary.statuses %}
+                <td class="text-end">
+                    <a href="{{ url_for('employees', q=search or None, status=status, _anchor='employees-directory') }}"
+                       class="link-dark text-decoration-none">{{ employee_summary.totals[status] }}</a>
+                </td>
+                {% endfor %}
+                <td class="text-end">
+                    <a href="{{ url_for('employees', q=search or None, _anchor='employees-directory') }}"
+                       class="link-dark text-decoration-none">{{ employee_summary.grand_total }}</a>
+                </td>
             </tr>
             </tfoot>
         </table>
@@ -66,6 +93,8 @@
         <form method="post" action="{{ url_for('employees_import') }}" enctype="multipart/form-data"
               class="d-flex flex-wrap align-items-end gap-2 mb-0">
             <input type="hidden" name="q" value="{{ search }}">
+            <input type="hidden" name="department" value="{{ department_filter or '' }}">
+            <input type="hidden" name="status" value="{{ status_filter or '' }}">
             <div>
                 <label for="employees-xlsx" class="form-label small mb-1">Исправленный файл XLSX</label>
                 <input id="employees-xlsx" type="file" name="file" class="form-control form-control-sm"
@@ -78,7 +107,20 @@
         Импорт сначала проверит весь файл; при ошибке данные не изменятся.
     </div>
 </div>
-<form class="mb-3" method="get">
+<div id="employees-directory" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+    <div>
+        <span class="fw-semibold">Сотрудники</span>
+        <span class="badge text-bg-secondary">{{ rows|length }}</span>
+        {% if department_filter %}<span class="badge text-bg-light ms-1">Подразделение: {{ department_filter }}</span>{% endif %}
+        {% if status_filter %}<span class="badge text-bg-light ms-1">Статус: {{ status_filter }}</span>{% endif %}
+    </div>
+    {% if department_filter or status_filter %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('employees', q=search or None, _anchor='employees-directory') }}">Показать всех</a>
+    {% endif %}
+</div>
+<form class="mb-3" method="get" action="{{ url_for('employees') }}#employees-directory">
+    {% if department_filter %}<input type="hidden" name="department" value="{{ department_filter }}">{% endif %}
+    {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
     <input type="text" name="q" class="form-control" style="max-width:320px" placeholder="Поиск по ФИО" value="{{ search }}">
 </form>
 <div class="card p-3 table-responsive">
@@ -97,6 +139,8 @@
         <tr>
             <form id="form-{{ loop.index }}" method="post" action="{{ url_for('employees_update', contragent=r.contragent) }}" style="display:none">
                 <input type="hidden" name="q" value="{{ search }}">
+                <input type="hidden" name="department_filter" value="{{ department_filter or '' }}">
+                <input type="hidden" name="status_filter" value="{{ status_filter or '' }}">
             </form>
             <td class="label-col">{{ r.contragent }}</td>
             <td class="label-col">
@@ -115,11 +159,17 @@
                 <select form="form-{{ loop.index }}" name="status" class="form-select form-select-sm">
                     <option value="Работает" {% if r.status=='Работает' %}selected{% endif %}>Работает</option>
                     <option value="Уволен" {% if r.status=='Уволен' %}selected{% endif %}>Уволен</option>
+                    {% if r.status and r.status not in ['Работает', 'Уволен'] %}
+                    <option value="{{ r.status }}" selected>{{ r.status }}</option>
+                    {% endif %}
                 </select>
             </td>
             <td><button form="form-{{ loop.index }}" class="btn btn-sm btn-outline-dark" type="submit">Сохранить</button></td>
         </tr>
         {% endfor %}
+        {% if not rows %}
+        <tr><td colspan="5" class="text-center text-muted py-4">В выбранной категории сотрудники не найдены.</td></tr>
+        {% endif %}
         </tbody>
     </table>
 </div>

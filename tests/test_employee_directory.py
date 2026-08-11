@@ -9,6 +9,7 @@ from employee_directory import (
     apply_employee_updates,
     build_employee_summary,
     build_employee_workbook,
+    filter_employee_rows,
     parse_employee_workbook,
 )
 
@@ -90,6 +91,45 @@ class EmployeeWorkbookTests(unittest.TestCase):
         self.assertEqual(summary['rows'], [])
         self.assertEqual(summary['totals'], {'Работает': 0, 'Уволен': 0})
         self.assertEqual(summary['grand_total'], 0)
+
+    def test_filter_rows_by_summary_department_and_status(self):
+        rows = self.rows + [
+            {
+                'contragent': 'Сидоров Пётр Олегович',
+                'department': 'Продажи',
+                'position': None,
+                'status': None,
+            },
+            {
+                'contragent': 'Ким Анна Олеговна',
+                'department': 'Продажи',
+                'position': None,
+                'status': 'Не в актуальном ШР',
+            },
+        ]
+
+        sales = filter_employee_rows(rows, department='Продажи')
+        working_sales = filter_employee_rows(
+            rows, department='Продажи', status='Работает'
+        )
+        without_department = filter_employee_rows(
+            rows, department='Без подразделения'
+        )
+        custom_status = filter_employee_rows(rows, status='Не в актуальном ШР')
+
+        self.assertEqual(len(sales), 3)
+        self.assertEqual(
+            [row['contragent'] for row in working_sales],
+            ['Иванов Иван Иванович', 'Сидоров Пётр Олегович'],
+        )
+        self.assertEqual(
+            [row['contragent'] for row in without_department],
+            ['Петрова Анна Сергеевна'],
+        )
+        self.assertEqual(
+            [row['contragent'] for row in custom_status],
+            ['Ким Анна Олеговна'],
+        )
 
     def test_import_rejects_duplicate_employee(self):
         rows = [self.rows[0], dict(self.rows[0])]

@@ -83,6 +83,20 @@ def build_employee_summary(rows, department_order=()):
     }
 
 
+def filter_employee_rows(rows, department=None, status=None):
+    """Фильтрует строки теми же значениями, которые показаны в сводной."""
+    filtered = []
+    for row in rows:
+        row_department = _clean_text(row.get('department')) or UNASSIGNED_DEPARTMENT
+        row_status = _clean_text(row.get('status')) or ALLOWED_STATUSES[0]
+        if department is not None and row_department != department:
+            continue
+        if status is not None and row_status != status:
+            continue
+        filtered.append(row)
+    return filtered
+
+
 def _clean_text(value):
     if value is None:
         return ''

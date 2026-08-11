@@ -26,6 +26,7 @@ from employee_directory import (
     apply_employee_updates,
     build_employee_summary,
     build_employee_workbook,
+    filter_employee_rows,
     parse_employee_workbook,
 )
 import monthly_etl as etl
@@ -917,19 +918,23 @@ def wallets_admin_remove_alias():
 @classifier_required
 def employees():
     search = request.args.get('q', '').strip()
+    department_filter = request.args.get('department') or None
+    status_filter = request.args.get('status') or None
     sql = 'SELECT contragent, department, position, status FROM reporting.employees'
     params = ()
     if search:
         sql += ' WHERE contragent ILIKE %s'
         params = (f'%{search}%',)
     sql += ' ORDER BY department NULLS LAST, contragent'
-    rows = query(sql, params)
+    all_rows = query(sql, params)
     return render_template(
         'employees.html',
-        rows=rows,
+        rows=filter_employee_rows(all_rows, department_filter, status_filter),
         search=search,
+        department_filter=department_filter,
+        status_filter=status_filter,
         dept_order=fr.DEPT_ORDER,
-        employee_summary=build_employee_summary(rows, fr.DEPT_ORDER),
+        employee_summary=build_employee_summary(all_rows, fr.DEPT_ORDER),
     )
 
 
@@ -956,16 +961,22 @@ def employees_export():
 @app.route('/employees/import.xlsx', methods=['POST'])
 @classifier_required
 def employees_import():
+    return_filters = {
+        'q': request.form.get('q', ''),
+        'department': request.form.get('department', ''),
+        'status': request.form.get('status', ''),
+        '_anchor': 'employees-directory',
+    }
     if request.content_length and request.content_length > MAX_FILE_SIZE + 1024 * 1024:
         flash('Файл больше 10 МБ.', 'danger')
-        return redirect(url_for('employees'))
+        return redirect(url_for('employees', **return_filters))
     uploaded = request.files.get('file')
     if not uploaded or not uploaded.filename:
         flash('Выберите XLSX-файл для загрузки.', 'danger')
-        return redirect(url_for('employees', q=request.form.get('q', '')))
+        return redirect(url_for('employees', **return_filters))
     if not uploaded.filename.lower().endswith('.xlsx'):
         flash('Поддерживается только формат XLSX.', 'danger')
-        return redirect(url_for('employees', q=request.form.get('q', '')))
+        return redirect(url_for('employees', **return_filters))
 
     payload = uploaded.stream.read(MAX_FILE_SIZE + 1)
     try:
@@ -973,11 +984,11 @@ def employees_import():
         result = apply_employee_updates(employees_to_update)
     except EmployeeWorkbookError as exc:
         flash(f'Импорт не выполнен: {exc}', 'danger')
-        return redirect(url_for('employees', q=request.form.get('q', '')))
+        return redirect(url_for('employees', **return_filters))
     except Exception:
         app.logger.exception('Ошибка импорта справочника сотрудников')
         flash('Не удалось импортировать файл. Данные не изменены.', 'danger')
-        return redirect(url_for('employees', q=request.form.get('q', '')))
+        return redirect(url_for('employees', **return_filters))
 
     safe_filename = os.path.basename(uploaded.filename.replace('\\', '/'))
     audit.log_action(
@@ -991,7 +1002,7 @@ def employees_import():
         f'обновлено {result["updated"]}, без изменений {result["unchanged"]}.',
         'success',
     )
-    return redirect(url_for('employees', q=request.form.get('q', '')))
+    return redirect(url_for('employees', **return_filters))
 
 
 @app.route('/employees/<contragent>', methods=['POST'])
@@ -1008,7 +1019,13 @@ def employees_update(contragent):
     )
     audit.log_action(session.get('username'), 'edit_employee', contragent)
     flash(f'Данные сотрудника «{contragent}» обновлены', 'success')
-    return redirect(url_for('employees', q=request.form.get('q', '')))
+    return redirect(url_for(
+        'employees',
+        q=request.form.get('q', ''),
+        department=request.form.get('department_filter', ''),
+        status=request.form.get('status_filter', ''),
+        _anchor='employees-directory',
+    ))
 
 
 @app.route('/classifier')
