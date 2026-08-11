@@ -789,20 +789,7 @@ def month_breakdown(period):
     for r in rows:
         line = r['Строка отчета']
         amt = float(r['amount'])
-        if line in pr.REVENUE_LINES:
-            key = 'revenue'
-        elif line in pr.VARIABLE_LINES:
-            key = 'variable'
-        elif line in pr.FIXED_LINES:
-            key = 'fixed'
-        elif line == pr.INVESTMENT_LINE:
-            key = 'investment'
-        elif line in pr.FINANCING_LINES:
-            key = 'financing'
-        elif line in pr.BONUS_LINES:
-            key = 'bonus'
-        else:
-            key = 'other'
+        key = pr.line_bucket(line) or 'other'
         buckets[key].append(r)
         totals[key] += amt
     gm = totals['revenue'] + totals['variable']

@@ -13,6 +13,7 @@ from db import query
 import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+INTERNAL_TRANSFER_LINE = 'Внутренние перемещения (нетто)'
 
 REVENUE_LINES = [
     'Выручка DP (цессия)',
@@ -54,7 +55,6 @@ FIXED_LINES = [
     'IT и оборудование',
     'Налог на прибыль',
     'Налоги Зп',
-    'Внутренние перемещения (нетто)',
     'Лизинг и авто',
     'Не в отчёте (остатки на начало)',
     'Обслуживание долга (проценты)',
@@ -62,7 +62,15 @@ FIXED_LINES = [
 
 BONUS_LINES = ['Бонус Генерального директора', 'Бонус Руководитель взыскания']
 INVESTMENT_LINE = 'Покупка портфелей (цессия)'
-FINANCING_LINES = ['Займ приход', 'Возврат тела займа', 'Чужие деньги', 'Дивиденды учредителям']
+# Денежные потоки финансирования не участвуют в операционной прибыли, но входят
+# в чистую прибыль / кэш-флоу. Единый список используется всеми отчётами.
+FINANCING_LINES = [
+    INTERNAL_TRANSFER_LINE,
+    'Займ приход',
+    'Возврат тела займа',
+    'Чужие деньги',
+    'Дивиденды учредителям',
+]
 
 ALL_LINES = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES + BONUS_LINES + [INVESTMENT_LINE] + FINANCING_LINES
 
@@ -71,6 +79,23 @@ SECTIONS = [
     ('  РАСХОДЫ ПЕРЕМЕННЫЕ', VARIABLE_LINES, 'Итого переменные'),
     ('  РАСХОДЫ ПОСТОЯННЫЕ', FIXED_LINES, 'Итого постоянные'),
 ]
+
+
+def line_bucket(line):
+    """Единая классификация строки для отчётов с денежными блоками."""
+    if line in REVENUE_LINES:
+        return 'revenue'
+    if line in VARIABLE_LINES:
+        return 'variable'
+    if line in FIXED_LINES:
+        return 'fixed'
+    if line in BONUS_LINES:
+        return 'bonus'
+    if line == INVESTMENT_LINE:
+        return 'investment'
+    if line in FINANCING_LINES:
+        return 'financing'
+    return None
 
 
 def _empty_months():
@@ -841,25 +866,13 @@ def counterparty_series(contragents, pf='факт', projects=None, date_from=Non
     sql += ' GROUP BY 1, 2 ORDER BY 1'
     rows = query(sql, params)
 
-    revenue_set, variable_set, fixed_set = set(REVENUE_LINES), set(VARIABLE_LINES), set(FIXED_LINES)
-    bonus_set, financing_set = set(BONUS_LINES), set(FINANCING_LINES)
     by_period = defaultdict(lambda: {'revenue': 0.0, 'variable': 0.0, 'fixed': 0.0,
                                       'bonus': 0.0, 'investment': 0.0, 'financing': 0.0})
     for r in rows:
         amount = float(r['amount'] or 0)
-        line = r['line']
-        if line in revenue_set:
-            bucket = 'revenue'
-        elif line in variable_set:
-            bucket = 'variable'
-        elif line in fixed_set:
-            bucket = 'fixed'
-        elif line in bonus_set:
-            bucket = 'bonus'
-        elif line == INVESTMENT_LINE:
-            bucket = 'investment'
-        else:
-            bucket = 'financing'
+        bucket = line_bucket(r['line'])
+        if bucket is None:
+            continue
         by_period[r['period']][bucket] += amount
 
     periods = sorted(by_period)
