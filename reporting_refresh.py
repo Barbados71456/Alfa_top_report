@@ -24,8 +24,9 @@ def _sync_employees():
     вручную) не трогает — ON CONFLICT DO NOTHING."""
     execute('''
         INSERT INTO reporting.employees (contragent, department)
-        SELECT employee, (array_agg(dept))[1]
+        SELECT employee, (array_agg(dept ORDER BY period DESC))[1]
         FROM reporting.fot_monthly
+        WHERE employee <> '(без сотрудника)'
         GROUP BY employee
         ON CONFLICT (contragent) DO NOTHING
     ''')

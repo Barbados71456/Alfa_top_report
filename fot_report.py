@@ -1,7 +1,8 @@
 """ФОТ v1 / ФОТ v2 — фонд оплаты труда по подразделениям и сотрудникам.
 
 Источник — reporting.fot_monthly (period, dept, employee, pf, line, amount),
-line IN ('ФОТ переменный','ФОТ постоянный'). Сверено с эталонным Excel до копейки
+line IN ('ФОТ переменный','ФОТ постоянный','Премия за изъятие авто').
+Сверено с эталонным Excel до копейки
 (Дирекция янв.2022 = 485587.07 руб, Зудин С.А. = 319543.07 руб).
 Суммы в рублях (в отличие от pl_report — там всё в тыс.руб).
 """
@@ -9,6 +10,11 @@ from db import query
 import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+
+FOT_VARIABLE_LINE = 'ФОТ переменный'
+FOT_FIXED_LINE = 'ФОТ постоянный'
+REPOSSESSION_BONUS_LINE = 'Премия за изъятие авто'
+FOT_LINES = (FOT_VARIABLE_LINE, FOT_FIXED_LINE, REPOSSESSION_BONUS_LINE)
 
 DEPT_ORDER = ['Дирекция', 'Commercial', 'Legal', 'Field', 'Soft и прочее']
 
@@ -23,15 +29,17 @@ def get_available_years():
 
 
 def get_employees():
-    """Все сотрудники — справочник для выбора на ФОТ v3 (~350 записей, безопасно
-    отдавать целиком одним select, в отличие от ~10 тыс. контрагентов)."""
-    rows = query('SELECT DISTINCT employee FROM reporting.fot_monthly ORDER BY 1')
-    return [r['employee'] for r in rows]
+    """Все сотрудники из редактируемого справочника, включая добавленных вручную."""
+    rows = query(
+        "SELECT contragent FROM reporting.employees "
+        "WHERE contragent <> '(без сотрудника)' ORDER BY contragent"
+    )
+    return [r['contragent'] for r in rows]
 
 
 def fot3(employee, year, pf='факт'):
     """ФОТ v3: динамика начислений одному сотруднику по месяцам за год —
-    ФОТ переменный / ФОТ постоянный и итого. Ячейки итога кликабельны на
+    ФОТ переменный / ФОТ постоянный / премия за изъятие авто и итого. Ячейки итога кликабельны на
     клиенте через тот же pr.cell_detail(contragent=[employee]), что и
     Свод1/Обзор — статьи и комментарии по месяцу."""
     rows = query(
@@ -45,21 +53,32 @@ def fot3(employee, year, pf='факт'):
     )
     variable = {m: 0.0 for m in range(1, 13)}
     fixed = {m: 0.0 for m in range(1, 13)}
-    dept = None
+    repossession_bonus = {m: 0.0 for m in range(1, 13)}
+    employee_rows = query(
+        'SELECT department FROM reporting.employees WHERE contragent = %s',
+        (employee,),
+    )
+    dept = employee_rows[0]['department'] if employee_rows else None
     for r in rows:
         dept = r['dept'] or dept
-        if r['line'] == 'ФОТ переменный':
+        if r['line'] == FOT_VARIABLE_LINE:
             variable[r['m']] += float(r['val'] or 0)
-        elif r['line'] == 'ФОТ постоянный':
+        elif r['line'] == FOT_FIXED_LINE:
             fixed[r['m']] += float(r['val'] or 0)
-    total = {m: variable[m] + fixed[m] for m in range(1, 13)}
+        elif r['line'] == REPOSSESSION_BONUS_LINE:
+            repossession_bonus[r['m']] += float(r['val'] or 0)
+    total = {
+        m: variable[m] + fixed[m] + repossession_bonus[m]
+        for m in range(1, 13)
+    }
 
     def series(d):
         return [d[m] for m in range(1, 13)]
 
     return {
         'employee': employee, 'dept': dept, 'months': MONTHS_RU,
-        'variable': series(variable), 'fixed': series(fixed), 'total': series(total),
+        'variable': series(variable), 'fixed': series(fixed),
+        'repossession_bonus': series(repossession_bonus), 'total': series(total),
         'year_total': sum(total.values()),
     }
 
@@ -265,8 +284,9 @@ def export_fot3(data, year=None, pf=None):
     """Экспорт карточки сотрудника: параметры и помесячная структура ФОТ."""
     headers = ['Показатель'] + data['months'] + ['Итого']
     rows = [
-        ['ФОТ переменный', *data['variable'], sum(data['variable'])],
-        ['ФОТ постоянный', *data['fixed'], sum(data['fixed'])],
+        [FOT_VARIABLE_LINE, *data['variable'], sum(data['variable'])],
+        [FOT_FIXED_LINE, *data['fixed'], sum(data['fixed'])],
+        [REPOSSESSION_BONUS_LINE, *data['repossession_bonus'], sum(data['repossession_bonus'])],
         ['Итого', *data['total'], data['year_total']],
     ]
     parameters = [

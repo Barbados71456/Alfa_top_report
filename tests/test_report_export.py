@@ -52,6 +52,7 @@ def test_fot3_export_contains_employee_parameters_and_totals():
         'months': fr.MONTHS_RU,
         'variable': variable,
         'fixed': fixed,
+        'repossession_bonus': [0.0] * 12,
         'total': total,
         'year_total': sum(total),
     }
@@ -62,7 +63,8 @@ def test_fot3_export_contains_employee_parameters_and_totals():
     report = workbook['ФОТ v3']
     assert report.max_column == 14
     assert report['A2'].value == 'ФОТ переменный'
-    assert report['N4'].value == sum(total)
+    assert report['A4'].value == 'Премия за изъятие авто'
+    assert report['N5'].value == sum(total)
     parameters = workbook['Параметры']
     assert parameters['B2'].value == 'Иванов И.И.'
     assert parameters['B3'].value == 'Commercial'

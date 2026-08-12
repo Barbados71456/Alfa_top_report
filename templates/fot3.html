@@ -52,12 +52,16 @@
                     <td class="label-col">ФОТ постоянный</td>
                     {% for v in data.fixed %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
                 </tr>
+                <tr>
+                    <td class="label-col">Премия за изъятие авто</td>
+                    {% for v in data.repossession_bonus %}<td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '{:,.0f}'.format(v).replace(',', ' ') if v else '—' }}</td>{% endfor %}
+                </tr>
                 <tr class="row-bold">
                     <td class="label-col">Итого</td>
                     {% for v in data.total %}
                     {% if v %}
                     <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
-                        data-lines='["ФОТ переменный","ФОТ постоянный"]' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
+                        data-lines='["ФОТ переменный","ФОТ постоянный","Премия за изъятие авто"]' data-year="{{ year }}" data-month="{{ loop.index }}" data-pf="{{ pf }}"
                         data-employee='{{ [employee] | tojson }}' data-label="ФОТ" data-focus="statya">{{ '{:,.0f}'.format(v).replace(',', ' ') }}</td>
                     {% else %}
                     <td>—</td>
@@ -84,7 +88,8 @@ new Chart(document.getElementById('fot3Chart'), {
         labels: {{ data.months | tojson }},
         datasets: [
             {label: 'Переменный', data: {{ data.variable | tojson }}.map(v => Math.abs(v)), backgroundColor: '#0d6efd'},
-            {label: 'Постоянный', data: {{ data.fixed | tojson }}.map(v => Math.abs(v)), backgroundColor: '#86868b'}
+            {label: 'Постоянный', data: {{ data.fixed | tojson }}.map(v => Math.abs(v)), backgroundColor: '#86868b'},
+            {label: 'Премия за изъятие авто', data: {{ data.repossession_bonus | tojson }}.map(v => Math.abs(v)), backgroundColor: '#f59e0b'}
         ]
     },
     options: { plugins: { legend: { display: true } }, scales: { x: { stacked: true }, y: { stacked: true } } }

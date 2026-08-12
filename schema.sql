@@ -48,7 +48,7 @@ SELECT "Период" AS period,
        "Строка отчета" AS line,
        SUM("Сумма") AS amount
 FROM public."FinancialData"
-WHERE "Строка отчета" IN ('ФОТ переменный', 'ФОТ постоянный')
+WHERE "Строка отчета" IN ('ФОТ переменный', 'ФОТ постоянный', 'Премия за изъятие авто')
 GROUP BY 1, 2, 3, 4, 5;
 
 CREATE UNIQUE INDEX fot_monthly_uq ON reporting.fot_monthly (period, dept, employee, pf, line);

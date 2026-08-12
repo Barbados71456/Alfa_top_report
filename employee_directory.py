@@ -358,6 +358,46 @@ def parse_employee_workbook(payload):
         workbook.close()
 
 
+def create_employee(contragent, department=None, position=None, status='Работает'):
+    """Добавляет сотрудника вручную, даже если у него ещё нет начислений ФОТ."""
+    contragent = _clean_text(contragent)
+    department = _clean_text(department) or None
+    position = _clean_text(position) or None
+    status = _clean_text(status) or ALLOWED_STATUSES[0]
+    if not contragent:
+        raise EmployeeWorkbookError('Укажите ФИО сотрудника.')
+    if contragent == '(без сотрудника)':
+        raise EmployeeWorkbookError('Нельзя добавить служебное значение «(без сотрудника)».')
+    if status not in ALLOWED_STATUSES:
+        raise EmployeeWorkbookError('Статус должен быть «Работает» или «Уволен».')
+
+    with transaction() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                '''SELECT contragent FROM reporting.employees
+                   WHERE lower(btrim(contragent)) = lower(%s)
+                   LIMIT 1''',
+                (contragent,),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                raise EmployeeWorkbookError(
+                    f'Сотрудник «{existing["contragent"]}» уже есть в справочнике.'
+                )
+            cursor.execute(
+                '''INSERT INTO reporting.employees
+                       (contragent, department, position, status, updated_at)
+                   VALUES (%s, %s, %s, %s, now())''',
+                (contragent, department, position, status),
+            )
+    return {
+        'contragent': contragent,
+        'department': department,
+        'position': position,
+        'status': status,
+    }
+
+
 def apply_employee_updates(employees):
     """Атомарно обновляет только существующих сотрудников."""
     names = [employee['contragent'] for employee in employees]

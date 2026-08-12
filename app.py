@@ -26,6 +26,7 @@ from employee_directory import (
     apply_employee_updates,
     build_employee_summary,
     build_employee_workbook,
+    create_employee,
     filter_employee_rows,
     parse_employee_workbook,
 )
@@ -1033,11 +1034,13 @@ def employees():
     search = request.args.get('q', '').strip()
     department_filter = request.args.get('department') or None
     status_filter = request.args.get('status') or None
-    sql = 'SELECT contragent, department, position, status FROM reporting.employees'
-    params = ()
+    sql = '''SELECT contragent, department, position, status
+             FROM reporting.employees
+             WHERE contragent <> %s'''
+    params = ['(без сотрудника)']
     if search:
-        sql += ' WHERE contragent ILIKE %s'
-        params = (f'%{search}%',)
+        sql += ' AND contragent ILIKE %s'
+        params.append(f'%{search}%')
     sql += ' ORDER BY department NULLS LAST, contragent'
     all_rows = query(sql, params)
     return render_template(
@@ -1057,6 +1060,7 @@ def employees_export():
     rows = query(
         '''SELECT contragent, department, position, status
            FROM reporting.employees
+           WHERE contragent <> '(без сотрудника)'
            ORDER BY department NULLS LAST, contragent'''
     )
     workbook = build_employee_workbook(rows, fr.DEPT_ORDER)
@@ -1116,6 +1120,34 @@ def employees_import():
         'success',
     )
     return redirect(url_for('employees', **return_filters))
+
+
+@app.route('/employees/new', methods=['POST'])
+@classifier_required
+def employees_new():
+    department = request.form.get('department', '').strip()
+    if department == '__custom__':
+        department = request.form.get('department_custom', '').strip()
+    try:
+        employee = create_employee(
+            request.form.get('contragent', ''),
+            department=department,
+            position=request.form.get('position', ''),
+            status=request.form.get('status', 'Работает'),
+        )
+    except EmployeeWorkbookError as exc:
+        flash(f'Сотрудник не добавлен: {exc}', 'danger')
+        return redirect(url_for('employees', _anchor='employee-add-form'))
+    except Exception:
+        app.logger.exception('Ошибка ручного добавления сотрудника')
+        flash('Не удалось добавить сотрудника.', 'danger')
+        return redirect(url_for('employees', _anchor='employee-add-form'))
+
+    audit.log_action(session.get('username'), 'create_employee', employee['contragent'])
+    flash(f'Сотрудник «{employee["contragent"]}» добавлен в справочник', 'success')
+    return redirect(url_for(
+        'employees', q=employee['contragent'], _anchor='employees-directory'
+    ))
 
 
 @app.route('/employees/<contragent>', methods=['POST'])

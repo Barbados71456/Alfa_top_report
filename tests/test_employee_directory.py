@@ -9,6 +9,7 @@ from employee_directory import (
     apply_employee_updates,
     build_employee_summary,
     build_employee_workbook,
+    create_employee,
     filter_employee_rows,
     parse_employee_workbook,
 )
@@ -144,6 +145,56 @@ class EmployeeWorkbookTests(unittest.TestCase):
         workbook.close()
         with self.assertRaisesRegex(EmployeeWorkbookError, 'формулы запрещены'):
             parse_employee_workbook(output.getvalue())
+
+    @patch('employee_directory.transaction')
+    def test_create_employee_adds_manual_directory_row(self, transaction_mock):
+        connection = MagicMock()
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.__exit__.return_value = False
+        cursor.fetchone.return_value = None
+        connection.cursor.return_value = cursor
+        transaction_mock.return_value.__enter__.return_value = connection
+        transaction_mock.return_value.__exit__.return_value = False
+
+        result = create_employee(
+            '  Новый Сотрудник  ', 'Field', 'Специалист', 'Работает'
+        )
+
+        self.assertEqual(result, {
+            'contragent': 'Новый Сотрудник',
+            'department': 'Field',
+            'position': 'Специалист',
+            'status': 'Работает',
+        })
+        self.assertEqual(cursor.execute.call_count, 2)
+        insert_sql, insert_params = cursor.execute.call_args.args
+        self.assertIn('INSERT INTO reporting.employees', insert_sql)
+        self.assertEqual(
+            insert_params,
+            ('Новый Сотрудник', 'Field', 'Специалист', 'Работает'),
+        )
+
+    @patch('employee_directory.transaction')
+    def test_create_employee_rejects_case_insensitive_duplicate(self, transaction_mock):
+        connection = MagicMock()
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.__exit__.return_value = False
+        cursor.fetchone.return_value = {'contragent': 'Иванов Иван Иванович'}
+        connection.cursor.return_value = cursor
+        transaction_mock.return_value.__enter__.return_value = connection
+        transaction_mock.return_value.__exit__.return_value = False
+
+        with self.assertRaisesRegex(EmployeeWorkbookError, 'уже есть'):
+            create_employee('иванов иван иванович')
+        self.assertEqual(cursor.execute.call_count, 1)
+
+    def test_create_employee_validates_required_fields(self):
+        with self.assertRaisesRegex(EmployeeWorkbookError, 'Укажите ФИО'):
+            create_employee('   ')
+        with self.assertRaisesRegex(EmployeeWorkbookError, 'Статус должен'):
+            create_employee('Сотрудник', status='Неизвестно')
 
     @patch('employee_directory.transaction')
     def test_apply_updates_only_changed_rows(self, transaction_mock):

@@ -5,9 +5,9 @@
     <div class="page-eyebrow">Справочники</div>
     <h1 class="page-title">Справочник сотрудников (для ФОТ)</h1>
     <p class="page-subtitle">
-        Новые сотрудники подхватываются сюда автоматически при обновлении отчётности (каждые
-        10 минут) с предположительным подразделением. Здесь можно поправить подразделение,
-        указать должность и статус — эти правки уже не будут перезаписаны.
+        Новые сотрудники из строк «ФОТ переменный», «ФОТ постоянный» и
+        «Премия за изъятие авто» подхватываются автоматически при обновлении отчётности
+        (каждые 10 минут). Сотрудника без начислений можно добавить вручную ниже.
     </p>
 </div>
 <div class="card p-3 mb-3" id="employees-summary">
@@ -78,6 +78,48 @@
     {% else %}
     <div class="small text-muted">Сотрудники не найдены.</div>
     {% endif %}
+</div>
+<div class="card p-3 mb-3" id="employee-add-form">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <div class="fw-semibold">Добавить сотрудника вручную</div>
+            <div class="small text-muted">
+                Сотрудник сразу появится в справочнике и в списке выбора ФОТ v3, даже если начислений ещё нет.
+            </div>
+        </div>
+        <span class="badge text-bg-light">ФИО не должно дублироваться</span>
+    </div>
+    <form method="post" action="{{ url_for('employees_new') }}" class="row g-2 align-items-end">
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label small mb-1" for="newEmployeeName">ФИО сотрудника</label>
+            <input class="form-control form-control-sm" id="newEmployeeName" name="contragent"
+                   maxlength="500" required placeholder="Иванов Иван Иванович">
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label small mb-1" for="newEmployeeDepartment">Подразделение</label>
+            <select class="form-select form-select-sm" id="newEmployeeDepartment" name="department">
+                <option value="">—</option>
+                {% for department in dept_order %}<option value="{{ department }}">{{ department }}</option>{% endfor %}
+                <option value="__custom__">Другое…</option>
+            </select>
+            <input class="form-control form-control-sm mt-1" id="newEmployeeDepartmentCustom"
+                   name="department_custom" maxlength="500" placeholder="Новое подразделение" style="display:none">
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label small mb-1" for="newEmployeePosition">Должность</label>
+            <input class="form-control form-control-sm" id="newEmployeePosition" name="position" maxlength="500">
+        </div>
+        <div class="col-xl-2 col-md-4">
+            <label class="form-label small mb-1" for="newEmployeeStatus">Статус</label>
+            <select class="form-select form-select-sm" id="newEmployeeStatus" name="status">
+                <option value="Работает">Работает</option>
+                <option value="Уволен">Уволен</option>
+            </select>
+        </div>
+        <div class="col-xl-1 col-md-2 d-grid">
+            <button class="btn btn-sm btn-dark" type="submit">Добавить</button>
+        </div>
+    </form>
 </div>
 <div class="card p-3 mb-3 border-primary" id="employees-excel-tools">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -178,6 +220,10 @@ document.querySelectorAll('.dept-select').forEach(sel => {
     sel.addEventListener('change', () => {
         document.getElementById('custom-' + sel.dataset.idx).style.display = sel.value === '__custom__' ? 'block' : 'none';
     });
+});
+document.getElementById('newEmployeeDepartment').addEventListener('change', event => {
+    document.getElementById('newEmployeeDepartmentCustom').style.display =
+        event.target.value === '__custom__' ? 'block' : 'none';
 });
 </script>
 {% endblock %}
