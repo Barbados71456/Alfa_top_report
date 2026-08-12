@@ -205,12 +205,13 @@
                 <li class="nav-item"><a class="nav-link {% if request.endpoint=='flash_page' %}active{% endif %}" href="{{ url_for('flash_page') }}">Flash <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size:.6rem;">неаудировано</span></a></li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Бизнес отчеты</a>
+                    <a class="nav-link dropdown-toggle {% if request.endpoint in ('svod1','svod2','dashboard1','dashboard2','period_comparison','unitpl') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">Бизнес отчеты</a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item {% if request.endpoint=='svod1' %}active{% endif %}" href="{{ url_for('svod1') }}">Свод1</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='svod2' %}active{% endif %}" href="{{ url_for('svod2') }}">Свод2</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='dashboard1' %}active{% endif %}" href="{{ url_for('dashboard1') }}">Dashboard1</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='dashboard2' %}active{% endif %}" href="{{ url_for('dashboard2') }}">Dashboard2</a></li>
+                        <li><a class="dropdown-item {% if request.endpoint=='period_comparison' %}active{% endif %}" href="{{ url_for('period_comparison') }}">Анализ изменений</a></li>
                         <li><a class="dropdown-item {% if request.endpoint=='unitpl' %}active{% endif %}" href="{{ url_for('unitpl') }}">UNIT+PL</a></li>
                     </ul>
                 </li>

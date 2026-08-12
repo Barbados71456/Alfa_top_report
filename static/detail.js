@@ -202,7 +202,109 @@ function renderDeviationDetail(data, polarity) {
         </table>`;
 }
 
+// Анализ изменений: диапазоны произвольной длины, всегда только факт.
+function initPeriodComparisonCells(root) {
+    (root || document).querySelectorAll('.period-amount-cell').forEach(cell => {
+        if (cell.dataset.periodAmountInit) return;
+        cell.dataset.periodAmountInit = '1';
+        cell.addEventListener('click', () => showPeriodDetail({
+            lines: JSON.parse(cell.dataset.lines),
+            projects: cell.dataset.projects ? JSON.parse(cell.dataset.projects) : null,
+            start: cell.dataset.start,
+            end: cell.dataset.end,
+            periodLabel: cell.dataset.periodLabel,
+            label: cell.dataset.label,
+            focus: cell.dataset.focus || 'statya',
+            allocation: cell.dataset.allocation || 'all',
+        }));
+    });
+
+    (root || document).querySelectorAll('.period-delta-cell').forEach(cell => {
+        if (cell.dataset.periodDeltaInit) return;
+        cell.dataset.periodDeltaInit = '1';
+        cell.addEventListener('click', () => showPeriodDeviationDetail({
+            lines: JSON.parse(cell.dataset.lines),
+            projects: cell.dataset.projects ? JSON.parse(cell.dataset.projects) : null,
+            aStart: cell.dataset.aStart,
+            aEnd: cell.dataset.aEnd,
+            bStart: cell.dataset.bStart,
+            bEnd: cell.dataset.bEnd,
+            label: cell.dataset.label,
+            allocation: cell.dataset.allocation || 'all',
+        }));
+    });
+}
+
+function showPeriodDetail(opts) {
+    const modalEl = document.getElementById('detailModal');
+    detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
+    document.getElementById('detailModalTitle').textContent = `${opts.label} — ${opts.periodLabel} (факт)`;
+    document.getElementById('detailModalSummary').textContent = '';
+    document.getElementById('detailModalSummary').className = 'mb-2 fw-bold';
+    document.getElementById('detailModalTabs').style.display = '';
+    document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
+    detailModalInstance.show();
+
+    const params = new URLSearchParams({
+        start: opts.start, end: opts.end, allocation: opts.allocation,
+    });
+    opts.lines.forEach(line => params.append('line', line));
+    if (opts.projects) opts.projects.forEach(project => params.append('project', project));
+    fetch('/api/period_detail?' + params.toString())
+        .then(response => response.json())
+        .then(data => renderCellDetail(data, opts))
+        .catch(() => {
+            document.getElementById('detailModalBody').innerHTML = '<div class="text-danger">Не удалось загрузить детализацию периода.</div>';
+        });
+}
+
+function showPeriodDeviationDetail(opts) {
+    const modalEl = document.getElementById('detailModal');
+    detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
+    document.getElementById('detailModalTitle').textContent = `Анализ отклонения: ${opts.label}`;
+    document.getElementById('detailModalSummary').textContent = '';
+    document.getElementById('detailModalTabs').style.display = 'none';
+    document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
+    detailModalInstance.show();
+
+    const params = new URLSearchParams({
+        a_start: opts.aStart, a_end: opts.aEnd,
+        b_start: opts.bStart, b_end: opts.bEnd,
+        allocation: opts.allocation,
+    });
+    opts.lines.forEach(line => params.append('line', line));
+    if (opts.projects) opts.projects.forEach(project => params.append('project', project));
+    fetch('/api/period_deviation_detail?' + params.toString())
+        .then(response => response.json())
+        .then(renderPeriodDeviationDetail)
+        .catch(() => {
+            document.getElementById('detailModalBody').innerHTML = '<div class="text-danger">Не удалось загрузить анализ отклонения.</div>';
+        });
+}
+
+function renderPeriodDeviationDetail(data) {
+    if (data.error) {
+        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
+        return;
+    }
+    document.getElementById('detailModalTitle').textContent += ` · ${data.label_b} − ${data.label_a}`;
+    document.getElementById('detailModalSummary').textContent = `Итого отклонение B − A: ${fmtAmount(data.total_delta)} руб.`;
+    document.getElementById('detailModalSummary').className = `mb-2 fw-bold ${deltaColorClass(data.total_delta, 1)}`;
+    const rows = data.drivers.map(driver => `<tr>
+        <td>${driver.project}</td><td>${driver.stat3}</td><td>${driver.contragent}</td>
+        <td class="text-end">${fmtAmount(driver.a)}</td><td class="text-end">${fmtAmount(driver.b)}</td>
+        <td class="text-end fw-bold ${deltaColorClass(driver.delta, 1)}">${fmtAmount(driver.delta)}</td>
+        </tr>`).join('');
+    document.getElementById('detailModalBody').innerHTML = `
+        <p class="text-secondary small">Топ-${data.drivers.length} драйверов по проекту, статье и контрагенту; суммы в рублях.</p>
+        <div class="table-responsive"><table class="table table-sm">
+            <thead><tr><th>Проект</th><th>Статья</th><th>Контрагент</th><th class="text-end">A</th><th class="text-end">B</th><th class="text-end">Δ B−A</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="text-center text-secondary">Изменений нет</td></tr>'}</tbody>
+        </table></div>`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initAmountCells(document);
     initDeltaCells(document);
+    initPeriodComparisonCells(document);
 });

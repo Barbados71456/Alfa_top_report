@@ -13,8 +13,13 @@ from db import query
 import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+MONTHS_FULL_RU = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
 INTERNAL_TRANSFER_LINE = 'Внутренние перемещения (нетто)'
 ONE_OFF_PORTFOLIO_PURCHASE_LINE = 'Покупка портфелей (разовая)'
+OPENING_BALANCE_LINE = 'Не в отчёте (остатки на начало)'
 
 REVENUE_LINES = [
     'Выручка DP (цессия)',
@@ -80,6 +85,16 @@ SECTIONS = [
     ('  ВЫРУЧКА', REVENUE_LINES, 'Итого выручка'),
     ('  РАСХОДЫ ПЕРЕМЕННЫЕ', VARIABLE_LINES, 'Итого переменные'),
     ('  РАСХОДЫ ПОСТОЯННЫЕ', FIXED_LINES, 'Итого постоянные'),
+]
+
+# В анализе изменений остаток на начало не смешивается с оборотами периода:
+# это балансовая величина, а не доход/расход. Сам Dashboard2 остаётся без
+# изменений для совместимости с эталонным Excel.
+COMPARISON_FIXED_LINES = [line for line in FIXED_LINES if line != OPENING_BALANCE_LINE]
+COMPARISON_SECTIONS = [
+    ('  ВЫРУЧКА', REVENUE_LINES, 'Итого выручка'),
+    ('  РАСХОДЫ ПЕРЕМЕННЫЕ', VARIABLE_LINES, 'Итого переменные'),
+    ('  РАСХОДЫ ПОСТОЯННЫЕ', COMPARISON_FIXED_LINES, 'Итого постоянные'),
 ]
 
 
@@ -601,6 +616,135 @@ def dashboard2(month, series, deltas, projects=None, allocation='all'):
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 
+def _months_between(start, end):
+    """Количество календарных месяцев в замкнутом диапазоне."""
+    return (end.year - start.year) * 12 + end.month - start.month + 1
+
+
+def _period_label(start, end, mode='period'):
+    if start == end:
+        label = f'{MONTHS_FULL_RU[start.month - 1]} {start.year}'
+    elif start.year == end.year:
+        label = f'{MONTHS_FULL_RU[start.month - 1]} — {MONTHS_FULL_RU[end.month - 1]} {end.year}'
+    else:
+        label = (
+            f'{MONTHS_FULL_RU[start.month - 1]} {start.year} — '
+            f'{MONTHS_FULL_RU[end.month - 1]} {end.year}'
+        )
+    return f'{label} · накопительно' if mode == 'ytd' else label
+
+
+def _comparison_period(start, end, mode):
+    start = start.replace(day=1)
+    end = end.replace(day=1)
+    if start > end:
+        raise ValueError('Начало периода не может быть позже окончания')
+    effective_start = date(end.year, 1, 1) if mode == 'ytd' else start
+    return {
+        'selected_start': start,
+        'selected_end': end,
+        'start': effective_start,
+        'end': end,
+        'months_count': _months_between(effective_start, end),
+        'label': _period_label(effective_start, end, mode),
+    }
+
+
+def _comparison_delta(value_a, value_b):
+    delta = value_b - value_a
+    if abs(value_a) < 0.005:
+        percent = 0.0 if abs(value_b) < 0.005 else None
+    else:
+        percent = delta / abs(value_a) * 100.0
+    return delta, percent
+
+
+def period_comparison(start_a, end_a, start_b, end_b, mode='period', projects=None, allocation='all'):
+    """Сравнение двух произвольных периодов в структуре Dashboard2.
+
+    Источник жёстко ограничен фактом. ``period`` суммирует выбранные диапазоны,
+    ``ytd`` считает каждый период с января по его конечный месяц. Все суммы
+    возвращаются в тыс. руб., как в Dashboard2.
+    """
+    if mode not in ('period', 'ytd'):
+        raise ValueError('Неизвестный режим расчёта')
+    if allocation not in ('all', 'no_alloc'):
+        raise ValueError('Неизвестный режим распределения затрат')
+
+    period_a = _comparison_period(start_a, end_a, mode)
+    period_b = _comparison_period(start_b, end_b, mode)
+    all_lines = REVENUE_LINES + VARIABLE_LINES + COMPARISON_FIXED_LINES
+    project_filter = ' AND project = ANY(%s)' if projects else ''
+    sql = f'''SELECT line,
+                     COALESCE(SUM(amount) FILTER (WHERE period BETWEEN %s AND %s), 0) / 1000.0 AS value_a,
+                     COALESCE(SUM(amount) FILTER (WHERE period BETWEEN %s AND %s), 0) / 1000.0 AS value_b
+              FROM reporting.pl_monthly
+              WHERE pf = %s AND line = ANY(%s)
+                AND ((period BETWEEN %s AND %s) OR (period BETWEEN %s AND %s))
+                {project_filter}{_alloc_where(allocation)}
+              GROUP BY line'''
+    params = [
+        period_a['start'], period_a['end'], period_b['start'], period_b['end'],
+        'факт', all_lines,
+        period_a['start'], period_a['end'], period_b['start'], period_b['end'],
+    ]
+    if projects:
+        params.append(projects)
+    values = {
+        row['line']: (float(row['value_a'] or 0), float(row['value_b'] or 0))
+        for row in query(sql, params)
+    }
+
+    def make_row(label, lines, kind='line'):
+        value_a = sum(values.get(line, (0.0, 0.0))[0] for line in lines)
+        value_b = sum(values.get(line, (0.0, 0.0))[1] for line in lines)
+        delta, delta_percent = _comparison_delta(value_a, value_b)
+        return {
+            'kind': kind,
+            'label': label,
+            'lines': list(lines),
+            'value_a': value_a,
+            'value_b': value_b,
+            'delta': delta,
+            'delta_percent': delta_percent,
+            'monthly_average_a': value_a / period_a['months_count'],
+            'monthly_average_b': value_b / period_b['months_count'],
+        }
+
+    rows = []
+    detail_rows = []
+    for header, lines, total_label in COMPARISON_SECTIONS:
+        rows.append({'kind': 'header', 'label': header})
+        for line in lines:
+            row = make_row(line, [line])
+            if abs(row['value_a']) < 0.005 and abs(row['value_b']) < 0.005:
+                continue
+            rows.append(row)
+            detail_rows.append(row)
+        rows.append(make_row(total_label, lines, kind='subtotal'))
+
+    revenue = make_row('Выручка', REVENUE_LINES, kind='kpi')
+    gross_margin = make_row('GM (валовая прибыль)', REVENUE_LINES + VARIABLE_LINES, kind='kpi')
+    operating_profit = make_row(
+        'Операционная прибыль',
+        REVENUE_LINES + VARIABLE_LINES + COMPARISON_FIXED_LINES,
+        kind='kpi',
+    )
+    fixed_costs = make_row('Постоянные расходы', COMPARISON_FIXED_LINES, kind='kpi')
+
+    drivers = sorted(detail_rows, key=lambda row: -abs(row['delta']))[:8]
+    return {
+        'rows': rows,
+        'kpis': [revenue, gross_margin, operating_profit, fixed_costs],
+        'drivers': drivers,
+        'period_a': period_a,
+        'period_b': period_b,
+        'mode': mode,
+        'fact_only': True,
+        'opening_balance_excluded': True,
+    }
+
+
 def dashboard1(month, series, deltas, projects=None, top_n=12, allocation='all'):
     """Dashboard1: Свод2-разбивка по портфелям, настраиваемые колонки сравнения (см.
     dashboard2). Кол-во SQL = 2 × число разных pf в series."""
@@ -801,6 +945,147 @@ def deviation_detail(lines, series_a, series_b, projects=None, top_n=20, allocat
     return {'total_delta': total_delta, 'drivers': drivers[:top_n]}
 
 
+def period_detail(lines, start, end, projects=None, allocation='all'):
+    """Детализация суммы за диапазон факта до статьи, контрагента и комментария."""
+    if isinstance(lines, str):
+        lines = [lines]
+    period = _comparison_period(start, end, 'period')
+    sql = '''SELECT "СтатьяУровень3" AS stat3, "Контрагент" AS contragent,
+                    "Комментарии" AS comment, "Проект" AS project,
+                    SUM("Сумма") AS amount, COUNT(*) AS operation_count
+             FROM public."FinancialData"
+             WHERE "Строка отчета" = ANY(%s) AND "Период" BETWEEN %s AND %s
+               AND "п_ф" = 'факт' '''
+    params = [lines, period['start'], period['end']]
+    if projects:
+        sql += ' AND "Проект" = ANY(%s)'
+        params.append(projects)
+    if allocation == 'no_alloc':
+        sql += " AND \"Распределение\" = 'до распределения'"
+    sql += ' GROUP BY 1, 2, 3, 4'
+    rows = query(sql, params)
+
+    by_stat3 = {}
+    by_project = defaultdict(float)
+    total = 0.0
+    row_count = 0
+    for row in rows:
+        amount = float(row['amount'] or 0)
+        operations = int(row['operation_count'] or 0)
+        total += amount
+        row_count += operations
+        project = (row['project'] or '').strip() or '(без проекта)'
+        by_project[project] += amount
+
+        stat3 = (row['stat3'] or '').strip() or '(без статьи)'
+        contragent = (row['contragent'] or '').strip() or '(без контрагента)'
+        comment = (row['comment'] or '').strip()
+        section = by_stat3.setdefault(stat3, {'total': 0.0, 'contragents': {}})
+        section['total'] += amount
+        counterparty = section['contragents'].setdefault(
+            contragent, {'total': 0.0, 'comments': []}
+        )
+        counterparty['total'] += amount
+        if comment:
+            if operations > 1:
+                comment = f'{comment} · {operations} оп.'
+            counterparty['comments'].append({
+                'comment': comment, 'amount': amount, 'project': project,
+            })
+
+    stat3_list = []
+    for stat3, section in by_stat3.items():
+        counterparties = []
+        for contragent, counterparty in section['contragents'].items():
+            counterparty['comments'].sort(key=lambda item: -abs(item['amount']))
+            counterparties.append({
+                'contragent': contragent,
+                'total': counterparty['total'],
+                'comments': counterparty['comments'][:50],
+            })
+        counterparties.sort(key=lambda item: -abs(item['total']))
+        stat3_list.append({
+            'stat3': stat3, 'total': section['total'], 'contragents': counterparties,
+        })
+    stat3_list.sort(key=lambda item: -abs(item['total']))
+    projects_list = sorted(
+        ({'project': project, 'total': amount} for project, amount in by_project.items()),
+        key=lambda item: -abs(item['total']),
+    )
+    return {
+        'total': total,
+        'by_statya3': stat3_list,
+        'by_project': projects_list,
+        'row_count': row_count,
+        'period_label': period['label'],
+    }
+
+
+def _raw_group_period(lines, start, end, projects=None, allocation='all'):
+    sql = '''SELECT "Проект" AS project, "СтатьяУровень3" AS stat3,
+                    "Контрагент" AS contragent, SUM("Сумма") AS amount
+             FROM public."FinancialData"
+             WHERE "Строка отчета" = ANY(%s) AND "Период" BETWEEN %s AND %s
+               AND "п_ф" = 'факт' '''
+    params = [lines, start, end]
+    if projects:
+        sql += ' AND "Проект" = ANY(%s)'
+        params.append(projects)
+    if allocation == 'no_alloc':
+        sql += " AND \"Распределение\" = 'до распределения'"
+    sql += ' GROUP BY 1, 2, 3'
+    result = {}
+    for row in query(sql, params):
+        key = (
+            (row['project'] or '').strip() or '(без проекта)',
+            (row['stat3'] or '').strip() or '(без статьи)',
+            (row['contragent'] or '').strip() or '(без контрагента)',
+        )
+        result[key] = result.get(key, 0.0) + float(row['amount'] or 0)
+    return result
+
+
+def period_deviation_detail(lines, start_a, end_a, start_b, end_b, projects=None,
+                            top_n=30, allocation='all'):
+    """Крупнейшие драйверы отклонения B − A между двумя диапазонами факта."""
+    if isinstance(lines, str):
+        lines = [lines]
+    period_a = _comparison_period(start_a, end_a, 'period')
+    period_b = _comparison_period(start_b, end_b, 'period')
+    values_a = _raw_group_period(
+        lines, period_a['start'], period_a['end'], projects, allocation
+    )
+    values_b = _raw_group_period(
+        lines, period_b['start'], period_b['end'], projects, allocation
+    )
+    drivers = []
+    for key in set(values_a) | set(values_b):
+        value_a = values_a.get(key, 0.0)
+        value_b = values_b.get(key, 0.0)
+        delta = value_b - value_a
+        if abs(delta) < 0.5:
+            continue
+        drivers.append({
+            'project': key[0], 'stat3': key[1], 'contragent': key[2],
+            'a': value_a, 'b': value_b, 'delta': delta,
+        })
+    # Итог должен в точности сходиться с ячейкой отчёта. Мелкие драйверы ниже
+    # порога не показываем в таблице, но не вычитаем их из общего отклонения.
+    total_delta = sum(values_b.values()) - sum(values_a.values())
+    drivers.sort(
+        key=lambda item: (
+            0 if (item['delta'] >= 0) == (total_delta >= 0) else 1,
+            -abs(item['delta']),
+        )
+    )
+    return {
+        'total_delta': total_delta,
+        'drivers': drivers[:top_n],
+        'label_a': period_a['label'],
+        'label_b': period_b['label'],
+    }
+
+
 def get_counterparties():
     rows = query('SELECT name FROM reporting.counterparty_list ORDER BY 1')
     return [r['name'] for r in rows]
@@ -819,6 +1104,15 @@ def search_counterparties(q, limit=50):
 def get_latest_period(pf='факт'):
     rows = query('SELECT MAX(period) AS mx FROM reporting.pl_monthly WHERE pf = %s', (pf,))
     return rows[0]['mx'] if rows and rows[0]['mx'] else date.today().replace(day=1)
+
+
+def get_period_bounds(pf='факт'):
+    row = query(
+        'SELECT MIN(period) AS mn, MAX(period) AS mx FROM reporting.pl_monthly WHERE pf = %s',
+        (pf,),
+    )[0]
+    fallback = date.today().replace(day=1)
+    return row['mn'] or fallback, row['mx'] or fallback
 
 
 def default_counterparty_range(pf='факт'):
@@ -992,6 +1286,36 @@ def export_dashboard(data, sheet_prefix):
     month_rows = export.flatten_rows(data['rows'], ('series_month', 'delta_month'))
     ytd_rows = export.flatten_rows(data['rows'], ('series_ytd', 'delta_ytd'))
     return [(f'{sheet_prefix} Месяц', headers, month_rows), (f'{sheet_prefix} Накопительно', headers, ytd_rows)]
+
+
+def export_period_comparison(data):
+    label_a = data['period_a']['label']
+    label_b = data['period_b']['label']
+    headers = [
+        'Статья', f'A: {label_a}, тыс. руб.', f'B: {label_b}, тыс. руб.',
+        'Δ B−A, тыс. руб.', 'Δ, %', 'Среднее/мес. A', 'Среднее/мес. B',
+    ]
+    rows = []
+    for row in data['rows']:
+        if row['kind'] == 'header':
+            rows.append([row['label']])
+            continue
+        rows.append([
+            row['label'], row['value_a'], row['value_b'], row['delta'],
+            row['delta_percent'], row['monthly_average_a'], row['monthly_average_b'],
+        ])
+    parameters = [
+        ['Параметр', 'Значение'],
+        ['Источник', 'Только факт'],
+        ['Период A', label_a],
+        ['Период B', label_b],
+        ['Режим', 'Накопительно с начала года' if data['mode'] == 'ytd' else 'За выбранный период'],
+        ['Остатки на начало', 'Исключены как балансовая величина'],
+    ]
+    return [
+        ('Анализ изменений', headers, rows),
+        ('Параметры', parameters[0], parameters[1:]),
+    ]
 
 
 def export_overview(data):

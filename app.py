@@ -101,6 +101,48 @@ def _series_deltas_from_request(years):
     return series, deltas
 
 
+def _previous_month(value):
+    if value.month == 1:
+        return date(value.year - 1, 12, 1)
+    return date(value.year, value.month - 1, 1)
+
+
+def _parse_month_value(raw, field_name, fallback=None):
+    if not raw:
+        if fallback is not None:
+            return fallback
+        raise ValueError(f'{field_name} обязателен')
+    try:
+        value = date.fromisoformat(f'{raw}-01')
+    except ValueError as exc:
+        raise ValueError(f'{field_name}: ожидается формат ГГГГ-ММ') from exc
+    if value.strftime('%Y-%m') != raw:
+        raise ValueError(f'{field_name}: ожидается формат ГГГГ-ММ')
+    return value
+
+
+def _period_comparison_request():
+    min_period, max_period = pr.get_period_bounds('факт')
+    default_a = max(_previous_month(max_period), min_period)
+    mode = request.args.get('mode', 'period')
+    allocation = request.args.get('allocation', 'all')
+    if mode not in ('period', 'ytd'):
+        raise ValueError('Неизвестный режим расчёта')
+    if allocation not in ('all', 'no_alloc'):
+        raise ValueError('Неизвестный режим распределения затрат')
+    return {
+        'start_a': _parse_month_value(request.args.get('a_start'), 'Начало периода A', default_a),
+        'end_a': _parse_month_value(request.args.get('a_end'), 'Окончание периода A', default_a),
+        'start_b': _parse_month_value(request.args.get('b_start'), 'Начало периода B', max_period),
+        'end_b': _parse_month_value(request.args.get('b_end'), 'Окончание периода B', max_period),
+        'mode': mode,
+        'projects': request.args.getlist('project') or None,
+        'allocation': allocation,
+        'min_period': min_period,
+        'max_period': max_period,
+    }
+
+
 @app.route('/')
 def index():
     return redirect(url_for('svod1') if 'user_id' in session else url_for('login'))
@@ -297,6 +339,77 @@ def dashboard2():
         all_projects=pr.get_projects_with_type(),
         series_str=_format_series(series), deltas_str=_format_deltas(deltas),
     )
+
+
+@app.route('/period-comparison')
+@report_required
+def period_comparison():
+    try:
+        params = _period_comparison_request()
+        data = pr.period_comparison(
+            params['start_a'], params['end_a'], params['start_b'], params['end_b'],
+            mode=params['mode'], projects=params['projects'], allocation=params['allocation'],
+        )
+    except ValueError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('period_comparison'))
+    return render_template(
+        'period_comparison.html', data=data, projects=params['projects'],
+        allocation=params['allocation'], all_projects=pr.get_projects_with_type(),
+        min_period=params['min_period'], max_period=params['max_period'],
+    )
+
+
+@app.route('/api/period_detail')
+@report_required
+def api_period_detail():
+    lines = request.args.getlist('line')
+    if not lines:
+        return {'error': 'line обязателен'}, 400
+    try:
+        allocation = request.args.get('allocation', 'all')
+        if allocation not in ('all', 'no_alloc'):
+            raise ValueError('Неизвестный режим распределения затрат')
+        start = _parse_month_value(request.args.get('start'), 'Начало периода')
+        end = _parse_month_value(request.args.get('end'), 'Окончание периода')
+        data = pr.period_detail(
+            lines, start, end,
+            projects=request.args.getlist('project') or None,
+            allocation=allocation,
+        )
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
+    except Exception:
+        app.logger.exception('period_detail error')
+        return {'error': 'Ошибка при получении детализации периода'}, 500
+    return data
+
+
+@app.route('/api/period_deviation_detail')
+@report_required
+def api_period_deviation_detail():
+    lines = request.args.getlist('line')
+    if not lines:
+        return {'error': 'line обязателен'}, 400
+    try:
+        allocation = request.args.get('allocation', 'all')
+        if allocation not in ('all', 'no_alloc'):
+            raise ValueError('Неизвестный режим распределения затрат')
+        start_a = _parse_month_value(request.args.get('a_start'), 'Начало периода A')
+        end_a = _parse_month_value(request.args.get('a_end'), 'Окончание периода A')
+        start_b = _parse_month_value(request.args.get('b_start'), 'Начало периода B')
+        end_b = _parse_month_value(request.args.get('b_end'), 'Окончание периода B')
+        data = pr.period_deviation_detail(
+            lines, start_a, end_a, start_b, end_b,
+            projects=request.args.getlist('project') or None,
+            allocation=allocation,
+        )
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
+    except Exception:
+        app.logger.exception('period_deviation_detail error')
+        return {'error': 'Ошибка при получении анализа отклонений'}, 500
+    return data
 
 
 @app.route('/fot1')
@@ -1206,6 +1319,13 @@ def export_report(kind):
             projects = request.args.getlist('project') or None
             allocation = request.args.get('allocation', 'all')
             sheets = pr.export_dashboard(pr.dashboard2(month, series, deltas, projects, allocation=allocation), 'Dashboard2')
+        elif kind == 'period_comparison':
+            params = _period_comparison_request()
+            data = pr.period_comparison(
+                params['start_a'], params['end_a'], params['start_b'], params['end_b'],
+                mode=params['mode'], projects=params['projects'], allocation=params['allocation'],
+            )
+            sheets = pr.export_period_comparison(data)
         elif kind == 'unitpl':
             start = request.args.get('start', type=int)
             end = request.args.get('end', type=int)

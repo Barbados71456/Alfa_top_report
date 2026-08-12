@@ -82,6 +82,7 @@ def test_every_report_template_exposes_excel_export():
         'svod2.html',
         'dashboard1.html',
         'dashboard2.html',
+        'period_comparison.html',
         'unitpl.html',
         'fot1.html',
         'fot2.html',

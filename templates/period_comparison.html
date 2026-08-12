@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Анализ изменений — Alfa Top Report{% endblock %}
+{% block content %}
+{% macro money(value, signed=false) -%}
+    {%- if signed and value > 0 %}+{% endif -%}{{ '{:,.1f}'.format(value).replace(',', ' ') }}
+{%- endmacro %}
+
+{% macro amount_button(value, row, period, period_key, extra_class='') -%}
+<button type="button"
+        class="number-button period-amount-cell {{ extra_class }} {% if value > 0 %}val-pos{% elif value < 0 %}val-neg{% endif %}"
+        data-lines='{{ row.lines | tojson }}'
+        data-start="{{ period.start.strftime('%Y-%m') }}"
+        data-end="{{ period.end.strftime('%Y-%m') }}"
+        data-label="{{ row.label }}"
+        data-period-label="{{ period.label }}"
+        data-focus="statya"
+        data-allocation="{{ allocation }}"
+        data-projects='{{ (projects or []) | tojson }}'>{{ money(value) }}</button>
+{%- endmacro %}
+
+{% macro delta_button(value, row, percent=false, extra_class='') -%}
+<button type="button"
+        class="number-button period-delta-cell {{ extra_class }} {% if value > 0 %}val-pos{% elif value < 0 %}val-neg{% endif %}"
+        data-lines='{{ row.lines | tojson }}'
+        data-a-start="{{ data.period_a.start.strftime('%Y-%m') }}"
+        data-a-end="{{ data.period_a.end.strftime('%Y-%m') }}"
+        data-b-start="{{ data.period_b.start.strftime('%Y-%m') }}"
+        data-b-end="{{ data.period_b.end.strftime('%Y-%m') }}"
+        data-label="{{ row.label }}"
+        data-allocation="{{ allocation }}"
+        data-projects='{{ (projects or []) | tojson }}'>
+    {%- if percent -%}
+        {%- if row.delta_percent is none %}н/д{% else %}{{ '%+.1f'|format(row.delta_percent) }}%{% endif -%}
+    {%- else -%}
+        {{ money(value, true) }}
+    {%- endif -%}
+</button>
+{%- endmacro %}
+
+<div class="page-header comparison-heading mb-3">
+    <div>
+        <div class="page-eyebrow">Бизнес отчёты · только факт</div>
+        <h1 class="page-title">Анализ изменений между периодами</h1>
+        <p class="page-subtitle">Структура Dashboard2, отклонение B − A и детализация каждой суммы до первичных операций.</p>
+    </div>
+    <span class="fact-badge"><i class="bi bi-check-circle-fill"></i> план и прогноз исключены</span>
+</div>
+
+<form class="card p-3 mb-3 comparison-filter" method="get" id="comparisonForm">
+    <div class="row g-3 align-items-start">
+        <div class="col-xl-3 col-md-6">
+            <div class="period-panel period-a">
+                <div class="period-panel-title"><span></span>Период A · база</div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small" for="aStart">С</label>
+                        <input class="form-control form-control-sm" type="month" id="aStart" name="a_start"
+                               min="{{ min_period.strftime('%Y-%m') }}" max="{{ max_period.strftime('%Y-%m') }}"
+                               value="{{ (data.period_a.start if data.mode == 'ytd' else data.period_a.selected_start).strftime('%Y-%m') }}" {% if data.mode == 'ytd' %}disabled{% endif %}>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small" for="aEnd">По</label>
+                        <input class="form-control form-control-sm" type="month" id="aEnd" name="a_end"
+                               min="{{ min_period.strftime('%Y-%m') }}" max="{{ max_period.strftime('%Y-%m') }}"
+                               value="{{ data.period_a.selected_end.strftime('%Y-%m') }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="period-panel period-b">
+                <div class="period-panel-title"><span></span>Период B · сравнение</div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small" for="bStart">С</label>
+                        <input class="form-control form-control-sm" type="month" id="bStart" name="b_start"
+                               min="{{ min_period.strftime('%Y-%m') }}" max="{{ max_period.strftime('%Y-%m') }}"
+                               value="{{ (data.period_b.start if data.mode == 'ytd' else data.period_b.selected_start).strftime('%Y-%m') }}" {% if data.mode == 'ytd' %}disabled{% endif %}>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small" for="bEnd">По</label>
+                        <input class="form-control form-control-sm" type="month" id="bEnd" name="b_end"
+                               min="{{ min_period.strftime('%Y-%m') }}" max="{{ max_period.strftime('%Y-%m') }}"
+                               value="{{ data.period_b.selected_end.strftime('%Y-%m') }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label small fw-semibold" for="comparisonMode">Единица сравнения</label>
+            <select class="form-select form-select-sm" name="mode" id="comparisonMode">
+                <option value="period" {% if data.mode == 'period' %}selected{% endif %}>За выбранный месяц / диапазон</option>
+                <option value="ytd" {% if data.mode == 'ytd' %}selected{% endif %}>Накопительно с начала года</option>
+            </select>
+            <div class="form-text" id="modeHelp">
+                {% if data.mode == 'ytd' %}Для A и B считается факт с января по конечный месяц.{% else %}Суммируются все месяцы от «С» до «По».{% endif %}
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label small fw-semibold" for="allocationSelect">Распределение затрат</label>
+            <select class="form-select form-select-sm" name="allocation" id="allocationSelect">
+                <option value="all" {% if allocation == 'all' %}selected{% endif %}>С распределением затрат</option>
+                <option value="no_alloc" {% if allocation == 'no_alloc' %}selected{% endif %}>Без распределения затрат</option>
+            </select>
+            <div class="form-text">Правило совпадает с Dashboard2.</div>
+        </div>
+        <div class="col-lg-9">
+            <label class="form-label small fw-semibold" for="projectSelect">Проекты</label>
+            <select name="project" class="form-select form-select-sm" multiple size="1" id="projectSelect">
+                {% for tip, names in all_projects %}
+                <optgroup label="{{ tip }}">
+                    {% for name in names %}<option value="{{ name }}" {% if projects and name in projects %}selected{% endif %}>{{ name }}</option>{% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+            <div class="form-text">Пустой выбор — вся компания.</div>
+        </div>
+        <div class="col-lg-3 d-flex gap-2 align-self-end flex-wrap comparison-actions">
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="swapPeriods"><i class="bi bi-arrow-left-right"></i> Поменять</button>
+            <button class="btn btn-sm btn-dark flex-grow-1" type="submit"><i class="bi bi-play-fill"></i> Сравнить</button>
+        </div>
+    </div>
+</form>
+
+{% if data.period_a.months_count != data.period_b.months_count %}
+<div class="alert alert-warning py-2 small mb-3">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Диапазоны разной длины: A — {{ data.period_a.months_count }} мес., B — {{ data.period_b.months_count }} мес.
+    Для корректной оценки масштаба под суммами показано среднемесячное значение.
+</div>
+{% endif %}
+<div class="alert alert-light border py-2 small mb-3 d-flex justify-content-between gap-3 flex-wrap">
+    <span><i class="bi bi-info-circle me-1"></i>«Остатки на начало» исключены: это баланс, а не движение или расход периода.</span>
+    <a class="text-nowrap" href="{{ url_for('export_report', kind='period_comparison') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
+</div>
+
+<div class="row g-3 mb-3">
+    {% for kpi in data.kpis %}
+    <div class="col-xl-3 col-md-6">
+        <div class="card kpi-card comparison-kpi h-100 p-3">
+            <div class="kpi-label">{{ kpi.label }}</div>
+            <div class="kpi-period-row">
+                <span>A</span>{{ amount_button(kpi.value_a, kpi, data.period_a, 'a') }}
+            </div>
+            {% if data.period_a.months_count > 1 %}<div class="kpi-average">ср. {{ money(kpi.monthly_average_a) }} / мес.</div>{% endif %}
+            <div class="kpi-period-row primary">
+                <span>B</span>{{ amount_button(kpi.value_b, kpi, data.period_b, 'b') }}
+            </div>
+            {% if data.period_b.months_count > 1 %}<div class="kpi-average">ср. {{ money(kpi.monthly_average_b) }} / мес.</div>{% endif %}
+            <div class="kpi-comparison">
+                <span>Δ {{ delta_button(kpi.delta, kpi) }}</span>
+                <span>{{ delta_button(kpi.delta, kpi, true) }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card p-3 table-responsive mb-3">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+        <div>
+            <h6 class="mb-1">Dashboard2 · сравнение факта, тыс. руб.</h6>
+            <div class="small text-secondary">У сумм цвет показывает знак; у Δ — улучшение или ухудшение результата. Нажмите на любую сумму или отклонение для детализации.</div>
+        </div>
+        <div class="period-legend small">
+            <span class="legend-a">A</span> {{ data.period_a.label }}
+            <span class="legend-b ms-2">B</span> {{ data.period_b.label }}
+        </div>
+    </div>
+    <table class="table report-table comparison-table mb-0">
+        <thead>
+            <tr>
+                <th class="label-col">Статья</th>
+                <th>A · {{ data.period_a.label }}</th>
+                <th>B · {{ data.period_b.label }}</th>
+                <th>Δ B − A</th>
+                <th>Δ, %</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in data.rows %}
+            {% if row.kind == 'header' %}
+            <tr><td class="label-col fw-bold" colspan="5">{{ row.label }}</td></tr>
+            {% else %}
+            <tr class="{% if row.kind == 'subtotal' %}row-bold{% endif %}">
+                <td class="label-col">{{ row.label }}</td>
+                <td>
+                    {{ amount_button(row.value_a, row, data.period_a, 'a') }}
+                    {% if data.period_a.months_count > 1 %}<div class="monthly-average">ср. {{ money(row.monthly_average_a) }}/мес.</div>{% endif %}
+                </td>
+                <td>
+                    {{ amount_button(row.value_b, row, data.period_b, 'b') }}
+                    {% if data.period_b.months_count > 1 %}<div class="monthly-average">ср. {{ money(row.monthly_average_b) }}/мес.</div>{% endif %}
+                </td>
+                <td>{{ delta_button(row.delta, row) }}</td>
+                <td>{{ delta_button(row.delta, row, true) }}</td>
+            </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+        <div>
+            <h6 class="mb-1">Крупнейшие драйверы изменения</h6>
+            <div class="small text-secondary">Строки Dashboard2 с наибольшим отклонением по модулю.</div>
+        </div>
+        <span class="small text-secondary">B − A, тыс. руб.</span>
+    </div>
+    <div class="driver-list">
+        {% for row in data.drivers %}
+        <div class="driver-row">
+            <span class="driver-rank">{{ loop.index }}</span>
+            <span class="driver-label">{{ row.label }}</span>
+            <span class="driver-value">{{ delta_button(row.delta, row) }}</span>
+        </div>
+        {% else %}
+        <div class="empty-state py-3">Изменений между периодами нет.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.comparison-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; }
+.fact-badge { background:#eaf7ee; color:var(--pos-color); border:1px solid #bfe3c8; border-radius:999px; padding:.35rem .7rem; font-size:.75rem; font-weight:600; white-space:nowrap; }
+.comparison-filter { overflow:visible; }
+.period-panel { border:1px solid var(--border-color); border-radius:12px; padding:.75rem; height:100%; background:#fafafa; }
+.period-panel.period-a { border-left:3px solid #0071e3; }
+.period-panel.period-b { border-left:3px solid #8b5cf6; }
+.period-panel-title { font-size:.78rem; font-weight:700; margin-bottom:.55rem; }
+.period-panel-title span { width:8px; height:8px; display:inline-block; border-radius:50%; background:#0071e3; margin-right:.4rem; }
+.period-b .period-panel-title span { background:#8b5cf6; }
+.comparison-actions .btn { min-width:105px; }
+.comparison-kpi { gap:.35rem; }
+.kpi-period-row { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; color:var(--secondary-color); font-size:.78rem; }
+.kpi-period-row.primary { border-top:1px solid #eee; padding-top:.35rem; }
+.kpi-period-row .number-button { font-size:1.05rem; font-weight:700; }
+.kpi-average { color:var(--secondary-color); font-size:.68rem; text-align:right; margin-top:-.25rem; }
+.kpi-comparison { display:flex; justify-content:space-between; gap:.5rem; border-top:1px solid #eee; padding-top:.45rem; margin-top:.1rem; font-size:.78rem; }
+.number-button { appearance:none; background:none; border:0; padding:0; font:inherit; color:inherit; font-variant-numeric:tabular-nums; text-decoration:underline dotted var(--border-color); text-underline-offset:3px; cursor:pointer; }
+.number-button:hover { color:var(--accent); }
+.monthly-average { color:var(--secondary-color); font-size:.68rem; margin-top:.1rem; }
+.period-legend { text-align:right; color:var(--secondary-color); }
+.legend-a,.legend-b { display:inline-flex; justify-content:center; align-items:center; width:20px; height:20px; border-radius:6px; color:#fff; font-weight:700; background:#0071e3; }
+.legend-b { background:#8b5cf6; }
+.driver-list { display:grid; gap:.35rem; }
+.driver-row { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:.65rem; align-items:center; padding:.45rem .25rem; border-bottom:1px solid rgba(0,0,0,.055); }
+.driver-row:last-child { border-bottom:0; }
+.driver-rank { color:var(--text-tertiary); font-size:.75rem; text-align:center; }
+.driver-label { min-width:0; }
+.driver-value { font-weight:700; }
+@media (max-width:768px) {
+    .comparison-heading { display:block; }
+    .fact-badge { display:inline-block; margin-top:.75rem; }
+    .comparison-actions { width:100%; }
+    .comparison-actions .btn { flex:1 1 0; }
+    .period-legend { text-align:left; }
+}
+</style>
+
+<script>
+(function() {
+    const form = document.getElementById('comparisonForm');
+    document.getElementById('swapPeriods').addEventListener('click', () => {
+        const aStart = form.elements.a_start.value;
+        const aEnd = form.elements.a_end.value;
+        form.elements.a_start.value = form.elements.b_start.value;
+        form.elements.a_end.value = form.elements.b_end.value;
+        form.elements.b_start.value = aStart;
+        form.elements.b_end.value = aEnd;
+    });
+    function syncYtdStarts() {
+        if (form.elements.mode.value !== 'ytd') return;
+        if (form.elements.a_end.value) form.elements.a_start.value = `${form.elements.a_end.value.slice(0, 4)}-01`;
+        if (form.elements.b_end.value) form.elements.b_start.value = `${form.elements.b_end.value.slice(0, 4)}-01`;
+    }
+    document.getElementById('comparisonMode').addEventListener('change', event => {
+        const isYtd = event.target.value === 'ytd';
+        if (isYtd) syncYtdStarts();
+        form.elements.a_start.disabled = isYtd;
+        form.elements.b_start.disabled = isYtd;
+        document.getElementById('modeHelp').textContent = event.target.value === 'ytd'
+            ? 'Для A и B считается факт с января по конечный месяц.'
+            : 'Суммируются все месяцы от «С» до «По».';
+    });
+    form.elements.a_end.addEventListener('change', syncYtdStarts);
+    form.elements.b_end.addEventListener('change', syncYtdStarts);
+})();
+</script>
+{% endblock %}
