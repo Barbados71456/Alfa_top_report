@@ -1,4 +1,4 @@
-"""ФОТ v1 / ФОТ v2 — фонд оплаты труда по подразделениям и сотрудникам.
+"""Отчёты ФОТ по подразделениям и сотрудникам.
 
 Источник — reporting.fot_monthly (period, dept, employee, pf, line, amount),
 line IN ('ФОТ переменный','ФОТ постоянный','Премия за изъятие авто').
@@ -6,10 +6,17 @@ line IN ('ФОТ переменный','ФОТ постоянный','Преми
 (Дирекция янв.2022 = 485587.07 руб, Зудин С.А. = 319543.07 руб).
 Суммы в рублях (в отличие от pl_report — там всё в тыс.руб).
 """
+from collections import defaultdict
+from datetime import date
+
 from db import query
 import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+MONTHS_FULL_RU = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
 
 FOT_VARIABLE_LINE = 'ФОТ переменный'
 FOT_FIXED_LINE = 'ФОТ постоянный'
@@ -26,6 +33,18 @@ def _dept_sort_key(dept):
 def get_available_years():
     rows = query('SELECT DISTINCT extract(year FROM period)::int AS y FROM reporting.fot_monthly ORDER BY 1')
     return [r['y'] for r in rows]
+
+
+def get_period_bounds(pf='факт'):
+    rows = query(
+        'SELECT MIN(period) AS mn, MAX(period) AS mx '
+        'FROM reporting.fot_monthly WHERE pf = %s',
+        (pf,),
+    )
+    fallback = date.today().replace(day=1)
+    if not rows:
+        return fallback, fallback
+    return rows[0]['mn'] or fallback, rows[0]['mx'] or fallback
 
 
 def get_employees():
@@ -265,6 +284,372 @@ def fot2(month, series, deltas):
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 
+def _months_between(start, end):
+    return (end.year - start.year) * 12 + end.month - start.month + 1
+
+
+def _period_label(start, end, mode='period'):
+    if start == end:
+        label = f'{MONTHS_FULL_RU[start.month - 1]} {start.year}'
+    elif start.year == end.year:
+        label = f'{MONTHS_FULL_RU[start.month - 1]} — {MONTHS_FULL_RU[end.month - 1]} {end.year}'
+    else:
+        label = (
+            f'{MONTHS_FULL_RU[start.month - 1]} {start.year} — '
+            f'{MONTHS_FULL_RU[end.month - 1]} {end.year}'
+        )
+    return f'{label} · накопительно' if mode == 'ytd' else label
+
+
+def _comparison_period(start, end, mode):
+    start = start.replace(day=1)
+    end = end.replace(day=1)
+    if start > end:
+        raise ValueError('Начало периода не может быть позже окончания')
+    effective_start = date(end.year, 1, 1) if mode == 'ytd' else start
+    return {
+        'selected_start': start,
+        'selected_end': end,
+        'start': effective_start,
+        'end': end,
+        'months_count': _months_between(effective_start, end),
+        'label': _period_label(effective_start, end, mode),
+    }
+
+
+def _comparison_delta(value_a, value_b):
+    delta = value_b - value_a
+    if abs(value_a) < 0.005:
+        percent = 0.0 if abs(value_b) < 0.005 else None
+    else:
+        percent = delta / abs(value_a) * 100.0
+    return delta, percent
+
+
+def _comparison_row(label, value_a, value_b, period_a, period_b, *, kind='line',
+                    unit='руб.', row_id=None, parent_id=None, department=None,
+                    employee=None, can_detail=True):
+    delta, delta_percent = _comparison_delta(value_a, value_b)
+    row = {
+        'kind': kind,
+        'label': label,
+        'unit': unit,
+        'value_a': value_a,
+        'value_b': value_b,
+        'delta': delta,
+        'delta_percent': delta_percent,
+        'monthly_average_a': (
+            value_a / period_a['months_count'] if can_detail else None
+        ),
+        'monthly_average_b': (
+            value_b / period_b['months_count'] if can_detail else None
+        ),
+        'department': department,
+        'employee': employee,
+        'can_detail': can_detail,
+        'lines': list(FOT_LINES),
+    }
+    if row_id:
+        row['row_id'] = row_id
+    if parent_id:
+        row['parent_id'] = parent_id
+    return row
+
+
+def period_comparison(start_a, end_a, start_b, end_b, mode='period'):
+    """Сравнивает два произвольных периода фактического ФОТ в структуре ФОТ v2."""
+    if mode not in ('period', 'ytd'):
+        raise ValueError('Неизвестный режим расчёта')
+
+    period_a = _comparison_period(start_a, end_a, mode)
+    period_b = _comparison_period(start_b, end_b, mode)
+    rows_raw = query(
+        '''SELECT COALESCE(e.department, fm.dept) AS dept, fm.employee,
+                  COALESCE(SUM(fm.amount) FILTER (
+                      WHERE fm.period BETWEEN %s AND %s), 0) AS value_a,
+                  COALESCE(SUM(fm.amount) FILTER (
+                      WHERE fm.period BETWEEN %s AND %s), 0) AS value_b,
+                  COUNT(DISTINCT fm.period) FILTER (
+                      WHERE fm.period BETWEEN %s AND %s AND fm.amount <> 0) AS active_months_a,
+                  COUNT(DISTINCT fm.period) FILTER (
+                      WHERE fm.period BETWEEN %s AND %s AND fm.amount <> 0) AS active_months_b
+           FROM reporting.fot_monthly fm
+           LEFT JOIN reporting.employees e ON e.contragent = fm.employee
+           WHERE fm.pf = 'факт'
+             AND ((fm.period BETWEEN %s AND %s) OR (fm.period BETWEEN %s AND %s))
+           GROUP BY 1, 2''',
+        (
+            period_a['start'], period_a['end'],
+            period_b['start'], period_b['end'],
+            period_a['start'], period_a['end'],
+            period_b['start'], period_b['end'],
+            period_a['start'], period_a['end'],
+            period_b['start'], period_b['end'],
+        ),
+    )
+
+    employees = {}
+    departments = defaultdict(list)
+    for raw in rows_raw:
+        dept = raw['dept'] or '(без подразделения)'
+        employee = raw['employee']
+        values = {
+            'department': dept,
+            'employee': employee,
+            'value_a': float(raw['value_a'] or 0),
+            'value_b': float(raw['value_b'] or 0),
+            'active_months_a': (
+                int(raw['active_months_a'] or 0)
+                if employee != '(без сотрудника)' else 0
+            ),
+            'active_months_b': (
+                int(raw['active_months_b'] or 0)
+                if employee != '(без сотрудника)' else 0
+            ),
+        }
+        employees[(dept, employee)] = values
+        departments[dept].append(values)
+
+    total_a = sum(item['value_a'] for item in employees.values())
+    total_b = sum(item['value_b'] for item in employees.values())
+    employee_months_a = sum(item['active_months_a'] for item in employees.values())
+    employee_months_b = sum(item['active_months_b'] for item in employees.values())
+    headcount_a = employee_months_a / period_a['months_count']
+    headcount_b = employee_months_b / period_b['months_count']
+    salary_a = total_a / employee_months_a if employee_months_a else 0.0
+    salary_b = total_b / employee_months_b if employee_months_b else 0.0
+
+    total_row = _comparison_row(
+        'ФОТ (всего)', total_a, total_b, period_a, period_b, kind='total'
+    )
+    salary_row = _comparison_row(
+        'СЗП (всего)', salary_a, salary_b, period_a, period_b,
+        kind='metric', can_detail=False,
+    )
+    headcount_row = _comparison_row(
+        'Средняя численность (всего)', headcount_a, headcount_b, period_a, period_b,
+        kind='metric', unit='чел.', can_detail=False,
+    )
+    rows = [total_row, salary_row, headcount_row]
+    employee_rows = []
+    department_rows = []
+
+    for index, dept in enumerate(sorted(departments, key=_dept_sort_key)):
+        dept_employees = departments[dept]
+        dept_a = sum(item['value_a'] for item in dept_employees)
+        dept_b = sum(item['value_b'] for item in dept_employees)
+        dept_employee_months_a = sum(
+            item['active_months_a'] for item in dept_employees
+        )
+        dept_employee_months_b = sum(
+            item['active_months_b'] for item in dept_employees
+        )
+        dept_hc_a = dept_employee_months_a / period_a['months_count']
+        dept_hc_b = dept_employee_months_b / period_b['months_count']
+        dept_salary_a = (
+            dept_a / dept_employee_months_a if dept_employee_months_a else 0.0
+        )
+        dept_salary_b = (
+            dept_b / dept_employee_months_b if dept_employee_months_b else 0.0
+        )
+        row_id = f'dept-{index}'
+        dept_row = _comparison_row(
+            dept, dept_a, dept_b, period_a, period_b, kind='subtotal',
+            row_id=row_id, department=dept,
+        )
+        rows.append(dept_row)
+        department_rows.append(dept_row)
+        rows.append(_comparison_row(
+            'СЗП', dept_salary_a, dept_salary_b, period_a, period_b,
+            kind='metric', department=dept, can_detail=False,
+        ))
+        rows.append(_comparison_row(
+            'Средняя численность', dept_hc_a, dept_hc_b, period_a, period_b,
+            kind='metric', unit='чел.', department=dept, can_detail=False,
+        ))
+
+        sorted_employees = sorted(
+            dept_employees,
+            key=lambda item: (
+                -abs(item['value_b'] - item['value_a']),
+                -max(abs(item['value_a']), abs(item['value_b'])),
+                item['employee'],
+            ),
+        )
+        for item in sorted_employees:
+            employee_row = _comparison_row(
+                item['employee'], item['value_a'], item['value_b'],
+                period_a, period_b, parent_id=row_id, department=dept,
+                employee=item['employee'],
+            )
+            rows.append(employee_row)
+            employee_rows.append(employee_row)
+
+    drivers = sorted(employee_rows, key=lambda row: -abs(row['delta']))[:10]
+    return {
+        'rows': rows,
+        'kpis': [total_row, salary_row, headcount_row],
+        'drivers': drivers,
+        'department_rows': department_rows,
+        'period_a': period_a,
+        'period_b': period_b,
+        'mode': mode,
+        'fact_only': True,
+    }
+
+
+def _fot_detail_result(rows, period):
+    by_stat3 = {}
+    by_project = defaultdict(float)
+    total = 0.0
+    row_count = 0
+    for row in rows:
+        amount = float(row['amount'] or 0)
+        operations = int(row['operation_count'] or 0)
+        total += amount
+        row_count += operations
+        project = (row['project'] or '').strip() or '(без проекта)'
+        by_project[project] += amount
+        stat3 = (row['stat3'] or '').strip() or '(без статьи)'
+        contragent = (row['contragent'] or '').strip() or '(без сотрудника)'
+        comment = (row['comment'] or '').strip()
+        section = by_stat3.setdefault(stat3, {'total': 0.0, 'contragents': {}})
+        section['total'] += amount
+        employee = section['contragents'].setdefault(
+            contragent, {'total': 0.0, 'comments': []}
+        )
+        employee['total'] += amount
+        if comment:
+            if operations > 1:
+                comment = f'{comment} · {operations} оп.'
+            employee['comments'].append({
+                'comment': comment, 'amount': amount, 'project': project,
+            })
+
+    stat3_list = []
+    for stat3, section in by_stat3.items():
+        counterparties = []
+        for contragent, employee in section['contragents'].items():
+            employee['comments'].sort(key=lambda item: -abs(item['amount']))
+            counterparties.append({
+                'contragent': contragent,
+                'total': employee['total'],
+                'comments': employee['comments'][:50],
+            })
+        counterparties.sort(key=lambda item: -abs(item['total']))
+        stat3_list.append({
+            'stat3': stat3,
+            'total': section['total'],
+            'contragents': counterparties,
+        })
+    stat3_list.sort(key=lambda item: -abs(item['total']))
+    projects_list = sorted(
+        ({'project': project, 'total': amount} for project, amount in by_project.items()),
+        key=lambda item: -abs(item['total']),
+    )
+    return {
+        'total': total,
+        'by_statya3': stat3_list,
+        'by_project': projects_list,
+        'row_count': row_count,
+        'period_label': period['label'],
+    }
+
+
+def period_detail(start, end, department=None, employee=None):
+    """Детализация фактического ФОТ за диапазон до статьи, сотрудника и операции."""
+    period = _comparison_period(start, end, 'period')
+    dept_expr = (
+        "COALESCE(e.department, COALESCE(NULLIF(TRIM(fd.\"Контрагент_report\"), ''), "
+        "'(без подразделения)'))"
+    )
+    employee_expr = "COALESCE(NULLIF(TRIM(fd.\"Контрагент\"), ''), '(без сотрудника)')"
+    sql = f'''SELECT fd."Строка отчета" AS stat3, {employee_expr} AS contragent,
+                     fd."Комментарии" AS comment, fd."Проект" AS project,
+                     SUM(fd."Сумма") AS amount, COUNT(*) AS operation_count
+              FROM public."FinancialData" fd
+              LEFT JOIN reporting.employees e ON e.contragent = {employee_expr}
+              WHERE fd."Строка отчета" = ANY(%s)
+                AND fd."Период" BETWEEN %s AND %s AND fd."п_ф" = 'факт' '''
+    params = [list(FOT_LINES), period['start'], period['end']]
+    if department:
+        sql += f' AND {dept_expr} = %s'
+        params.append(department)
+    if employee:
+        sql += f' AND {employee_expr} = %s'
+        params.append(employee)
+    sql += ' GROUP BY 1, 2, 3, 4'
+    return _fot_detail_result(query(sql, params), period)
+
+
+def _raw_group_period(start, end, department=None, employee=None):
+    dept_expr = (
+        "COALESCE(e.department, COALESCE(NULLIF(TRIM(fd.\"Контрагент_report\"), ''), "
+        "'(без подразделения)'))"
+    )
+    employee_expr = "COALESCE(NULLIF(TRIM(fd.\"Контрагент\"), ''), '(без сотрудника)')"
+    sql = f'''SELECT fd."Проект" AS project, fd."Строка отчета" AS stat3,
+                     {employee_expr} AS contragent, SUM(fd."Сумма") AS amount
+              FROM public."FinancialData" fd
+              LEFT JOIN reporting.employees e ON e.contragent = {employee_expr}
+              WHERE fd."Строка отчета" = ANY(%s)
+                AND fd."Период" BETWEEN %s AND %s AND fd."п_ф" = 'факт' '''
+    params = [list(FOT_LINES), start, end]
+    if department:
+        sql += f' AND {dept_expr} = %s'
+        params.append(department)
+    if employee:
+        sql += f' AND {employee_expr} = %s'
+        params.append(employee)
+    sql += ' GROUP BY 1, 2, 3'
+    result = {}
+    for row in query(sql, params):
+        key = (
+            (row['project'] or '').strip() or '(без проекта)',
+            (row['stat3'] or '').strip() or '(без статьи)',
+            (row['contragent'] or '').strip() or '(без сотрудника)',
+        )
+        result[key] = result.get(key, 0.0) + float(row['amount'] or 0)
+    return result
+
+
+def period_deviation_detail(start_a, end_a, start_b, end_b, department=None,
+                            employee=None, top_n=30):
+    """Крупнейшие первичные драйверы отклонения ФОТ B − A."""
+    period_a = _comparison_period(start_a, end_a, 'period')
+    period_b = _comparison_period(start_b, end_b, 'period')
+    values_a = _raw_group_period(
+        period_a['start'], period_a['end'], department, employee
+    )
+    values_b = _raw_group_period(
+        period_b['start'], period_b['end'], department, employee
+    )
+    drivers = []
+    for key in set(values_a) | set(values_b):
+        value_a = values_a.get(key, 0.0)
+        value_b = values_b.get(key, 0.0)
+        delta = value_b - value_a
+        if abs(delta) < 0.5:
+            continue
+        drivers.append({
+            'project': key[0], 'stat3': key[1], 'contragent': key[2],
+            'a': value_a, 'b': value_b, 'delta': delta,
+        })
+    total_delta = sum(values_b.values()) - sum(values_a.values())
+    drivers.sort(
+        key=lambda item: (
+            0 if (item['delta'] >= 0) == (total_delta >= 0) else 1,
+            -abs(item['delta']),
+        )
+    )
+    return {
+        'total_delta': total_delta,
+        'drivers': drivers[:top_n],
+        'label_a': period_a['label'],
+        'label_b': period_b['label'],
+    }
+
+
 def export_fot1(data):
     headers = ['Подразделение/сотрудник'] + data['months']
     return [('ФОТ v1', headers, export.flatten_rows(data['rows'], ('vals',)))]
@@ -278,6 +663,36 @@ def export_fot2(data):
     month_rows = export.flatten_rows(data['rows'], ('series_month', 'delta_month'))
     ytd_rows = export.flatten_rows(data['rows'], ('series_ytd', 'delta_ytd'))
     return [('ФОТ v2 Месяц', headers, month_rows), ('ФОТ v2 Накопительно', headers, ytd_rows)]
+
+
+def export_period_comparison(data):
+    label_a = data['period_a']['label']
+    label_b = data['period_b']['label']
+    headers = [
+        'Подразделение / сотрудник', 'Единица', f'A: {label_a}', f'B: {label_b}',
+        'Δ B−A', 'Δ, %', 'Среднее/мес. A', 'Среднее/мес. B',
+    ]
+    rows = []
+    for row in data['rows']:
+        label = f'    {row["label"]}' if row.get('parent_id') else row['label']
+        rows.append([
+            label, row['unit'], row['value_a'], row['value_b'], row['delta'],
+            row['delta_percent'], row['monthly_average_a'], row['monthly_average_b'],
+        ])
+    parameters = [
+        ['Источник', 'Только факт'],
+        ['Период A', label_a],
+        ['Период B', label_b],
+        ['Режим', (
+            'Накопительно с начала года'
+            if data['mode'] == 'ytd' else 'За выбранный период'
+        )],
+        ['Состав ФОТ', ', '.join(FOT_LINES)],
+    ]
+    return [
+        ('ФОТ анализ изменений', headers, rows),
+        ('Параметры', ['Параметр', 'Значение'], parameters),
+    ]
 
 
 def export_fot3(data, year=None, pf=None):

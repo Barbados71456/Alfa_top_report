@@ -88,6 +88,7 @@ def test_every_report_template_exposes_excel_export():
         'unitpl.html',
         'fot1.html',
         'fot2.html',
+        'fot_period_comparison.html',
         'fot3.html',
         'loans.html',
         'counterparty.html',

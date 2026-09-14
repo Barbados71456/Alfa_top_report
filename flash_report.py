@@ -11,6 +11,12 @@
 "не размечено" и ждут точечной правки бухгалтера (см. flash.classification_rules,
 source='manual').
 
+Для положительных операций проект дополнительно ищется в CRM по номеру
+договора, явно указанному в назначении платежа. Источник проекта — актуальная
+витрина crm_alfa.v_case_reporting, которая учитывает закреплённый за конкретным
+делом проект. Свободный поиск по ФИО не используется из-за риска неоднозначных
+совпадений.
+
 Поддерживаемые форматы выписок (определяются по структуре листа, см. detect_format):
   alfabank      — "_Выписка_<счёт>_<период>.xlsx", шапка + двухстрочный заголовок
   sberbusiness  — "_СберБизнес. Выписка ... счёт <счёт>.xlsx", "плавающие" колонки
@@ -283,6 +289,92 @@ def detect_and_parse(file_obj, filename):
 # ---------------------------------------------------------------------------
 
 RULE_CONFIDENCE_THRESHOLD = 0.85
+
+# Номер договора берём только после явного маркера. Простое вхождение любого
+# номера ДО из CRM во весь текст назначения давало бы ложные совпадения с ИНН,
+# датами, номерами исполнительных производств и суммами.
+_CRM_CONTRACT_RE = re.compile(
+    r'(?iu)(?:кредитн(?:ому|ый|ого|ом)?\s+договор(?:а|у|ом|е)?|'
+    r'договор(?:а|у|ом|ов|ам|е)?|\bкд\b)'
+    r'(?:\s+цессии)?\s*(?:№|n|:)?\s*["\'«]?\s*'
+    r'([0-9a-zа-я][0-9a-zа-я/_\-.]{2,})'
+)
+_CRM_MIN_CONTRACT_ALNUM = 6
+
+
+def _extract_crm_contract_candidates(purpose_text):
+    """Извлекает номера договоров из банковского назначения.
+
+    Нормализацию выполняет сама CRM-функция normalize_do_number(text), поэтому
+    Flash не заводит вторую реализацию нормализации. Короткие номера исключены:
+    они недостаточно надёжны для автоматического назначения проекта.
+    """
+    if not purpose_text:
+        return []
+    result = []
+    for match in _CRM_CONTRACT_RE.finditer(str(purpose_text)):
+        candidate = match.group(1).strip('."\'»')
+        if len(re.sub(r'(?iu)[^0-9a-zа-я]+', '', candidate)) < _CRM_MIN_CONTRACT_ALNUM:
+            continue
+        if candidate not in result:
+            result.append(candidate)
+    return result
+
+
+def _crm_projects_for_transactions(rows):
+    """Возвращает {индекс строки: проект} для однозначных CRM-совпадений.
+
+    Обрабатываются только положительные операции. Один параметризованный
+    запрос обслуживает весь файл. Проект применяется, только если номер
+    соответствует ровно одному делу; несколько договоров в одном назначении
+    допустимы лишь тогда, когда все найденные дела относятся к одному проекту.
+    """
+    candidates_by_row = {}
+    all_candidates = []
+    for index, row in enumerate(rows):
+        if _norm_amount(row.get('amount')) <= 0:
+            continue
+        candidates = _extract_crm_contract_candidates(row.get('purpose_text'))
+        if not candidates:
+            continue
+        candidates_by_row[index] = candidates
+        all_candidates.extend(candidates)
+
+    if not all_candidates:
+        return {}
+
+    matched = query(
+        '''WITH requested AS (
+               SELECT DISTINCT candidate
+               FROM unnest(%s::text[]) AS items(candidate)
+               WHERE crm_alfa.normalize_do_number(candidate) IS NOT NULL
+           )
+           SELECT requested.candidate, min(btrim(facts.project)) AS project
+           FROM requested
+           JOIN crm_alfa.source_cases AS cases
+             ON crm_alfa.normalize_do_number(cases.do_number) =
+                crm_alfa.normalize_do_number(requested.candidate)
+           JOIN crm_alfa.v_case_reporting AS facts ON facts.case_id = cases.id
+           WHERE nullif(btrim(facts.project), '') IS NOT NULL
+           GROUP BY requested.candidate
+           HAVING count(DISTINCT cases.id) = 1
+              AND count(DISTINCT btrim(facts.project)) = 1''',
+        (list(dict.fromkeys(all_candidates)),)
+    )
+    project_by_candidate = {row['candidate']: row['project'] for row in matched}
+
+    result = {}
+    for index, candidates in candidates_by_row.items():
+        projects = {
+            project_by_candidate[candidate]
+            for candidate in candidates
+            if candidate in project_by_candidate
+        }
+        if len(projects) == 1:
+            result[index] = projects.pop()
+    return result
+
+
 # Один контрагент (по ИНН) или один и тот же текст назначения платежа
 # (purpose_contains) на практике сплошь и рядом относится к РАЗНЫМ строкам
 # отчёта и проектам — проверено на реальных данных: "Рубанков Иван
@@ -529,6 +621,38 @@ def reclassify_unmatched(period):
     return len(updates)
 
 
+def enrich_projects_from_crm(period):
+    """Повторно подтягивает CRM-проект для положительных операций месяца.
+
+    Ручную разметку и ручные разбиения не меняет. Функция нужна для уже
+    загруженных выписок и вызывается после обучения/повторного применения
+    правил, чтобы более общий проект из правила не перезаписал точное
+    назначение проекта конкретному договору в CRM.
+    """
+    transactions = query(
+        '''SELECT id, amount, purpose_text
+           FROM flash.transactions
+           WHERE date_trunc('month', operation_date) = %s
+             AND amount > 0
+             AND classification_source NOT IN ('manual', 'split')''',
+        (period,)
+    )
+    projects_by_row = _crm_projects_for_transactions(transactions)
+    updates = [
+        (project, transactions[index]['id'])
+        for index, project in projects_by_row.items()
+    ]
+    if updates:
+        execute_values(
+            '''UPDATE flash.transactions AS t
+               SET "Проект" = v.project
+               FROM (VALUES %s) AS v(project, id)
+               WHERE t.id = v.id''',
+            updates
+        )
+    return len(updates)
+
+
 def classify_transaction(txn):
     """Применяет flash.classification_rules к одной операции — для точечной
     переклассификации вне массового импорта (сам import_statement использует
@@ -669,18 +793,20 @@ def import_statement(file_obj, filename, username):
     Правила/алиасы кошельков грузятся один раз на файл и классификация идёт
     в памяти (не по запросу на строку) — на файле в тысячи операций на
     удалённой Render Postgres это разница между минутами и секундами.
-    Возвращает {bank_format, total, matched}."""
+    CRM-проект ищется только для положительных операций. Возвращает
+    {bank_format, total, matched, crm_projects}."""
     bank_format, rows = detect_and_parse(file_obj, filename)
     if not rows:
         raise ValueError(f'В файле "{filename}" не найдено ни одной операции — проверь формат.')
 
     inn_rules, purpose_rules = _load_classification_rules()
     wallet_by_account = _load_wallet_aliases()
+    crm_projects_by_row = _crm_projects_for_transactions(rows)
 
     matched = 0
     hit_rule_ids = []
     values = []
-    for r in rows:
+    for row_index, r in enumerate(rows):
         rule, rule_id = _match_rule(r, inn_rules, purpose_rules)
         if rule:
             source = 'rule'
@@ -691,6 +817,12 @@ def import_statement(file_obj, filename, username):
         else:
             source = 'unmatched'
             fields = (None, None, None, None, None, None)
+
+        crm_project = crm_projects_by_row.get(row_index)
+        if crm_project:
+            # Остальные поля по-прежнему принадлежат правилу/ручной разметке;
+            # CRM является приоритетным источником только для проекта.
+            fields = fields[:3] + (crm_project,) + fields[4:]
 
         wallet = wallet_by_account.get(r['account_number'])
         values.append((
@@ -713,7 +845,12 @@ def import_statement(file_obj, filename, username):
     if hit_rule_ids:
         execute('UPDATE flash.classification_rules SET hits = hits + 1 WHERE id = ANY(%s)', (hit_rule_ids,))
 
-    return {'bank_format': bank_format, 'total': len(rows), 'matched': matched}
+    return {
+        'bank_format': bank_format,
+        'total': len(rows),
+        'matched': matched,
+        'crm_projects': len(crm_projects_by_row),
+    }
 
 
 def _effective_rows_sql():

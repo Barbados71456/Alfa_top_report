@@ -144,6 +144,31 @@ def _period_comparison_request():
     }
 
 
+def _fot_period_comparison_request():
+    min_period, max_period = fr.get_period_bounds('факт')
+    default_a = max(_previous_month(max_period), min_period)
+    mode = request.args.get('mode', 'period')
+    if mode not in ('period', 'ytd'):
+        raise ValueError('Неизвестный режим расчёта')
+    return {
+        'start_a': _parse_month_value(
+            request.args.get('a_start'), 'Начало периода A', default_a
+        ),
+        'end_a': _parse_month_value(
+            request.args.get('a_end'), 'Окончание периода A', default_a
+        ),
+        'start_b': _parse_month_value(
+            request.args.get('b_start'), 'Начало периода B', max_period
+        ),
+        'end_b': _parse_month_value(
+            request.args.get('b_end'), 'Окончание периода B', max_period
+        ),
+        'mode': mode,
+        'min_period': min_period,
+        'max_period': max_period,
+    }
+
+
 @app.route('/')
 def index():
     return redirect(url_for('svod1') if 'user_id' in session else url_for('login'))
@@ -441,6 +466,64 @@ def fot2():
     )
 
 
+@app.route('/fot-period-comparison')
+@report_required
+def fot_period_comparison():
+    try:
+        params = _fot_period_comparison_request()
+        data = fr.period_comparison(
+            params['start_a'], params['end_a'], params['start_b'], params['end_b'],
+            mode=params['mode'],
+        )
+    except ValueError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('fot_period_comparison'))
+    return render_template(
+        'fot_period_comparison.html', data=data,
+        min_period=params['min_period'], max_period=params['max_period'],
+    )
+
+
+@app.route('/api/fot_period_detail')
+@report_required
+def api_fot_period_detail():
+    try:
+        start = _parse_month_value(request.args.get('start'), 'Начало периода')
+        end = _parse_month_value(request.args.get('end'), 'Окончание периода')
+        data = fr.period_detail(
+            start, end,
+            department=request.args.get('department') or None,
+            employee=request.args.get('employee') or None,
+        )
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
+    except Exception:
+        app.logger.exception('fot_period_detail error')
+        return {'error': 'Ошибка при получении детализации ФОТ'}, 500
+    return data
+
+
+@app.route('/api/fot_period_deviation_detail')
+@report_required
+def api_fot_period_deviation_detail():
+    try:
+        start_a = _parse_month_value(request.args.get('a_start'), 'Начало периода A')
+        end_a = _parse_month_value(request.args.get('a_end'), 'Окончание периода A')
+        start_b = _parse_month_value(request.args.get('b_start'), 'Начало периода B')
+        end_b = _parse_month_value(request.args.get('b_end'), 'Окончание периода B')
+        data = fr.period_deviation_detail(
+            start_a, end_a, start_b, end_b,
+            department=request.args.get('department') or None,
+            employee=request.args.get('employee') or None,
+        )
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
+    except Exception:
+        app.logger.exception('fot_period_deviation_detail error')
+        return {'error': 'Ошибка при получении анализа отклонений ФОТ'}, 500
+    return data
+
+
 @app.route('/fot3')
 @report_required
 def fot3():
@@ -657,6 +740,7 @@ def flash_upload():
     files = request.files.getlist('statements')
     period_str = request.form.get('period')
     results, errors = [], []
+    crm_reapplied = 0
     for f in files:
         if not f or not f.filename:
             continue
@@ -670,9 +754,11 @@ def flash_upload():
         period = date.fromisoformat(period_str)
         learned = flr.learn_rules(period, created_by=session.get('username'))
         wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
+        crm_reapplied = flr.enrich_projects_from_crm(period)
         audit.log_action(
             session.get('username'), 'flash_upload',
-            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, кошельков: {wallets_learned}'
+            f'файлов: {len(results)}, период: {period}, новых правил: {learned}, '
+            f'кошельков: {wallets_learned}, CRM-проектов применено: {crm_reapplied}'
         )
 
     if errors:
@@ -680,7 +766,12 @@ def flash_upload():
     if results:
         total = sum(r['total'] for _, r in results)
         matched = sum(r['matched'] for _, r in results)
-        flash(f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}', 'success')
+        crm_projects = sum(r.get('crm_projects', 0) for _, r in results)
+        flash(
+            f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}, '
+            f'проект из CRM найден: {crm_projects}',
+            'success'
+        )
     elif not errors:
         flash('Выберите хотя бы один файл выписки', 'danger')
 
@@ -698,13 +789,16 @@ def flash_relearn():
     learned = flr.learn_rules(period, created_by=session.get('username'))
     wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
     reclassified = flr.reclassify_unmatched(period)
+    crm_enriched = flr.enrich_projects_from_crm(period)
     audit.log_action(
         session.get('username'), 'flash_relearn',
-        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, доразмечено по правилам: {reclassified}'
+        f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, '
+        f'доразмечено по правилам: {reclassified}, CRM-проектов применено: {crm_enriched}'
     )
     flash(
         f'Классификация пересчитана против FinancialData (новых правил: {learned}, кошельков: {wallets_learned}) '
-        f'и по уже известным правилам доразмечено ещё {reclassified} операций.',
+        f'и по уже известным правилам доразмечено ещё {reclassified} операций. '
+        f'Проект из CRM применён к {crm_enriched} положительным операциям.',
         'success'
     )
     return redirect(url_for('flash_page', period=period_str))
@@ -1378,6 +1472,13 @@ def export_report(kind):
                 series = series or default_series
                 deltas = deltas or default_deltas
             sheets = fr.export_fot2(fr.fot2(month, series, deltas))
+        elif kind == 'fot_period_comparison':
+            params = _fot_period_comparison_request()
+            data = fr.period_comparison(
+                params['start_a'], params['end_a'],
+                params['start_b'], params['end_b'], mode=params['mode'],
+            )
+            sheets = fr.export_period_comparison(data)
         elif kind == 'fot3':
             employee = request.args.get('employee', '').strip()
             if not employee:

@@ -216,6 +216,9 @@ function initPeriodComparisonCells(root) {
             label: cell.dataset.label,
             focus: cell.dataset.focus || 'statya',
             allocation: cell.dataset.allocation || 'all',
+            department: cell.dataset.department || null,
+            employee: cell.dataset.employee || null,
+            detailUrl: cell.dataset.detailUrl || '/api/period_detail',
         }));
     });
 
@@ -231,6 +234,9 @@ function initPeriodComparisonCells(root) {
             bEnd: cell.dataset.bEnd,
             label: cell.dataset.label,
             allocation: cell.dataset.allocation || 'all',
+            department: cell.dataset.department || null,
+            employee: cell.dataset.employee || null,
+            deviationUrl: cell.dataset.deviationUrl || '/api/period_deviation_detail',
         }));
     });
 }
@@ -250,7 +256,9 @@ function showPeriodDetail(opts) {
     });
     opts.lines.forEach(line => params.append('line', line));
     if (opts.projects) opts.projects.forEach(project => params.append('project', project));
-    fetch('/api/period_detail?' + params.toString())
+    if (opts.department) params.set('department', opts.department);
+    if (opts.employee) params.set('employee', opts.employee);
+    fetch(opts.detailUrl + '?' + params.toString())
         .then(response => response.json())
         .then(data => renderCellDetail(data, opts))
         .catch(() => {
@@ -274,7 +282,9 @@ function showPeriodDeviationDetail(opts) {
     });
     opts.lines.forEach(line => params.append('line', line));
     if (opts.projects) opts.projects.forEach(project => params.append('project', project));
-    fetch('/api/period_deviation_detail?' + params.toString())
+    if (opts.department) params.set('department', opts.department);
+    if (opts.employee) params.set('employee', opts.employee);
+    fetch(opts.deviationUrl + '?' + params.toString())
         .then(response => response.json())
         .then(renderPeriodDeviationDetail)
         .catch(() => {
