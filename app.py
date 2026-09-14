@@ -737,39 +737,73 @@ def flash_page():
 @app.route('/flash/upload', methods=['POST'])
 @classifier_required
 def flash_upload():
-    files = request.files.getlist('statements')
+    files = [f for f in request.files.getlist('statements') if f and f.filename]
     period_str = request.form.get('period')
-    results, errors = [], []
+    results, errors, warnings = [], [], []
     crm_reapplied = 0
-    for f in files:
-        if not f or not f.filename:
-            continue
+    history_reapplied = 0
+    period = None
+    if period_str:
         try:
-            res = flr.import_statement(f.stream, f.filename, session.get('username'))
+            period = date.fromisoformat(period_str)
+        except ValueError:
+            flash('Некорректный период загрузки', 'danger')
+            return redirect(url_for('flash_page'))
+
+    # Историю FinancialData загружаем один раз на весь комплект выписок, а не
+    # заново для каждого банковского файла.
+    historical_project_index = None
+    if files and period:
+        try:
+            historical_project_index = flr.load_historical_project_index(period)
+            if not historical_project_index.get('is_fresh', True):
+                expected = historical_project_index.get('expected_previous_period')
+                latest = historical_project_index.get('latest_period')
+                latest_label = latest.strftime('%m.%Y') if latest else 'нет данных'
+                warnings.append(
+                    f'Проекты расходов из истории не применены: ожидался факт за '
+                    f'{expected.strftime("%m.%Y")}, последний доступный период — {latest_label}.'
+                )
+        except Exception as e:
+            errors.append(('Исторические проекты', str(e)))
+            historical_project_index = {'exact': {}, 'period': {}}
+
+    for f in files:
+        try:
+            res = flr.import_statement(
+                f.stream, f.filename, session.get('username'),
+                historical_project_index=historical_project_index,
+            )
             results.append((f.filename, res))
         except Exception as e:
             errors.append((f.filename, str(e)))
 
-    if period_str and results:
-        period = date.fromisoformat(period_str)
+    if period and results:
         learned = flr.learn_rules(period, created_by=session.get('username'))
         wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
+        history_reapplied = flr.enrich_projects_from_history(
+            period, historical_project_index=historical_project_index
+        )
         crm_reapplied = flr.enrich_projects_from_crm(period)
         audit.log_action(
             session.get('username'), 'flash_upload',
             f'файлов: {len(results)}, период: {period}, новых правил: {learned}, '
-            f'кошельков: {wallets_learned}, CRM-проектов применено: {crm_reapplied}'
+            f'кошельков: {wallets_learned}, проектов из истории применено: {history_reapplied}, '
+            f'CRM-проектов применено: {crm_reapplied}'
         )
 
     if errors:
         flash('Ошибки при загрузке: ' + '; '.join(f'{fn}: {e}' for fn, e in errors), 'danger')
+    if warnings:
+        flash(' '.join(warnings), 'warning')
     if results:
         total = sum(r['total'] for _, r in results)
         matched = sum(r['matched'] for _, r in results)
         crm_projects = sum(r.get('crm_projects', 0) for _, r in results)
+        history_projects = sum(r.get('history_projects', 0) for _, r in results)
         flash(
             f'Загружено файлов: {len(results)}, операций: {total}, размечено сразу: {matched}, '
-            f'проект из CRM найден: {crm_projects}',
+            f'проект из CRM найден: {crm_projects}, из прошлых периодов: {history_projects}',
             'success'
         )
     elif not errors:
@@ -789,16 +823,19 @@ def flash_relearn():
     learned = flr.learn_rules(period, created_by=session.get('username'))
     wallets_learned = flr.learn_wallet_aliases(period, created_by=session.get('username'))
     reclassified = flr.reclassify_unmatched(period)
+    history_enriched = flr.enrich_projects_from_history(period)
     crm_enriched = flr.enrich_projects_from_crm(period)
     audit.log_action(
         session.get('username'), 'flash_relearn',
         f'период: {period}, новых правил: {learned}, кошельков: {wallets_learned}, '
-        f'доразмечено по правилам: {reclassified}, CRM-проектов применено: {crm_enriched}'
+        f'доразмечено по правилам: {reclassified}, проектов из истории: {history_enriched}, '
+        f'CRM-проектов применено: {crm_enriched}'
     )
     flash(
         f'Классификация пересчитана против FinancialData (новых правил: {learned}, кошельков: {wallets_learned}) '
         f'и по уже известным правилам доразмечено ещё {reclassified} операций. '
-        f'Проект из CRM применён к {crm_enriched} положительным операциям.',
+        f'Проект из прошлых периодов применён к {history_enriched} отрицательным операциям, '
+        f'из CRM — к {crm_enriched} положительным.',
         'success'
     )
     return redirect(url_for('flash_page', period=period_str))

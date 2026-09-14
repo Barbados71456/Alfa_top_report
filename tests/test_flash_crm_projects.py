@@ -89,9 +89,15 @@ def test_import_statement_prefers_crm_project_but_keeps_classification_source(mo
     monkeypatch.setattr(flash_report, 'execute_values', lambda sql, values: inserted.extend(values))
     monkeypatch.setattr(flash_report, 'execute', lambda *args, **kwargs: None)
 
-    result = flash_report.import_statement(object(), 'statement.xlsx', 'analyst')
+    result = flash_report.import_statement(
+        object(), 'statement.xlsx', 'analyst',
+        historical_project_index={'exact': {}, 'period': {}},
+    )
 
-    assert result == {'bank_format': 'alfabank', 'total': 3, 'matched': 2, 'crm_projects': 2}
+    assert result == {
+        'bank_format': 'alfabank', 'total': 3, 'matched': 2,
+        'crm_projects': 2, 'history_projects': 0,
+    }
     assert inserted[0][13] == '(DP) Moneyman'
     assert inserted[0][16] == 'rule'
     assert inserted[1][13] == '(DP) TB'

@@ -17,6 +17,11 @@ source='manual').
 делом проект. Свободный поиск по ФИО не используется из-за риска неоднозначных
 совпадений.
 
+Для отрицательных операций проект ищется в закрытых прошлых периодах
+public."FinancialData": сначала по точному нормализованному назначению, затем
+по тому же назначению без меняющихся дат/названия месяца. Берётся только проект
+из самого свежего совпавшего периода и только когда в нём ровно один вариант.
+
 Поддерживаемые форматы выписок (определяются по структуре листа, см. detect_format):
   alfabank      — "_Выписка_<счёт>_<период>.xlsx", шапка + двухстрочный заголовок
   sberbusiness  — "_СберБизнес. Выписка ... счёт <счёт>.xlsx", "плавающие" колонки
@@ -25,8 +30,9 @@ source='manual').
                   не бинарный xls и не xlsx
 """
 import re
+import unicodedata
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from collections import defaultdict
 
 import openpyxl
@@ -300,6 +306,149 @@ _CRM_CONTRACT_RE = re.compile(
     r'([0-9a-zа-я][0-9a-zа-я/_\-.]{2,})'
 )
 _CRM_MIN_CONTRACT_ALNUM = 6
+
+# Историческое назначение расхода приводим к сопоставимому виду осторожно:
+# меняем только явные календарные фрагменты, но не номера договоров/счетов.
+# Так повторяющаяся услуга "за июль" находится "за август", а два разных
+# договора одного контрагента не склеиваются в один ключ.
+_HISTORY_DATE_RE = re.compile(
+    r'(?<!\d)(?:[0-3]?\d[./-][01]?\d[./-](?:19|20)?\d{2}|'
+    r'(?:19|20)\d{2}[./-][01]?\d[./-][0-3]?\d)(?!\d)'
+)
+_HISTORY_NUMERIC_PERIOD_RE = re.compile(
+    r'(?<!\d)(?:0?[1-9]|1[0-2])[./-](?:19|20)\d{2}(?!\d)|'
+    r'(?<!\d)(?:19|20)\d{2}[./-](?:0?[1-9]|1[0-2])(?!\d)'
+)
+_HISTORY_MONTH_RE = re.compile(
+    r'(?iu)\b(?:январ(?:ь|я|е|ем)|феврал(?:ь|я|е|ем)|март(?:а|е|ом)?|'
+    r'апрел(?:ь|я|е|ем)|ма[йяе]|июн(?:ь|я|е|ем)|июл(?:ь|я|е|ем)|'
+    r'август(?:а|е|ом)?|сентябр(?:ь|я|е|ем)|октябр(?:ь|я|е|ем)|'
+    r'ноябр(?:ь|я|е|ем)|декабр(?:ь|я|е|ем))\b'
+)
+_HISTORY_YEAR_WITH_LABEL_RE = re.compile(
+    r'(?iu)(?<!\d)(?:19|20)\d{2}(?=\s*(?:г(?:\.|\b)|год(?:а|у|ом|е)?\b))'
+)
+_HISTORY_YEAR_AFTER_MONTH_RE = re.compile(
+    r'(?iu)(<месяц>\s+)(?:19|20)\d{2}(?!\d)'
+)
+_HISTORY_MIN_KEY_ALNUM = 15
+
+
+def _normalize_history_purpose(value):
+    """Нормализует только регистр, Unicode и пробелы, не теряя реквизиты."""
+    text = unicodedata.normalize('NFKC', str(value or ''))
+    text = text.replace('\x00', ' ').replace('\xa0', ' ')
+    return ' '.join(text.split()).casefold().replace('ё', 'е')
+
+
+def _normalize_history_periods(value):
+    """Заменяет явные даты/месяцы, оставляя договоры и номера документов."""
+    text = _normalize_history_purpose(value)
+    text = _HISTORY_DATE_RE.sub(' <дата> ', text)
+    text = _HISTORY_NUMERIC_PERIOD_RE.sub(' <период> ', text)
+    text = _HISTORY_MONTH_RE.sub(' <месяц> ', text)
+    text = _HISTORY_YEAR_WITH_LABEL_RE.sub(' <год> ', text)
+    text = _HISTORY_YEAR_AFTER_MONTH_RE.sub(r'\1<год>', text)
+    return ' '.join(text.split())
+
+
+def _history_key_is_specific(key):
+    alnum = re.sub(r'(?iu)[^0-9a-zа-я]+', '', key or '')
+    words = re.findall(r'(?iu)[0-9a-zа-я]+', key or '')
+    return len(alnum) >= _HISTORY_MIN_KEY_ALNUM and len(words) >= 3
+
+
+def _latest_unambiguous_project_index(rows, key_func):
+    """Строит ключ -> проект по самому свежему однозначному периоду."""
+    grouped = {}
+    for row in rows:
+        period = row.get('Период')
+        project = str(row.get('Проект') or '').strip()
+        key = key_func(row.get('Комментарии'))
+        if period is None or not project or not _history_key_is_specific(key):
+            continue
+        current = grouped.get(key)
+        if current is None or period > current['period']:
+            grouped[key] = {'period': period, 'projects': {project}}
+        elif period == current['period']:
+            current['projects'].add(project)
+    return {
+        key: next(iter(value['projects']))
+        for key, value in grouped.items()
+        if len(value['projects']) == 1
+    }
+
+
+def load_historical_project_index(before_period):
+    """Загружает прошлые расходы FinancialData одним запросом на весь импорт.
+
+    В историю не попадает текущий месяц: Flash не должен принимать собственный
+    прогноз за факт. Зерно исходной таблицы сохраняется; неоднозначность проекта
+    проверяется отдельно внутри каждого ключа и последнего совпавшего периода.
+    Если непосредственно предыдущего закрытого месяца в выборке нет, индекс
+    остаётся пустым: устаревший проект нельзя выдавать за актуальный.
+    """
+    if isinstance(before_period, datetime):
+        before_period = before_period.date()
+    if not isinstance(before_period, date):
+        raise ValueError('Для исторического сопоставления нужен корректный период.')
+    before_period = before_period.replace(day=1)
+    expected_previous_period = (before_period - timedelta(days=1)).replace(day=1)
+    rows = query(
+        '''SELECT "Период", "Комментарии", btrim("Проект") AS "Проект"
+           FROM public."FinancialData"
+           WHERE "Период" < %s
+             AND "п_ф" = 'факт'
+             AND "Распределение" = 'до распределения'
+             AND "Сумма" < 0
+             AND nullif(btrim("Комментарии"), '') IS NOT NULL
+             AND nullif(btrim("Проект"), '') IS NOT NULL''',
+        (before_period,)
+    )
+    latest_period = max((row.get('Период') for row in rows if row.get('Период')), default=None)
+    is_fresh = latest_period is not None and latest_period >= expected_previous_period
+    if not is_fresh:
+        return {
+            'before_period': before_period,
+            'expected_previous_period': expected_previous_period,
+            'latest_period': latest_period,
+            'is_fresh': False,
+            'exact': {},
+            'period': {},
+        }
+    return {
+        'before_period': before_period,
+        'expected_previous_period': expected_previous_period,
+        'latest_period': latest_period,
+        'is_fresh': True,
+        'exact': _latest_unambiguous_project_index(rows, _normalize_history_purpose),
+        'period': _latest_unambiguous_project_index(rows, _normalize_history_periods),
+    }
+
+
+def _historical_projects_for_transactions(rows, historical_project_index):
+    """Возвращает {индекс строки: проект} только для отрицательных операций."""
+    if not historical_project_index:
+        return {}
+    exact_index = historical_project_index.get('exact') or {}
+    period_index = historical_project_index.get('period') or {}
+    result = {}
+    for index, row in enumerate(rows):
+        if _norm_amount(row.get('amount')) >= 0:
+            continue
+        exact_key = _normalize_history_purpose(row.get('purpose_text'))
+        if not _history_key_is_specific(exact_key):
+            continue
+        project = exact_index.get(exact_key)
+        if not project:
+            period_key = _normalize_history_periods(row.get('purpose_text'))
+            # Второй проход имеет смысл только если в тексте действительно был
+            # меняющийся календарный фрагмент.
+            if period_key != exact_key:
+                project = period_index.get(period_key)
+        if project:
+            result[index] = project
+    return result
 
 
 def _extract_crm_contract_candidates(purpose_text):
@@ -653,6 +802,40 @@ def enrich_projects_from_crm(period):
     return len(updates)
 
 
+def enrich_projects_from_history(period, historical_project_index=None):
+    """Повторно подтягивает проект прошлых периодов для расходов месяца.
+
+    Ручные/разбитые строки не меняются. Строки с source='learned' также
+    защищены: они уже получили более сильный проект из факта текущего периода.
+    """
+    if historical_project_index is None:
+        historical_project_index = load_historical_project_index(period)
+    transactions = query(
+        '''SELECT id, amount, purpose_text
+           FROM flash.transactions
+           WHERE date_trunc('month', operation_date) = %s
+             AND amount < 0
+             AND classification_source NOT IN ('manual', 'split', 'learned')''',
+        (period,)
+    )
+    projects_by_row = _historical_projects_for_transactions(
+        transactions, historical_project_index
+    )
+    updates = [
+        (project, transactions[index]['id'])
+        for index, project in projects_by_row.items()
+    ]
+    if updates:
+        execute_values(
+            '''UPDATE flash.transactions AS t
+               SET "Проект" = v.project
+               FROM (VALUES %s) AS v(project, id)
+               WHERE t.id = v.id''',
+            updates
+        )
+    return len(updates)
+
+
 def classify_transaction(txn):
     """Применяет flash.classification_rules к одной операции — для точечной
     переклассификации вне массового импорта (сам import_statement использует
@@ -775,7 +958,7 @@ def wallet_reconciliation(period):
     return rows
 
 
-def import_statement(file_obj, filename, username):
+def import_statement(file_obj, filename, username, historical_project_index=None):
     """Разбирает один файл выписки, классифицирует построчно по уже выученным
     правилам и сохраняет в flash.transactions. ON CONFLICT — по содержимому
     операции (bank_format, account_number, document_number, дата, сумма, ИНН,
@@ -793,8 +976,9 @@ def import_statement(file_obj, filename, username):
     Правила/алиасы кошельков грузятся один раз на файл и классификация идёт
     в памяти (не по запросу на строку) — на файле в тысячи операций на
     удалённой Render Postgres это разница между минутами и секундами.
-    CRM-проект ищется только для положительных операций. Возвращает
-    {bank_format, total, matched, crm_projects}."""
+    CRM-проект ищется только для положительных операций, исторический проект
+    FinancialData — только для отрицательных. Возвращает
+    {bank_format, total, matched, crm_projects, history_projects}."""
     bank_format, rows = detect_and_parse(file_obj, filename)
     if not rows:
         raise ValueError(f'В файле "{filename}" не найдено ни одной операции — проверь формат.')
@@ -802,6 +986,17 @@ def import_statement(file_obj, filename, username):
     inn_rules, purpose_rules = _load_classification_rules()
     wallet_by_account = _load_wallet_aliases()
     crm_projects_by_row = _crm_projects_for_transactions(rows)
+    if historical_project_index is None and any(
+        _norm_amount(row.get('amount')) < 0 and row.get('purpose_text')
+        for row in rows
+    ):
+        first_operation_date = min(row['operation_date'] for row in rows)
+        historical_project_index = load_historical_project_index(
+            first_operation_date.replace(day=1)
+        )
+    history_projects_by_row = _historical_projects_for_transactions(
+        rows, historical_project_index
+    )
 
     matched = 0
     hit_rule_ids = []
@@ -819,10 +1014,12 @@ def import_statement(file_obj, filename, username):
             fields = (None, None, None, None, None, None)
 
         crm_project = crm_projects_by_row.get(row_index)
-        if crm_project:
+        history_project = history_projects_by_row.get(row_index)
+        preferred_project = crm_project or history_project
+        if preferred_project:
             # Остальные поля по-прежнему принадлежат правилу/ручной разметке;
-            # CRM является приоритетным источником только для проекта.
-            fields = fields[:3] + (crm_project,) + fields[4:]
+            # CRM/история являются приоритетным источником только для проекта.
+            fields = fields[:3] + (preferred_project,) + fields[4:]
 
         wallet = wallet_by_account.get(r['account_number'])
         values.append((
@@ -850,6 +1047,7 @@ def import_statement(file_obj, filename, username):
         'total': len(rows),
         'matched': matched,
         'crm_projects': len(crm_projects_by_row),
+        'history_projects': len(history_projects_by_row),
     }
 
 
