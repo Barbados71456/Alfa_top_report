@@ -1592,6 +1592,13 @@ def export_report(kind):
             period = date.fromisoformat(period_str)
             rows = flr.export_for_load(period)
             sheets = [('загрузка', etl.FACT_COLUMNS, [[r[c] for c in etl.FACT_COLUMNS] for r in rows])]
+        elif kind == 'flash_combined':
+            period_str = request.args.get('period')
+            if not period_str:
+                return {'error': 'period обязателен'}, 400
+            period = date.fromisoformat(period_str)
+            rows = flr.export_combined(period)
+            sheets = [('сводная', etl.FACT_COLUMNS, [[r[c] for c in etl.FACT_COLUMNS] for r in rows])]
         elif kind == 'flash_review':
             period_str = request.args.get('period')
             if not period_str:

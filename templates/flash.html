@@ -27,6 +27,7 @@
             <button type="submit" class="btn btn-sm btn-outline-secondary" title="Пересчитать правила классификации по этому периоду против актуальной FinancialData — не требует новой загрузки файлов">Дообучить классификацию</button>
         </form>
         {% endif %}
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('export_report', kind='flash_combined') }}?period={{ period.isoformat() }}" title="Все операции выбранного месяца одним листом; неопределённый проект останется пустым"><i class="bi bi-download"></i> Сведённая выгрузка</a>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_load') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Файл для загрузки в FinancialData</a>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='flash_review') }}?period={{ period.isoformat() }}"><i class="bi bi-download"></i> Выгрузить всё для проверки</a>
     </div>

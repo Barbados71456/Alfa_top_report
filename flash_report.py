@@ -1375,27 +1375,15 @@ _MONTH_NAMES_RU = [
 ]
 
 
-def export_for_load(period):
-    """Строки Flash за period в точности в формате листа "загрузка"
-    (monthly_etl.FACT_COLUMNS) — готовый файл для /admin/monthly_load.
-    Только уже размеченные операции (classification_source != 'unmatched');
-    неразмеченные не экспортируются, их нужно сначала разобрать на /flash.
-
-    "Контрагент" берём из сырого banковского counterparty_name (не
-    Контрагент_report — это уже производное отчётное имя, его пересчитает
-    сам конвейер по тем же правилам, что и для остальной FinancialData).
-    "Проект" копируется из последней совпавшей исторической строки
-    FinancialData и не проверяется построчно — распределение по проектам
-    для новых операций это допущение, а не факт; стоит перепроверить перед
-    финальной загрузкой, если контрагент участвует в нескольких проектах.
-    Разбитые вручную по проектам операции (см. set_transaction_splits) идут
-    отдельными строками — по одной на каждую часть разбиения."""
+def _export_fact_rows(period, include_unmatched):
+    """Собирает эффективные строки Flash в формате monthly_etl.FACT_COLUMNS."""
+    classification_filter = '' if include_unmatched else "AND classification_source != 'unmatched'"
     rows = query(
         f'''SELECT operation_date, "Признак", "Категория", "Статья", "Проект", counterparty_name,
                   wallet, amount, purpose_text
            FROM ({_effective_rows_sql()}) AS ft
-           WHERE date_trunc('month', operation_date) = %s AND classification_source != 'unmatched'
-           ORDER BY operation_date''',
+           WHERE date_trunc('month', operation_date) = %s {classification_filter}
+           ORDER BY operation_date, id, split_id NULLS FIRST''',
         (period,)
     )
     wallet_types = {r['account_number']: r['wallet_type'] for r in query(
@@ -1412,8 +1400,27 @@ def export_for_load(period):
         out.append({
             'Дата': d, 'Год': d.year, 'месяц': _MONTH_NAMES_RU[d.month - 1],
             'Признак': r['Признак'], 'Категория': r['Категория'], 'Статья': r['Статья'],
-            'Проект': r['Проект'], 'Контрагент': r['counterparty_name'],
+            'Проект': r['Проект'] or None, 'Контрагент': r['counterparty_name'],
             'Тип Кошелька': wallet_types.get(account), 'Кошелек': r['wallet'],
             'Сумма': float(r['amount']), 'Комментарии': r['purpose_text'],
         })
     return out
+
+
+def export_for_load(period):
+    """Размеченные строки Flash в формате листа "загрузка".
+
+    Неразмеченные операции исключаются. Ручные разбиения идут отдельными
+    эффективными строками, а исходная разбитая операция не дублируется.
+    """
+    return _export_fact_rows(period, include_unmatched=False)
+
+
+def export_combined(period):
+    """Все строки Flash месяца одним листом в формате бухгалтерского файла.
+
+    Включает размеченные и неразмеченные операции из всех загруженных выписок,
+    а также эффективные строки ручных разбиений. Если проект не определён,
+    значение остаётся NULL и выгружается как пустая ячейка Excel.
+    """
+    return _export_fact_rows(period, include_unmatched=True)
