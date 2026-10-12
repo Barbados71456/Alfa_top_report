@@ -32,12 +32,12 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$AMVERA_SSH_PRIVATE_KEY" > ~/.ssh/amvera
           chmod 600 ~/.ssh/amvera
-          ssh-keyscan -H git.msk0.amvera.ru >> ~/.ssh/known_hosts
+          ssh-keyscan -H git.mia0.amvera.ru >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Push current commit to Amvera master
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/amvera -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
         run: |
-          git remote add amvera git@git.msk0.amvera.ru:fedbi/al-fa-otcetn566xt6
+          git remote add amvera git@git.mia0.amvera.ru:fedbi/al-fa-otcetn2ie9ju
           git push amvera HEAD:refs/heads/master
