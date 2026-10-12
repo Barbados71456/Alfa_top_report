@@ -51,4 +51,15 @@ jobs:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/amvera -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
         run: |
           git remote add amvera git@git.mia0.amvera.ru:fedbi/al-fa-otcetn2ie9ju
+          git fetch amvera master
+          deploy_base=$(git merge-base HEAD FETCH_HEAD)
+          unexpected_files=$(git diff --name-only "$deploy_base" FETCH_HEAD -- . ':!amvera.yml')
+          if [ -n "$unexpected_files" ]; then
+            echo "::error::Amvera contains application changes requiring manual review: $unexpected_files"
+            exit 1
+          fi
+          # The Amvera UI commits runtime settings to its own master branch.
+          # Preserve those commits and require a fast-forward push; never force.
+          git -c user.name='Alfa deploy' -c user.email='deploy@users.noreply.github.com' \
+            merge --no-edit FETCH_HEAD
           git push amvera HEAD:refs/heads/master
