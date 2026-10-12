@@ -72,6 +72,7 @@
             <td class="amount-cell {% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}"
                 data-lines='{{ row.lines | tojson }}' data-year="{{ data.series[loop.index0][1] }}" data-month="{{ month }}"
                 data-pf="{{ data.series[loop.index0][0] }}" data-label="{{ row.label }}"
+                data-mode="{{ 'month' if is_month else 'ytd' }}" data-allocation="{{ allocation }}"
                 data-focus="projects" data-projects='{{ (row.project or projects or []) | tojson }}'>{{ '%.1f'|format(v) }}</td>
             {% else %}
             <td class="{% if v > 0 %}val-pos{% elif v < 0 %}val-neg{% endif %}">{{ '%.1f'|format(v) if v else '—' }}</td>
@@ -85,6 +86,7 @@
                 data-lines='{{ row.lines | tojson }}' data-month="{{ month }}" data-polarity="{{ row.polarity or 1 }}"
                 data-a="{{ data.series[data.deltas[di][0]][0] }}:{{ data.series[data.deltas[di][0]][1] }}:{{ month }}"
                 data-b="{{ data.series[data.deltas[di][1]][0] }}:{{ data.series[data.deltas[di][1]][1] }}:{{ month }}"
+                data-mode="{{ 'month' if is_month else 'ytd' }}" data-allocation="{{ allocation }}"
                 data-label="{{ row.label }}" data-projects='{{ (row.project or projects or []) | tojson }}'>{{ '%.1f'|format(dv) }}</td>
             {% else %}
             <td class="{% if eff > 0 %}val-pos{% elif eff < 0 %}val-neg{% endif %}">{{ '%.1f'|format(dv) if dv else '—' }}</td>

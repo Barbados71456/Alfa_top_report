@@ -240,6 +240,8 @@ def svod1(year, pf='факт', allocation='all'):
             continue
         rows.append({'kind': 'line', 'label': line, 'vals': vals})
     profit_after_bonus = _sum_lines(by_line, BONUS_LINES)
+    for m in range(1, 13):
+        profit_after_bonus[m] += profit[m]
     rows.append({'kind': 'subtotal', 'label': 'Прибыль после бонусов', 'vals': _series(profit_after_bonus)})
 
     rows.append({'kind': 'header', 'label': '  ИНВЕСТИЦИИ В ПОРТФЕЛИ'})
@@ -266,7 +268,7 @@ def svod1(year, pf='факт', allocation='all'):
 
     net_profit = _empty_months()
     for m in range(1, 13):
-        net_profit[m] = profit_after_bonus[m] + financing_total[m] + investment[m] + profit[m]
+        net_profit[m] = profit_after_bonus[m] + financing_total[m] + investment[m]
     rows.append({'kind': 'total', 'label': '💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ', 'vals': _series(net_profit)})
 
     gm = _empty_months()
@@ -832,7 +834,7 @@ def portfolio_pl_summary(project, year=None, pf='факт', allocation='all'):
     return out
 
 
-def cell_detail(lines, year, month, pf, projects=None, allocation='all', contragent=None):
+def cell_detail(lines, year, month, pf, projects=None, allocation='all', contragent=None, mode='month'):
     """Детализация ячейки Свод1/Dashboard2 (lines — список "Строка отчета", обычно
     одна строка, для итоговых строк — весь список секции): дерево
     СтатьяУровень3 -> Контрагент -> [{comment, amount, project}], плюс отдельно
@@ -843,11 +845,14 @@ def cell_detail(lines, year, month, pf, projects=None, allocation='all', contrag
     if isinstance(lines, str):
         lines = [lines]
     period = date(year, month, 1)
+    if mode not in ('month', 'ytd'):
+        raise ValueError('Неизвестный режим детализации')
+    start = date(year, 1, 1) if mode == 'ytd' else period
     sql = '''SELECT "СтатьяУровень3" AS stat3, "Контрагент" AS contragent, "Комментарии" AS comment,
                     "Проект" AS project, "Сумма" AS amount
              FROM public."FinancialData"
-             WHERE "Строка отчета" = ANY(%s) AND "Период" = %s AND "п_ф" = %s'''
-    params = [lines, period, pf]
+             WHERE "Строка отчета" = ANY(%s) AND "Период" BETWEEN %s AND %s AND "п_ф" = %s'''
+    params = [lines, start, period, pf]
     if projects:
         sql += ' AND "Проект" = ANY(%s)'
         params.append(projects)
@@ -899,15 +904,18 @@ def cell_detail(lines, year, month, pf, projects=None, allocation='all', contrag
     return {'total': total, 'by_statya3': stat3_list, 'by_project': project_list, 'row_count': len(rows)}
 
 
-def _raw_group(lines, year, month, pf, projects=None, allocation='all'):
+def _raw_group(lines, year, month, pf, projects=None, allocation='all', mode='month'):
     """{(project, stat3, contragent): amount} — живой запрос, узкий фильтр (под
     idx_financialdata_line_period_pf), для акт-анализа отклонений."""
     period = date(year, month, 1)
+    if mode not in ('month', 'ytd'):
+        raise ValueError('Неизвестный режим детализации')
+    start = date(year, 1, 1) if mode == 'ytd' else period
     sql = '''SELECT "Проект" AS project, "СтатьяУровень3" AS stat3, "Контрагент" AS contragent,
                     SUM("Сумма") AS amount
              FROM public."FinancialData"
-             WHERE "Строка отчета" = ANY(%s) AND "Период" = %s AND "п_ф" = %s'''
-    params = [lines, period, pf]
+             WHERE "Строка отчета" = ANY(%s) AND "Период" BETWEEN %s AND %s AND "п_ф" = %s'''
+    params = [lines, start, period, pf]
     if projects:
         sql += ' AND "Проект" = ANY(%s)'
         params.append(projects)
@@ -925,13 +933,13 @@ def _raw_group(lines, year, month, pf, projects=None, allocation='all'):
     return result
 
 
-def deviation_detail(lines, series_a, series_b, projects=None, top_n=20, allocation='all'):
+def deviation_detail(lines, series_a, series_b, projects=None, top_n=20, allocation='all', mode='month'):
     """Акт-анализ отклонения между двумя срезами (series_a, series_b — каждый
     (pf, year, month)): топ-N (проект, СтатьяУровень3, Контрагент) по |разница|.
     Сортировка — сначала строки того же знака, что и общее отклонение (по
     убыванию модуля), затем строки противоположного знака (тоже по модулю)."""
-    a = _raw_group(lines, series_a[1], series_a[2], series_a[0], projects, allocation)
-    b = _raw_group(lines, series_b[1], series_b[2], series_b[0], projects, allocation)
+    a = _raw_group(lines, series_a[1], series_a[2], series_a[0], projects, allocation, mode)
+    b = _raw_group(lines, series_b[1], series_b[2], series_b[0], projects, allocation, mode)
     drivers = []
     for key in set(a) | set(b):
         va, vb = a.get(key, 0.0), b.get(key, 0.0)
@@ -940,7 +948,7 @@ def deviation_detail(lines, series_a, series_b, projects=None, top_n=20, allocat
             continue
         drivers.append({'project': key[0], 'stat3': key[1], 'contragent': key[2],
                          'a': va, 'b': vb, 'delta': delta})
-    total_delta = sum(d['delta'] for d in drivers)
+    total_delta = sum(a.values()) - sum(b.values())
     drivers.sort(key=lambda d: (0 if (d['delta'] >= 0) == (total_delta >= 0) else 1, -abs(d['delta'])))
     return {'total_delta': total_delta, 'drivers': drivers[:top_n]}
 

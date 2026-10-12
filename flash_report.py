@@ -34,10 +34,12 @@ import unicodedata
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from collections import defaultdict
+from decimal import Decimal, InvalidOperation
 
 import openpyxl
+from psycopg2.extras import execute_values as cursor_execute_values
 
-from db import execute, execute_values, query, query_one
+from db import execute, execute_values, query, query_one, transaction
 
 _XML_NS = {'ss': 'urn:schemas-microsoft-com:office:spreadsheet'}
 
@@ -1327,46 +1329,53 @@ def set_transaction_splits(txn_id, splits, username):
     classification_source='split' (из обычных отчётов Flash она после этого
     исключается, см. _effective_rows_sql) и полностью заменяет предыдущее
     разбиение этой операции, если оно было."""
-    txn = query_one('SELECT amount FROM flash.transactions WHERE id = %s', (txn_id,))
-    if txn is None:
-        raise ValueError('Операция не найдена')
-    if not splits:
+    if not isinstance(splits, list) or not splits:
         raise ValueError('Нужна хотя бы одна часть разбиения')
-
-    total = sum(float(s.get('amount') or 0) for s in splits)
-    if abs(total - float(txn['amount'])) > 0.01:
-        raise ValueError(
-            f'Сумма частей ({total:,.2f}) не совпадает с суммой операции ({float(txn["amount"]):,.2f})'
-        )
-
-    execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
-    rows = [(
-        txn_id, s.get('amount'), s.get('Признак'), s.get('Категория'), s.get('Статья'),
-        s.get('Проект'), s.get('Контрагент_report'), s.get('Строка отчета'), username,
-    ) for s in splits]
-    execute_values(
-        '''INSERT INTO flash.transaction_splits
-           (transaction_id, amount, "Признак", "Категория", "Статья", "Проект", "Контрагент_report",
-            "Строка отчета", created_by)
-           VALUES %s''',
-        rows
-    )
-    execute(
-        '''UPDATE flash.transactions SET "Признак"=NULL, "Категория"=NULL, "Статья"=NULL, "Проект"=NULL,
-           "Контрагент_report"=NULL, "Строка отчета"=NULL, classification_source='split' WHERE id = %s''',
-        (txn_id,)
-    )
+    rows = []
+    for part in splits:
+        if not isinstance(part, dict):
+            raise ValueError('Каждая часть должна быть объектом с суммой')
+        try:
+            amount = Decimal(str(part.get('amount')))
+        except (InvalidOperation, ValueError):
+            raise ValueError('У каждой части должна быть числовая сумма') from None
+        if not amount.is_finite():
+            raise ValueError('Сумма части должна быть конечным числом')
+        rows.append((txn_id, amount, part.get('Признак'), part.get('Категория'), part.get('Статья'),
+                     part.get('Проект'), part.get('Контрагент_report'), part.get('Строка отчета'), username))
+    total = sum(row[1] for row in rows)
+    # Блокируем исходную строку: две одновременные правки не смешивают части.
+    # DELETE, INSERT и смена статуса либо коммитятся вместе, либо откатываются.
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT amount FROM flash.transactions WHERE id = %s FOR UPDATE', (txn_id,))
+            txn = cur.fetchone()
+            if txn is None:
+                raise ValueError('Операция не найдена')
+            original = Decimal(str(txn[0]))
+            if abs(total - original) > Decimal('0.01'):
+                raise ValueError(f'Сумма частей ({total:,.2f}) не совпадает с суммой операции ({original:,.2f})')
+            cur.execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
+            cursor_execute_values(cur, '''INSERT INTO flash.transaction_splits
+                (transaction_id, amount, "Признак", "Категория", "Статья", "Проект", "Контрагент_report",
+                 "Строка отчета", created_by) VALUES %s''', rows)
+            cur.execute('''UPDATE flash.transactions SET "Признак"=NULL, "Категория"=NULL,
+                "Статья"=NULL, "Проект"=NULL, "Контрагент_report"=NULL, "Строка отчета"=NULL,
+                classification_source='split' WHERE id = %s''', (txn_id,))
 
 
 def clear_transaction_splits(txn_id):
     """Отменяет разбиение — операция возвращается в 'unmatched' (обычная
     точечная разметка через set_manual_classification/автоправила дальше как
     для любой другой неразмеченной операции)."""
-    execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
-    execute(
-        '''UPDATE flash.transactions SET classification_source='unmatched' WHERE id = %s''',
-        (txn_id,)
-    )
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT id FROM flash.transactions WHERE id = %s FOR UPDATE', (txn_id,))
+            if cur.fetchone() is None:
+                raise ValueError('Операция не найдена')
+            cur.execute('DELETE FROM flash.transaction_splits WHERE transaction_id = %s', (txn_id,))
+            cur.execute('''UPDATE flash.transactions SET classification_source='unmatched'
+                           WHERE id = %s AND classification_source='split' ''', (txn_id,))
 
 
 _MONTH_NAMES_RU = [

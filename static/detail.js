@@ -9,6 +9,12 @@ function fmtAmount(v) {
     return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(v);
 }
 
+function escapeDetailText(value) {
+    const span = document.createElement('span');
+    span.textContent = value == null ? '' : String(value);
+    return span.innerHTML;
+}
+
 // polarity: +1 (по умолчанию) — рост показателя это хорошо, зелёный при value>0;
 // -1 — для показателей вроде остатка долга, где рост это плохо, зелёный при value<0.
 function deltaColorClass(value, polarity) {
@@ -21,7 +27,7 @@ function deltaColorClass(value, polarity) {
 function buildTooltipHtml(detail) {
     if (!detail || !detail.length) return null;
     const rows = detail.slice(0, 8).map(d => `<div class="d-flex justify-content-between gap-3">
-        <span>${d.stat3}</span><span>${fmtAmount(d.val)}</span></div>`).join('');
+        <span>${escapeDetailText(d.stat3)}</span><span>${fmtAmount(d.val)}</span></div>`).join('');
     return `<div class="text-start">${rows}</div>`;
 }
 
@@ -49,6 +55,8 @@ function initAmountCells(root) {
                 employee: td.dataset.employee ? JSON.parse(td.dataset.employee) : null,
                 focus: td.dataset.focus || 'statya',
                 label: td.dataset.label,
+                mode: td.dataset.mode || 'month',
+                allocation: td.dataset.allocation || new URLSearchParams(location.search).get('allocation') || 'all',
             });
         });
     });
@@ -59,14 +67,15 @@ let detailModalInstance = null;
 function showCellDetail(opts) {
     const modalEl = document.getElementById('detailModal');
     detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
-    document.getElementById('detailModalTitle').textContent = `${opts.label} — ${opts.month}.${opts.year} (${opts.pf})`;
+    document.getElementById('detailModalTitle').textContent = `${opts.label} — ${opts.month}.${opts.year} (${opts.pf})${opts.mode === 'ytd' ? ' · накопительно' : ''}`;
     document.getElementById('detailModalSummary').textContent = '';
     document.getElementById('detailModalSummary').className = 'mb-2 fw-bold';
     document.getElementById('detailModalTabs').style.display = '';
     document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
     detailModalInstance.show();
 
-    const params = new URLSearchParams({ year: opts.year, month: opts.month, pf: opts.pf });
+    const params = new URLSearchParams({ year: opts.year, month: opts.month, pf: opts.pf,
+        mode: opts.mode || 'month', allocation: opts.allocation || 'all' });
     opts.lines.forEach(l => params.append('line', l));
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
     if (opts.employee) opts.employee.forEach(e => params.append('employee', e));
@@ -81,21 +90,21 @@ function showCellDetail(opts) {
 
 function renderCellDetail(data, opts) {
     if (data.error) {
-        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
+        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${escapeDetailText(data.error)}</div>`;
         return;
     }
     document.getElementById('detailModalSummary').textContent =
-        `Итого: ${fmtAmount(data.total)} (${data.row_count} операций)`;
+        `Итого: ${fmtAmount(data.total)} руб. (${data.row_count} операций)`;
 
     const projectsHtml = `<table class="table table-sm"><thead><tr><th>Проект</th><th class="text-end">Сумма</th></tr></thead><tbody>` +
-        data.by_project.map(p => `<tr><td>${p.project}</td><td class="text-end">${fmtAmount(p.total)}</td></tr>`).join('') +
+        data.by_project.map(p => `<tr><td>${escapeDetailText(p.project)}</td><td class="text-end">${fmtAmount(p.total)}</td></tr>`).join('') +
         `</tbody></table>`;
 
     const statyaHtml = `<div class="accordion" id="statyaAccordion">` + data.by_statya3.map((s, i) => `
         <div class="accordion-item">
             <h2 class="accordion-header">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#stat3-${i}">
-                    <span class="flex-grow-1">${s.stat3}</span><span class="me-2">${fmtAmount(s.total)}</span>
+                    <span class="flex-grow-1">${escapeDetailText(s.stat3)}</span><span class="me-2">${fmtAmount(s.total)}</span>
                 </button>
             </h2>
             <div id="stat3-${i}" class="accordion-collapse collapse" data-bs-parent="#statyaAccordion">
@@ -105,14 +114,14 @@ function renderCellDetail(data, opts) {
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed py-1" type="button" data-bs-toggle="collapse" data-bs-target="#c-${i}-${j}">
-                                    <span class="flex-grow-1">${c.contragent}</span><span class="me-2">${fmtAmount(c.total)}</span>
+                                    <span class="flex-grow-1">${escapeDetailText(c.contragent)}</span><span class="me-2">${fmtAmount(c.total)}</span>
                                 </button>
                             </h2>
                             <div id="c-${i}-${j}" class="accordion-collapse collapse" data-bs-parent="#contragentAccordion-${i}">
                                 <div class="accordion-body p-2">
                                     ${c.comments.length ? `<ul class="list-unstyled mb-0">` +
                                         c.comments.map(cm => `<li class="d-flex justify-content-between gap-2 border-bottom py-1">
-                                            <span class="text-secondary">${cm.comment || '—'} <span class="badge bg-light text-dark">${cm.project}</span></span>
+                                            <span class="text-secondary">${escapeDetailText(cm.comment || '—')} <span class="badge bg-light text-dark">${escapeDetailText(cm.project)}</span></span>
                                             <span>${fmtAmount(cm.amount)}</span></li>`).join('') + `</ul>`
                                         : '<span class="text-secondary">Без комментариев</span>'}
                                 </div>
@@ -156,6 +165,8 @@ function initDeltaCells(root) {
                 b: td.dataset.b,
                 label: td.dataset.label,
                 polarity: td.dataset.polarity ? parseInt(td.dataset.polarity, 10) : 1,
+                mode: td.dataset.mode || 'month',
+                allocation: td.dataset.allocation || new URLSearchParams(location.search).get('allocation') || 'all',
             });
         });
     });
@@ -164,13 +175,14 @@ function initDeltaCells(root) {
 function showDeviationDetail(opts) {
     const modalEl = document.getElementById('detailModal');
     detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
-    document.getElementById('detailModalTitle').textContent = `Акт-анализ: ${opts.label} (${opts.a} − ${opts.b})`;
+    document.getElementById('detailModalTitle').textContent = `Акт-анализ: ${opts.label} (${opts.a} − ${opts.b})${opts.mode === 'ytd' ? ' · накопительно' : ''}`;
     document.getElementById('detailModalSummary').textContent = '';
     document.getElementById('detailModalTabs').style.display = 'none';
     document.getElementById('detailModalBody').innerHTML = '<div class="text-secondary">Загрузка…</div>';
     detailModalInstance.show();
 
-    const params = new URLSearchParams({ a: opts.a, b: opts.b });
+    const params = new URLSearchParams({ a: opts.a, b: opts.b,
+        mode: opts.mode || 'month', allocation: opts.allocation || 'all' });
     opts.lines.forEach(l => params.append('line', l));
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
 
@@ -184,13 +196,13 @@ function showDeviationDetail(opts) {
 
 function renderDeviationDetail(data, polarity) {
     if (data.error) {
-        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
+        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${escapeDetailText(data.error)}</div>`;
         return;
     }
     document.getElementById('detailModalSummary').textContent = `Итого отклонение: ${fmtAmount(data.total_delta)}`;
     document.getElementById('detailModalSummary').className = `mb-2 fw-bold ${deltaColorClass(data.total_delta, polarity)}`;
     const rows = data.drivers.map(d => `<tr>
-        <td>${d.project}</td><td>${d.stat3}</td><td>${d.contragent}</td>
+        <td>${escapeDetailText(d.project)}</td><td>${escapeDetailText(d.stat3)}</td><td>${escapeDetailText(d.contragent)}</td>
         <td class="text-end">${fmtAmount(d.a)}</td><td class="text-end">${fmtAmount(d.b)}</td>
         <td class="text-end fw-bold ${deltaColorClass(d.delta, polarity)}">${fmtAmount(d.delta)}</td>
         </tr>`).join('');
@@ -294,14 +306,14 @@ function showPeriodDeviationDetail(opts) {
 
 function renderPeriodDeviationDetail(data) {
     if (data.error) {
-        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${data.error}</div>`;
+        document.getElementById('detailModalBody').innerHTML = `<div class="text-danger">${escapeDetailText(data.error)}</div>`;
         return;
     }
     document.getElementById('detailModalTitle').textContent += ` · ${data.label_b} − ${data.label_a}`;
     document.getElementById('detailModalSummary').textContent = `Итого отклонение B − A: ${fmtAmount(data.total_delta)} руб.`;
     document.getElementById('detailModalSummary').className = `mb-2 fw-bold ${deltaColorClass(data.total_delta, 1)}`;
     const rows = data.drivers.map(driver => `<tr>
-        <td>${driver.project}</td><td>${driver.stat3}</td><td>${driver.contragent}</td>
+        <td>${escapeDetailText(driver.project)}</td><td>${escapeDetailText(driver.stat3)}</td><td>${escapeDetailText(driver.contragent)}</td>
         <td class="text-end">${fmtAmount(driver.a)}</td><td class="text-end">${fmtAmount(driver.b)}</td>
         <td class="text-end fw-bold ${deltaColorClass(driver.delta, 1)}">${fmtAmount(driver.delta)}</td>
         </tr>`).join('');

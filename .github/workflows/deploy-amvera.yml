@@ -25,6 +25,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test before deployment (no database connection)
+        run: |
+          python -m pip install -r requirements.txt 'pytest>=8,<10'
+          python -m pytest -q
+          node --test tests/detail_js.test.cjs
+
       - name: Configure Amvera SSH key
         env:
           AMVERA_SSH_PRIVATE_KEY: ${{ secrets.AMVERA_SSH_PRIVATE_KEY }}

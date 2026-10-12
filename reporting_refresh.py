@@ -7,6 +7,7 @@
 import logging
 
 from db import execute, execute_autocommit
+from fot_source import MONTHLY_CTE
 import investment_report as ir
 import wallet_report as wr
 
@@ -22,10 +23,10 @@ def _sync_employees():
     с подразделением-заготовкой (взято из FinancialData."Контрагент_report" на
     момент появления). Уже существующие строки (в т.ч. поправленные админом
     вручную) не трогает — ON CONFLICT DO NOTHING."""
-    execute('''
+    execute(MONTHLY_CTE + '''
         INSERT INTO reporting.employees (contragent, department)
         SELECT employee, (array_agg(dept ORDER BY period DESC))[1]
-        FROM reporting.fot_monthly
+        FROM fot_source
         WHERE employee <> '(без сотрудника)'
         GROUP BY employee
         ON CONFLICT (contragent) DO NOTHING
@@ -33,11 +34,14 @@ def _sync_employees():
 
 
 def refresh_all():
+    result = {'updated': [], 'failed': []}
     for view in VIEWS:
         try:
             execute_autocommit(f'REFRESH MATERIALIZED VIEW CONCURRENTLY {view}')
+            result['updated'].append(view)
             logger.info('Обновлено: %s', view)
         except Exception:
+            result['failed'].append(view)
             logger.exception('Не удалось обновить %s', view)
 
     try:
@@ -45,30 +49,37 @@ def refresh_all():
         # таблицы выгрузки (cbr_report_1/2), уникальный индекс под CONCURRENTLY не
         # нужен — обычный REFRESH проще и надёжнее для этого источника.
         execute_autocommit('REFRESH MATERIALIZED VIEW cbr.monthly')
+        result['updated'].append('cbr.monthly')
         logger.info('Обновлено: cbr.monthly')
     except Exception:
+        result['failed'].append('cbr.monthly')
         logger.exception('Не удалось обновить cbr.monthly')
 
     try:
         _sync_employees()
         logger.info('Обновлён справочник reporting.employees')
     except Exception:
+        result['failed'].append('reporting.employees')
         logger.exception('Не удалось обновить reporting.employees')
 
     try:
         ir.sync_aliases()
         logger.info('Обновлены алиасы reporting.dp_portfolio_aliases')
     except Exception:
+        result['failed'].append('reporting.dp_portfolio_aliases')
         logger.exception('Не удалось обновить reporting.dp_portfolio_aliases')
 
     try:
         wr.sync_aliases()
         logger.info('Обновлены алиасы reporting.wallet_aliases')
     except Exception:
+        result['failed'].append('reporting.wallet_aliases')
         logger.exception('Не удалось обновить reporting.wallet_aliases')
 
     try:
         wr.seed_foreign_money_balance()
         logger.info('Проверен входящий остаток reporting.foreign_money_balances')
     except Exception:
+        result['failed'].append('reporting.foreign_money_balances')
         logger.exception('Не удалось проверить reporting.foreign_money_balances')
+    return result

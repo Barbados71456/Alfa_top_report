@@ -1,6 +1,6 @@
 """Отчёты ФОТ по подразделениям и сотрудникам.
 
-Источник — reporting.fot_monthly (period, dept, employee, pf, line, amount),
+Источник — public.FinancialData, агрегированный до (period, dept, employee, pf, line),
 line IN ('ФОТ переменный','ФОТ постоянный','Премия за изъятие авто').
 Сверено с эталонным Excel до копейки
 (Дирекция янв.2022 = 485587.07 руб, Зудин С.А. = 319543.07 руб).
@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import date
 
 from db import query
+from fot_source import FOT_LINES, MONTHLY_CTE
 import export
 
 MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
@@ -21,9 +22,14 @@ MONTHS_FULL_RU = [
 FOT_VARIABLE_LINE = 'ФОТ переменный'
 FOT_FIXED_LINE = 'ФОТ постоянный'
 REPOSSESSION_BONUS_LINE = 'Премия за изъятие авто'
-FOT_LINES = (FOT_VARIABLE_LINE, FOT_FIXED_LINE, REPOSSESSION_BONUS_LINE)
 
 DEPT_ORDER = ['Дирекция', 'Commercial', 'Legal', 'Field', 'Soft и прочее']
+
+
+def _query_monthly(sql, params=None):
+    # Сохранённые в старом бекапе определения fot_monthly могут исключать премию.
+    # Единый источник отчёта и детализации не требует DROP/CREATE в рабочей БД.
+    return query(MONTHLY_CTE + sql.replace('reporting.fot_monthly', 'fot_source'), params)
 
 
 def _dept_sort_key(dept):
@@ -31,12 +37,12 @@ def _dept_sort_key(dept):
 
 
 def get_available_years():
-    rows = query('SELECT DISTINCT extract(year FROM period)::int AS y FROM reporting.fot_monthly ORDER BY 1')
+    rows = _query_monthly('SELECT DISTINCT extract(year FROM period)::int AS y FROM reporting.fot_monthly ORDER BY 1')
     return [r['y'] for r in rows]
 
 
 def get_period_bounds(pf='факт'):
-    rows = query(
+    rows = _query_monthly(
         'SELECT MIN(period) AS mn, MAX(period) AS mx '
         'FROM reporting.fot_monthly WHERE pf = %s',
         (pf,),
@@ -61,7 +67,7 @@ def fot3(employee, year, pf='факт'):
     ФОТ переменный / ФОТ постоянный / премия за изъятие авто и итого. Ячейки итога кликабельны на
     клиенте через тот же pr.cell_detail(contragent=[employee]), что и
     Свод1/Обзор — статьи и комментарии по месяцу."""
-    rows = query(
+    rows = _query_monthly(
         '''SELECT extract(month FROM fm.period)::int AS m, fm.line,
                   COALESCE(e.department, fm.dept) AS dept, SUM(fm.amount) AS val
            FROM reporting.fot_monthly fm
@@ -111,7 +117,7 @@ def fot1(year, pf='факт'):
     свёрнуты по умолчанию — раскрываются кнопкой на строке подразделения.
     СЗП = ФОТ подразделения / численность (кол-во сотрудников с ненулевым
     начислением в месяце)."""
-    rows_raw = query(
+    rows_raw = _query_monthly(
         '''SELECT extract(month FROM fm.period)::int AS m, COALESCE(e.department, fm.dept) AS dept,
                   fm.employee, SUM(fm.amount) AS val
            FROM reporting.fot_monthly fm
@@ -162,7 +168,7 @@ def fot1(year, pf='факт'):
 
 
 def get_available_pf():
-    rows = query('SELECT DISTINCT pf FROM reporting.fot_monthly ORDER BY 1')
+    rows = _query_monthly('SELECT DISTINCT pf FROM reporting.fot_monthly ORDER BY 1')
     return [r['pf'] for r in rows]
 
 
@@ -185,7 +191,7 @@ def _batched_fetch(years, month, pf):
                   WHERE fm.pf = %s AND extract(year FROM fm.period) = ANY(%s)
                     AND extract(month FROM fm.period) {month_cmp} %s
                   GROUP BY 1, 2, 3'''
-        return query(sql, (pf, years, month))
+        return _query_monthly(sql, (pf, years, month))
 
     def to_map(rows):
         return {(r['y'], r['dept'], r['employee']): float(r['val'] or 0) for r in rows}
@@ -241,9 +247,11 @@ def fot2(month, series, deltas):
                 total += v
         return total
 
-    latest_pf, latest_year = series[-1]
+    # Ушедшие сотрудники и подразделения тоже объясняют отклонение.
+    # При пустом текущем месяце сохраняем строки накопительного раздела.
+    all_keys = set(month_map) | set(ytd_map)
     depts = sorted(
-        {d for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year},
+        {d for (p_, y_, d, e) in all_keys},
         key=_dept_sort_key
     )
 
@@ -273,8 +281,9 @@ def fot2(month, series, deltas):
         rows.append(_series_row('Численность', series, deltas, hc_mmd, hc_ymd, kind='metric'))
 
         employees = sorted(
-            {e for (p_, y_, d, e) in month_map if p_ == latest_pf and y_ == latest_year and d == dept},
-            key=lambda e: -abs(agg(month_map, latest_pf, latest_year, dept=dept, employee=e))
+            {e for (p_, y_, d, e) in all_keys if d == dept},
+            key=lambda e: (-sum(abs(agg(ytd_map, pf, yr, dept=dept, employee=e))
+                                for pf, yr in series), e)
         )
         for emp in employees:
             mme = {(pf, yr): agg(month_map, pf, yr, dept=dept, employee=emp) for pf, yr in series}
@@ -363,7 +372,7 @@ def period_comparison(start_a, end_a, start_b, end_b, mode='period'):
 
     period_a = _comparison_period(start_a, end_a, mode)
     period_b = _comparison_period(start_b, end_b, mode)
-    rows_raw = query(
+    rows_raw = _query_monthly(
         '''SELECT COALESCE(e.department, fm.dept) AS dept, fm.employee,
                   COALESCE(SUM(fm.amount) FILTER (
                       WHERE fm.period BETWEEN %s AND %s), 0) AS value_a,

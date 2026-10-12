@@ -5,6 +5,8 @@ from datetime import date
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+from werkzeug.exceptions import BadRequest
+from psycopg2.errors import UniqueViolation
 
 from config import Config
 from auth import admin_required, report_required, classifier_required, login_required, authenticate_user, set_password
@@ -32,6 +34,7 @@ from employee_directory import (
 )
 import monthly_etl as etl
 import flash_report as flr
+import request_validation as validation
 
 logging.basicConfig(level=logging.INFO)
 
@@ -54,6 +57,22 @@ scheduler.add_job(refresh_all, 'interval', minutes=10)
 scheduler.start()
 
 
+@app.before_request
+def validate_request_parameters():
+    if request.endpoint not in ('static', 'login', 'healthz') and 'user_id' in session:
+        try:
+            validation.validate_report_args(request.args, request.endpoint)
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
+    if request.is_json and not isinstance(request.get_json(silent=True), dict):
+        return {'error': 'Ожидается JSON-объект'}, 400
+
+
+@app.errorhandler(BadRequest)
+def invalid_request(error):
+    return {'error': error.description}, 400
+
+
 def _pick_year(years, requested):
     if requested and requested in years:
         return requested
@@ -62,26 +81,12 @@ def _pick_year(years, requested):
 
 def _parse_series(raw):
     """'факт:2025,прогноз:2026,факт:2026' -> [('факт',2025),('прогноз',2026),('факт',2026)]"""
-    if not raw:
-        return None
-    series = []
-    for part in raw.split(','):
-        pf, _, year = part.partition(':')
-        if pf and year.isdigit():
-            series.append((pf, int(year)))
-    return series or None
+    return validation.series(raw)
 
 
 def _parse_deltas(raw):
     """'2-0,2-1' -> [(2,0),(2,1)]"""
-    if not raw:
-        return None
-    deltas = []
-    for part in raw.split(','):
-        i, _, j = part.partition('-')
-        if i.isdigit() and j.isdigit():
-            deltas.append((int(i), int(j)))
-    return deltas or None
+    return validation.deltas(raw)
 
 
 def _format_series(series):
@@ -92,13 +97,16 @@ def _format_deltas(deltas):
     return ','.join(f'{i}-{j}' for i, j in deltas)
 
 
-def _series_deltas_from_request(years):
-    series = _parse_series(request.args.get('series')) or None
-    deltas = _parse_deltas(request.args.get('deltas')) or None
-    if series is None or deltas is None:
-        default_series, default_deltas = pr.default_series_deltas(years)
-        series = series or default_series
-        deltas = deltas or default_deltas
+def _series_deltas_from_request(years, report_module=pr):
+    series = _parse_series(request.args.get('series'))
+    deltas = _parse_deltas(request.args.get('deltas'))
+    default_series, default_deltas = report_module.default_series_deltas(years)
+    if series is None:
+        series = default_series
+    if deltas is None:
+        deltas = [(i, j) for i, j in default_deltas if max(i, j) < len(series)]
+    if any(max(i, j) >= len(series) for i, j in deltas):
+        raise BadRequest('Отклонение ссылается на отсутствующую колонку сравнения')
     return series, deltas
 
 
@@ -200,9 +208,9 @@ def healthz():
     try:
         query('SELECT 1')
         return {'status': 'ok'}
-    except Exception as e:
+    except Exception:
         app.logger.exception('healthz: БД недоступна')
-        return {'status': 'error', 'detail': str(e)}, 500
+        return {'status': 'error'}, 500
 
 
 @app.route('/logout')
@@ -253,7 +261,10 @@ def api_cell_detail():
     if not (lines and year and month):
         return {'error': 'line, year, month обязательны'}, 400
     try:
-        data = pr.cell_detail(lines, year, month, pf, projects, allocation, contragent=employee)
+        data = pr.cell_detail(lines, year, month, pf, projects, allocation,
+                              contragent=employee, mode=request.args.get('mode', 'month'))
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
     except Exception:
         app.logger.exception('cell_detail error')
         return {'error': 'Ошибка при получении детализации'}, 500
@@ -327,8 +338,11 @@ def api_deviation_detail():
         return {'error': 'line обязателен'}, 400
     try:
         data = pr.deviation_detail(
-            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)), projects, allocation=allocation
+            lines, (a_pf, int(a_year), int(a_month)), (b_pf, int(b_year), int(b_month)),
+            projects, allocation=allocation, mode=request.args.get('mode', 'month')
         )
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
     except Exception:
         app.logger.exception('deviation_detail error')
         return {'error': 'Ошибка при получении акт-анализа'}, 500
@@ -453,12 +467,7 @@ def fot1():
 def fot2():
     years = fr.get_available_years()
     month = request.args.get('month', type=int) or date.today().month
-    series = _parse_series(request.args.get('series'))
-    deltas = _parse_deltas(request.args.get('deltas'))
-    if series is None or deltas is None:
-        default_series, default_deltas = fr.default_series_deltas(years)
-        series = series or default_series
-        deltas = deltas or default_deltas
+    series, deltas = _series_deltas_from_request(years, fr)
     data = fr.fot2(month, series, deltas)
     return render_template(
         'fot2.html', data=data, years=years, month=month,
@@ -917,7 +926,10 @@ def flash_split(txn_id):
 @app.route('/flash/split/<int:txn_id>/clear', methods=['POST'])
 @classifier_required
 def flash_split_clear(txn_id):
-    flr.clear_transaction_splits(txn_id)
+    try:
+        flr.clear_transaction_splits(txn_id)
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
     audit.log_action(session.get('username'), 'flash_split_clear', f'txn_id={txn_id}')
     return {'ok': True}
 
@@ -1356,9 +1368,13 @@ def admin_users():
 @app.route('/admin/refresh_views', methods=['POST'])
 @admin_required
 def admin_refresh_views():
-    refresh_all()
-    audit.log_action(session.get('username'), 'refresh_views', 'Ручное обновление reporting.*')
-    flash('Все reporting-вьюшки обновлены', 'success')
+    result = refresh_all()
+    failures = result['failed']
+    audit.log_action(session.get('username'), 'refresh_views', f'Ошибки: {failures}')
+    if failures:
+        flash('Не удалось обновить: ' + ', '.join(failures) + '. Подробности в журнале сервера.', 'danger')
+    else:
+        flash('Все reporting-вьюшки обновлены', 'success')
     return redirect(url_for('admin_users'))
 
 
@@ -1368,12 +1384,19 @@ def admin_users_create():
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
     role = request.form.get('role', 'shareholder')
+    if role not in ('admin', 'accountant', 'shareholder'):
+        flash('Недопустимая роль пользователя', 'danger')
+        return redirect(url_for('admin_users'))
     email = request.form.get('email', '').strip() or None
     if username and password:
-        execute(
-            'INSERT INTO users (username, password_hash, email, role, is_active) VALUES (%s, %s, %s, %s, true)',
-            (username, auth_hash_password(password), email, role)
-        )
+        try:
+            execute(
+                'INSERT INTO users (username, password_hash, email, role, is_active) VALUES (%s, %s, %s, %s, true)',
+                (username, auth_hash_password(password), email, role)
+            )
+        except UniqueViolation:
+            flash('Пользователь с таким логином или email уже существует', 'danger')
+            return redirect(url_for('admin_users'))
         audit.log_action(session.get('username'), 'create_user', f'{username} ({role})')
         flash(f'Пользователь «{username}» создан', 'success')
     return redirect(url_for('admin_users'))
@@ -1384,6 +1407,12 @@ def admin_users_create():
 def admin_users_update(user_id):
     role = request.form.get('role')
     is_active = request.form.get('is_active') == 'on'
+    if role not in ('admin', 'accountant', 'shareholder'):
+        flash('Недопустимая роль пользователя', 'danger')
+        return redirect(url_for('admin_users'))
+    if user_id == session.get('user_id') and (role != 'admin' or not is_active):
+        flash('Нельзя отключить свою учётную запись или снять у себя права администратора', 'danger')
+        return redirect(url_for('admin_users'))
     execute('UPDATE users SET role = %s, is_active = %s WHERE id = %s', (role, is_active, user_id))
     audit.log_action(session.get('username'), 'update_user', f'user_id={user_id} role={role} is_active={is_active}')
     flash('Пользователь обновлён', 'success')
@@ -1502,12 +1531,7 @@ def export_report(kind):
         elif kind == 'fot2':
             years = fr.get_available_years()
             month = request.args.get('month', type=int) or date.today().month
-            series = _parse_series(request.args.get('series'))
-            deltas = _parse_deltas(request.args.get('deltas'))
-            if series is None or deltas is None:
-                default_series, default_deltas = fr.default_series_deltas(years)
-                series = series or default_series
-                deltas = deltas or default_deltas
+            series, deltas = _series_deltas_from_request(years, fr)
             sheets = fr.export_fot2(fr.fot2(month, series, deltas))
         elif kind == 'fot_period_comparison':
             params = _fot_period_comparison_request()
@@ -1533,10 +1557,10 @@ def export_report(kind):
             sheets = lr.export_loans(lr.loans(year, month, pf))
         elif kind == 'counterparty':
             contragents = request.args.getlist('name')
-            if not contragents:
-                return {'error': 'name обязателен'}, 400
             pf = request.args.get('pf', 'факт')
             projects = request.args.getlist('project') or None
+            if not contragents and not projects:
+                return {'error': 'Укажите контрагента или проект'}, 400
             allocation = request.args.get('allocation', 'all')
             default_from, default_to = pr.default_counterparty_range(pf)
             date_from = request.args.get('date_from') or default_from.isoformat()
@@ -1608,6 +1632,8 @@ def export_report(kind):
             sheets = [('flash', headers, rows)]
         else:
             return {'error': f'Неизвестный отчёт: {kind}'}, 404
+    except (ValueError, BadRequest) as exc:
+        return {'error': exc.description if isinstance(exc, BadRequest) else str(exc)}, 400
     except Exception:
         app.logger.exception('Ошибка экспорта kind=%s', kind)
         return {'error': 'Ошибка при формировании отчёта'}, 500
@@ -1630,6 +1656,8 @@ def chat():
 @report_required
 def api_chat():
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload.get('question', ''), str) or not isinstance(payload.get('history', []), list):
+        return {'error': 'Некорректный вопрос или история чата'}, 400
     question = (payload.get('question') or '').strip()
     history = payload.get('history') or []
     if not question:

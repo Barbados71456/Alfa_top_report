@@ -2,7 +2,7 @@ import hashlib
 import logging
 from functools import wraps
 
-from flask import session, redirect, url_for, flash, request
+from flask import session, redirect, url_for, flash, request, g, current_app
 
 from db import query_one, execute
 import audit
@@ -34,7 +34,23 @@ def hash_password(password):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if 'user_id' in session and 'current_user' not in g:
+            try:
+                g.current_user = query_one(
+                    'SELECT id, username, role, is_active FROM users WHERE id = %s',
+                    (session['user_id'],),
+                )
+            except Exception:
+                current_app.logger.exception('Не удалось проверить текущего пользователя')
+                return {'error': 'Не удалось проверить доступ. Повторите попытку позже.'}, 503
+            if not g.current_user or not g.current_user['is_active']:
+                session.clear()
+            else:
+                session['role'] = g.current_user['role']
+                session['username'] = g.current_user['username']
         if 'user_id' not in session:
+            if request.path.startswith('/api/') or request.is_json:
+                return {'error': 'Сеанс завершён. Войдите в систему повторно.'}, 401
             flash('Требуется авторизация', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -49,6 +65,8 @@ def role_required(*roles):
         @login_required
         def decorated_function(*args, **kwargs):
             if session.get('role') not in roles:
+                if request.path.startswith('/api/') or request.is_json:
+                    return {'error': 'Недостаточно прав'}, 403
                 flash('Недостаточно прав', 'danger')
                 return redirect(url_for('svod1'))
             return f(*args, **kwargs)

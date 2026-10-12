@@ -407,7 +407,7 @@ let _drilldownRows = [];
 function _escapeHtml(s) {
     const div = document.createElement('div');
     div.textContent = s == null ? '' : String(s);
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function _openDrilldown(title, extraParams) {
@@ -420,6 +420,7 @@ function _openDrilldown(title, extraParams) {
     fetch('/api/flash_transactions?' + params.toString())
         .then(r => r.json())
         .then(rows => {
+            if (!Array.isArray(rows)) throw new Error(rows.error || 'Не удалось получить операции');
             _drilldownRows = rows;
             if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="text-secondary">Нет операций</td></tr>'; return; }
             const canEdit = {{ 'true' if session.get('role') in ('admin','accountant') else 'false' }};
@@ -445,6 +446,9 @@ function _openDrilldown(title, extraParams) {
                     <td class="text-nowrap">${actions}</td>
                 </tr>`;
             }).join('');
+        })
+        .catch(error => {
+            body.innerHTML = `<tr><td colspan="6" class="text-danger">${_escapeHtml(error.message || 'Не удалось загрузить операции')}</td></tr>`;
         });
 }
 

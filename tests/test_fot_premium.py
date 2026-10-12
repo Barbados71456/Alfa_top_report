@@ -15,7 +15,7 @@ def test_fot_source_includes_repossession_bonus():
 
 def test_fot3_breaks_out_repossession_bonus_and_includes_it_in_total(monkeypatch):
     def fake_query(sql, params=None):
-        if 'FROM reporting.fot_monthly fm' in sql:
+        if 'FROM fot_source fm' in sql:
             return [
                 {'m': 1, 'line': fot_report.FOT_VARIABLE_LINE, 'dept': 'Field', 'val': -100.0},
                 {'m': 1, 'line': fot_report.FOT_FIXED_LINE, 'dept': 'Field', 'val': -200.0},
