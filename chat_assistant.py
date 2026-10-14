@@ -1,6 +1,5 @@
-"""Чат с Claude по данным отчётности, через Polza.ai (OpenAI-совместимый прокси —
-не зависит от статуса конкретной организации в Anthropic Console, в отличие от
-прямого ANTHROPIC_API_KEY). Модель не видит и не пишет произвольный SQL — только
+"""Чат по данным отчётности через OpenAI-совместимый API Polza.ai.
+Модель задаётся переменной POLZA_AI_MODEL. Она не видит и не пишет SQL — только
 вызывает фиксированный набор read-only функций-инструментов, каждая из которых —
 тонкая обёртка над уже существующими отчётными функциями (pl_report/fot_report/
 loans_report/investment_report). ТОЛЬКО ЧТЕНИЕ: здесь импортируется исключительно
@@ -21,7 +20,6 @@ import investment_report as ir
 logger = logging.getLogger('chat_assistant')
 
 BASE_URL = 'https://polza.ai/api/v1'
-MODEL = 'anthropic/claude-sonnet-5'
 MAX_TOOL_ROUNDS = 6
 
 SYSTEM_PROMPT = (
@@ -172,7 +170,7 @@ def ask(question, history=None):
     if not Config.POLZA_AI_API_KEY:
         return {'error': 'Чат не настроен: добавьте POLZA_AI_API_KEY в переменные окружения.'}
 
-    from openai import OpenAI
+    from openai import OpenAI, PermissionDeniedError
     client = OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY)
 
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
@@ -182,8 +180,12 @@ def ask(question, history=None):
     for _ in range(MAX_TOOL_ROUNDS):
         try:
             resp = client.chat.completions.create(
-                model=MODEL, max_tokens=1500, tools=TOOLS, messages=messages,
+                model=Config.POLZA_AI_MODEL, max_tokens=1500, tools=TOOLS, messages=messages,
             )
+        except PermissionDeniedError:
+            logger.warning('Polza.ai отклонила доступ к модели %s', Config.POLZA_AI_MODEL)
+            return {'error': 'Polza.ai запретила доступ к выбранной модели. '
+                    'Проверьте ограничения ключа и настройку POLZA_AI_MODEL.'}
         except Exception:
             logger.exception('Ошибка обращения к Polza.ai')
             return {'error': 'Не удалось связаться с ассистентом. Попробуйте позже.'}

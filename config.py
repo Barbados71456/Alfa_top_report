@@ -26,9 +26,9 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 
     # Необязательный — без него /chat показывает баннер "не настроено" вместо ошибки.
-    # Polza.ai — OpenAI-совместимый прокси к Claude, не зависит от статуса
-    # конкретной организации в Anthropic Console (в отличие от прямого API-ключа).
+    # Модель задаётся отдельно: у API-ключа Polza может быть список разрешённых моделей.
     POLZA_AI_API_KEY = os.getenv('POLZA_AI_API_KEY')
+    POLZA_AI_MODEL = (os.getenv('POLZA_AI_MODEL') or '').strip() or 'openai/gpt-6-astra-pro'
 
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True
