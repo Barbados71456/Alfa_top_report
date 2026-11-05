@@ -684,9 +684,7 @@ def _comparison_delta(value_a, value_b):
 
 
 def svod1_month_review(year, month=None, allocation='all', *, live=False):
-    """Факт месяца против прогноза и прошлогоднего факта, тыс. руб."""
-    costs = VARIABLE_LINES + COMPARISON_FIXED_LINES
-    lines = REVENUE_LINES + costs
+    """Месяц и январь–выбранный месяц против прогноза и прошлого года, тыс. руб."""
     # A manual recalculation can see a completed KNIME load before the periodic
     # refresh of pl_monthly. The same line whitelist and sums apply to both sources.
     source = 'reporting.pl_monthly'
@@ -700,7 +698,7 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
             f'''SELECT max(period) AS period FROM {source}
                 WHERE pf = 'факт' AND line = ANY(%s) AND amount IS NOT NULL
                   AND period BETWEEN %s AND %s AND period < %s{_alloc_where(allocation)}''',
-            (lines, date(year, 1, 1), date(year, 12, 1), today),
+            (ALL_LINES, date(year, 1, 1), date(year, 12, 1), today),
         )[0]['period']
         month = latest.month if latest else None
     result = {'month': month, 'months': MONTHS_FULL_RU}
@@ -708,19 +706,70 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
         return result
 
     period = date(year, month, 1)
-    prior = date(year - 1, month, 1) if year > 1 else None
+    prior_start = date(year - 1, 1, 1) if year > 1 else None
+    prior_end = date(year - 1, month, 1) if year > 1 else None
     rows = query(
         f'''SELECT period, pf, line, sum(amount) / 1000.0 AS value
             FROM {source}
-            WHERE ((period = %s AND pf IN ('факт', 'прогноз')) OR (period = %s AND pf = 'факт'))
+            WHERE ((period BETWEEN %s AND %s AND pf IN ('факт', 'прогноз'))
+                OR (period BETWEEN %s AND %s AND pf = 'факт'))
               AND line = ANY(%s) AND amount IS NOT NULL{_alloc_where(allocation)}
-            GROUP BY period, pf, line''', (period, prior, lines),
+            GROUP BY period, pf, line''', (date(year, 1, 1), period, prior_start, prior_end, ALL_LINES),
     )
-    values = defaultdict(dict)
+    monthly = defaultdict(dict)
+    cumulative = defaultdict(lambda: defaultdict(float))
+    coverage = defaultdict(set)
     for row in rows:
-        values[row['period'], row['pf']][row['line']] = float(row['value'])
-    current = values[period, 'факт'] if period <= today else {}
-    periods = (current, values[period, 'прогноз'], values[prior, 'факт'])
+        booked, pf, line = row['period'], row['pf'], row['line']
+        if booked > today and pf == 'факт':
+            continue
+        key = (booked.year, pf)
+        value = float(row['value'])
+        cumulative[key][line] += value
+        coverage[key].add(booked.month)
+        if booked.month == month:
+            monthly[key][line] = value
+
+    scenarios = [(year, 'факт'), (year, 'прогноз'), (year - 1, 'факт')]
+    month_name = MONTHS_FULL_RU[month - 1]
+    month_label = f'{month_name} {year}'
+    ytd_label = f'Январь — {month_name.lower()} {year}' if month > 1 else month_label
+    windows = []
+    for title, label, source_values, expected in (
+        ('За месяц', month_label, monthly, {month}),
+        ('С начала года', ytd_label, cumulative, set(range(1, month + 1))),
+    ):
+        periods = [source_values[key] for key in scenarios]
+        if period > today:
+            periods[0] = {}
+        missing = [sorted(expected - coverage[key]) for key in scenarios]
+        window = _shareholder_comparison(periods, missing)
+        window.update(title=title, label=label)
+        if source_values is cumulative:
+            window['gaps'] = [
+                (name, ', '.join(MONTHS_RU[m - 1].lower() for m in gaps))
+                for name, gaps in zip(('Факт', 'Прогноз', f'Факт {year - 1}'), missing) if gaps
+            ]
+        windows.append(window)
+    return dict(result, windows=windows, partial=period == today, future=period > today,
+                month_name=month_name)
+
+
+def _cash_flow_drivers(current, baseline):
+    changes = [{'name': line, 'delta': current.get(line, 0) - baseline.get(line, 0)}
+               for line in ALL_LINES]
+    changes = sorted((item for item in changes if item['delta'] != 0),
+                     key=lambda item: (-abs(item['delta']), item['name']))
+    positive = [item for item in changes if item['delta'] >= .05][:2]
+    negative = [item for item in changes if item['delta'] <= -.05][:2]
+    leaders = [item for item in changes if item in positive or item in negative]
+    others = [item for item in changes if item not in leaders]
+    return {'leaders': leaders, 'others': others, 'other_total': sum(item['delta'] for item in others)}
+
+
+def _shareholder_comparison(periods, missing):
+    current = periods[0]
+    costs = VARIABLE_LINES + COMPARISON_FIXED_LINES
 
     def amounts(names, sign):
         # An absent scenario/metric is unknown. Individual absent lines within
@@ -734,8 +783,8 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
 
     def metric(label, amounts, polarity):
         deltas = []
-        for base in amounts[1:]:
-            if amounts[0] is None or base is None:
+        for base, gaps in zip(amounts[1:], missing[1:]):
+            if amounts[0] is None or base is None or missing[0] or gaps:
                 deltas.append(None)
             else:
                 delta, pct = _comparison_delta(base, amounts[0])
@@ -743,7 +792,8 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
         return {'label': label, 'values': amounts, 'deltas': deltas, 'polarity': polarity}
 
     metrics = [metric('Выручка', revenue, 1), metric('Затраты', expense, -1),
-               metric('Операционная прибыль', profit, 1)]
+               metric('Операционная прибыль', profit, 1),
+               metric('Чистая прибыль / кэш флоу', amounts(ALL_LINES, 1), 1)]
     comparisons = []
     for index, title in enumerate(('К прогнозу', 'К прошлому году')):
         baseline = periods[index + 1]
@@ -759,9 +809,11 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
             leaders = [next((item for item in changes if item['delta'] * direction > 0), None)
                        for direction in (1, -1)]
             groups.append({'metric': row, 'leaders': [item for item in leaders if item]})
-        comparisons.append({'title': title, 'groups': groups, 'profit_delta': metrics[2]['deltas'][index]})
-    return dict(result, metrics=metrics, comparisons=comparisons, partial=period == today,
-                future=period > today, has_actual=bool(current), month_name=MONTHS_FULL_RU[month - 1])
+        net_delta = metrics[3]['deltas'][index]
+        comparisons.append({'title': title, 'groups': groups, 'profit_delta': metrics[2]['deltas'][index],
+                            'net_delta': net_delta,
+                            'drivers': _cash_flow_drivers(current, baseline) if net_delta is not None else None})
+    return dict(metrics=metrics, comparisons=comparisons, has_actual=bool(current))
 
 
 def period_comparison(start_a, end_a, start_b, end_b, mode='period', projects=None, allocation='all'):

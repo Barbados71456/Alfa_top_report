@@ -87,9 +87,10 @@ def test_shareholder_refresh_reads_new_bookings_and_rewrites_conclusions(month_r
 
     def bookings(sql, params):
         assert 'public."FinancialData"' in sql and "allocation = 'до распределения'" in sql
-        assert params[:2] == (date(2025, 10, 1), date(2024, 10, 1))
-        return [dict(period=params[0], pf=pf, line=line, value=value)
+        assert params[:4] == (date(2025, 1, 1), date(2025, 10, 1), date(2024, 1, 1), date(2024, 10, 1))
+        return [dict(period=date(2025, month, 1), pf=pf, line=line, value=value)
                 for pf, revenue in [('факт', next(actual_revenues)), ('прогноз', 100)]
+                for month in range(1, 11)
                 for line, value in [(module.pr.REVENUE_LINES[0], revenue), ('Аренда', -10)]]
     monkeypatch.setattr(module.pr, 'query', bookings)
     params = dict(year=2025, month=10, allocation='no_alloc', pf='план', refresh_review='1')
@@ -99,6 +100,8 @@ def test_shareholder_refresh_reads_new_bookings_and_rewrites_conclusions(month_r
         page = result.get_data(as_text=True)
         assert 'Обновить выводы' in page and 'Пересчитано по данным базы' in page
         assert f'Операционная прибыль {direction} на' in page
+        assert 'Январь — октябрь 2025' in page
+        assert page.count(f'Чистая прибыль / кэш флоу <strong>{direction} на') == 2
 
 
 def test_manual_review_db_error_shows_scheduled_data_without_success_stamp(month_review_web, monkeypatch):
