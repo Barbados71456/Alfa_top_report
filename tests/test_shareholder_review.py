@@ -56,3 +56,35 @@ def test_claim_coalesces_clicks_and_cache_rejects_stale_jobs(monkeypatch, tmp_pa
     monkeypatch.setattr(sr, 'generate', Mock(side_effect=ValueError('rejected')))
     sr._worker(*thread.call_args.kwargs['args'])
     assert sr.snapshot(digest) == {'state': 'failed', 'texts': {'month_forecast': 'Проверено'}}
+
+
+def test_projects_cost_detail_and_ytd_are_compared_at_their_own_grain(monkeypatch):
+    rows = []
+    sales = pl.REVENUE_LINES[0]
+    for m, pf, project, rev, cost in [
+            (1, 'факт', '(DP) Tbank', 60, -45), (1, 'прогноз', '(DP) TB', 100, -40),
+            (2, 'факт', '(DP) Tbank', 90, -20), (2, 'прогноз', '(DP) TB', 100, -30)]:
+        for kind, line, name, value in [('project', sales, project, rev), ('subitem', sales, 'Поступления', rev),
+                                        ('project', 'ФОТ постоянный', project, cost),
+                                        ('dept', 'ФОТ постоянный', 'Департамент взыскания', cost)]:
+            rows.append(dict(period=date(2025, m, 1), pf=pf, line=line, kind=kind, name=name, value=value))
+    monkeypatch.setattr(pl, 'query', lambda *args: rows)
+    review = pl.svod1_month_review(2025, 2)
+    cards, facts, _ = sr.prepare(review, 'all')
+    month, ytd = cards
+    assert month['sections'][0]['intro'].startswith('Выручка составила 90,0 тыс.')
+    assert 'на 10,0 тыс. ₽ меньше' in month['sections'][0]['paragraphs'][0]['text']
+    assert 'на 50,0 тыс. ₽ меньше' in ytd['sections'][0]['paragraphs'][0]['text']
+    assert '«Департамент взыскания» — на 10,0 тыс. ₽ меньше' in month['sections'][1]['paragraphs'][0]['text']
+    assert 'недостаточно данных' in month['sections'][0]['paragraphs'][1]['text']
+    assert '(DP) TB' not in str(facts) and 'Департамент взыскания' not in str(facts)
+
+
+def test_tax_classification_note_only_when_subitems_tie_to_their_lines():
+    tax, duty = 'Налоги Зп', 'Гос. пошлина (ВПК)'
+    a = {('project', tax, 'A'): -24, ('subitem', tax, tax): -24}
+    b = {('project', tax, 'A'): -6, ('subitem', tax, tax): -6,
+         ('project', duty, 'A'): -15, ('subitem', duty, tax): -15}
+    assert '24,0 тыс. ₽ против 21,0 тыс. ₽' in sr.payroll_tax_comparison(a, b, 0)
+    b['project', duty, 'A'] = -10
+    assert sr.payroll_tax_comparison(a, b, 0) == ''

@@ -683,13 +683,16 @@ def _comparison_delta(value_a, value_b):
     return delta, percent
 
 
-def svod1_month_review(year, month=None, allocation='all', *, live=False):
+def svod1_month_review(year, month=None, allocation='all', *, live=False, cached_only=False):
     """Месяц и январь–выбранный месяц против прогноза и прошлого года, тыс. руб."""
     # A manual recalculation can see a completed KNIME load before the periodic
     # refresh of pl_monthly. The same line whitelist and sums apply to both sources.
     source = 'reporting.pl_monthly'
     if live:
         source = '''(SELECT "Период" AS period, "Строка отчета" AS line,
+                            COALESCE(NULLIF(trim("Проект"), ''), '(без проекта)') AS project,
+                            COALESCE(NULLIF(trim("СтатьяУровень3"), ''), '(без статьи)') AS stat3,
+                            COALESCE(NULLIF(trim("Контрагент_report"), ''), '(без подразделения)') AS dept,
                             "п_ф" AS pf, "Распределение" AS allocation, "Сумма" AS amount
                      FROM public."FinancialData") AS entries'''
     today = date.today().replace(day=1)
@@ -708,16 +711,36 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
     period = date(year, month, 1)
     prior_start = date(year - 1, 1, 1) if year > 1 else None
     prior_end = date(year - 1, month, 1) if year > 1 else None
-    rows = query(
-        f'''SELECT period, pf, line, sum(amount) / 1000.0 AS value
-            FROM {source}
-            WHERE ((period BETWEEN %s AND %s AND pf IN ('факт', 'прогноз'))
+    where = f'''WHERE ((period BETWEEN %s AND %s AND pf IN ('факт', 'прогноз'))
                 OR (period BETWEEN %s AND %s AND pf = 'факт'))
-              AND line = ANY(%s) AND amount IS NOT NULL{_alloc_where(allocation)}
-            GROUP BY period, pf, line''', (date(year, 1, 1), period, prior_start, prior_end, ALL_LINES),
-    )
-    monthly = defaultdict(dict)
+              AND line = ANY(%s) AND amount IS NOT NULL{_alloc_where(allocation)}'''
+    if live:
+        breakdown = f'''SELECT period, pf, line, CASE WHEN grouping(project)=0 THEN 'project'
+                                      WHEN grouping(stat3)=0 THEN 'subitem' ELSE 'dept' END AS kind,
+                               coalesce(project, stat3, dept) AS name, sum(amount) / 1000.0 AS value
+                        FROM {source} {where}
+                        GROUP BY GROUPING SETS ((period,pf,line,project), (period,pf,line,stat3), (period,pf,line,dept))
+                        HAVING grouping(dept)=1 OR line IN ('ФОТ постоянный','ФОТ переменный','Премия за изъятие авто')'''
+    else:
+        dept_source = "SELECT period,pf,line,NULL::text,amount,'dept',dept FROM reporting.fot_monthly"
+        if allocation == 'no_alloc' and not cached_only:
+            # The scheduled payroll view combines both allocation modes.
+            dept_source = '''SELECT "Период","п_ф","Строка отчета","Распределение","Сумма",'dept',
+                                    COALESCE(NULLIF(trim("Контрагент_report"), ''), '(без подразделения)')
+                             FROM public."FinancialData"
+                             WHERE "Строка отчета" IN ('ФОТ постоянный','ФОТ переменный','Премия за изъятие авто')'''
+        breakdown = f'''SELECT period, pf, line, kind, name, sum(amount) / 1000.0 AS value FROM (
+                          SELECT period,pf,line,allocation,amount,'project' AS kind,project AS name FROM reporting.pl_monthly
+                          UNION ALL
+                          SELECT period,pf,line,allocation,amount,'subitem',stat3 FROM reporting.pl_monthly_stat3
+                          UNION ALL
+                          {dept_source}
+                        ) AS entries {where} GROUP BY period,pf,line,kind,name'''
+    rows = query(breakdown, (date(year, 1, 1), period, prior_start, prior_end, ALL_LINES))
+    monthly = defaultdict(lambda: defaultdict(float))
     cumulative = defaultdict(lambda: defaultdict(float))
+    month_detail = defaultdict(lambda: defaultdict(float))
+    ytd_detail = defaultdict(lambda: defaultdict(float))
     coverage = defaultdict(set)
     for row in rows:
         booked, pf, line = row['period'], row['pf'], row['line']
@@ -725,10 +748,16 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
             continue
         key = (booked.year, pf)
         value = float(row['value'])
+        detail_key = (row.get('kind', 'project'), line, row.get('name') or '(без проекта)')
+        ytd_detail[key][detail_key] += value
+        if booked.month == month:
+            month_detail[key][detail_key] += value
+        if detail_key[0] != 'project':
+            continue  # Subarticles describe the same money as the project totals.
         cumulative[key][line] += value
         coverage[key].add(booked.month)
         if booked.month == month:
-            monthly[key][line] = value
+            monthly[key][line] += value
 
     scenarios = [(year, 'факт'), (year, 'прогноз'), (year - 1, 'факт')]
     month_name = MONTHS_FULL_RU[month - 1]
@@ -744,6 +773,8 @@ def svod1_month_review(year, month=None, allocation='all', *, live=False):
             periods[0] = {}
         missing = [sorted(expected - coverage[key]) for key in scenarios]
         window = _shareholder_comparison(periods, missing)
+        breakdown = ytd_detail if source_values is cumulative else month_detail
+        window['details'] = [breakdown[key] for key in scenarios]
         window.update(title=title, label=label)
         if source_values is cumulative:
             window['gaps'] = [

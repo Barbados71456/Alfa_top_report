@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
 
@@ -15,14 +16,18 @@ import httpx
 
 from chat_assistant import BASE_URL
 from config import Config
+from pl_report import REVENUE_LINES, VARIABLE_LINES, COMPARISON_FIXED_LINES, INVESTMENT_LINE
 
 log = logging.getLogger(__name__)
 CACHE = (Path('/data') if Path('/data').is_dir() else Path(tempfile.gettempdir())) / 'svod1-commentary.sqlite3'
 LEASE = 270
 BASES = ('прогноза', 'прошлого года')
+SALARY_LINES = ('ФОТ постоянный', 'ФОТ переменный')
 
 
 def money(value, signed=False):
+    if abs(value) < .05:
+        return '0 ₽'
     millions = abs(value) >= 1000
     number = abs(value / 1000) if millions else abs(value)
     sign = '−' if value < -.05 else '+' if signed and value >= .05 else ''
@@ -34,21 +39,192 @@ def article_text(article):
     return f'«{article["name"]}» ({money(article["delta"], signed=True)})'
 
 
-def driver_text(leaders, delta):
-    if not leaders:
+def grouped(detail, lines, kind='project', by_line=False, sign=1):
+    totals = defaultdict(float)
+    for (dimension, line, name), value in detail.items():
+        if dimension == kind and line in lines:
+            # The ETL classifies (DP) TB as (DP) Tbank. Forecast history still uses both names.
+            name = '(DP) Tbank' if dimension == 'project' and name == '(DP) TB' else name
+            totals[line if by_line else name] += sign * value
+    return dict(totals)
+
+
+def movements(actual, baseline, limit=3):
+    """Keep the largest changes, including the strongest offset when one exists."""
+    changes = [(name, actual.get(name, 0) - baseline.get(name, 0)) for name in actual.keys() | baseline.keys()]
+    ranked = sorted((item for item in changes if abs(item[1]) >= .05), key=lambda item: (-abs(item[1]), item[0]))
+    picked = ranked[:limit]
+    if limit > 1 and picked and all(v * picked[0][1] > 0 for _, v in picked):
+        offset = next((item for item in ranked[limit:] if item[1] * picked[0][1] < 0), None)
+        if offset:
+            picked[-1] = offset
+    return picked
+
+
+def metric_sentence(metric, index):
+    change = metric['deltas'][index]
+    if change is None:
+        return 'Для сравнения недостаточно данных.'
+    base = metric['values'][index + 1]
+    delta = change['value']
+    if abs(delta) < .05:
+        return f'На уровне {BASES[index]} ({money(base)}).'
+    return f'{"Выше" if delta > 0 else "Ниже"} {BASES[index]} на {money(abs(delta))} ({"прогноз" if index == 0 else "годом ранее"} — {money(base)}).'
+
+
+def operating_bridge(net_change, operating_change):
+    if operating_change is None:
         return ''
-    clauses = []
-    for sign in ((-1, 1) if delta < 0 else (1, -1)):
-        names = [article_text(a) for a in leaders if a['delta'] * sign > 0]
-        if names:
-            if abs(delta) < .05:
-                phrase = 'Результат поддержали изменения' if sign > 0 else 'Этот эффект компенсировали изменения'
-            elif sign > 0:
-                phrase = 'Часть отставания компенсировали изменения' if delta < 0 else 'Прирост во многом связан с изменениями'
-            else:
-                phrase = 'На отставание сильнее всего повлияли изменения' if delta < 0 else 'Прирост частично сдержали изменения'
-            clauses.append(f'{phrase} по {"статье" if len(names) == 1 else "статьям"} {" и ".join(names)}.')
-    return ' '.join(clauses)
+    operating = operating_change['value']
+    if abs(operating) < .05:
+        return 'Операционная прибыль почти не изменилась.'
+    text = f'Операционная прибыль {"выше" if operating > 0 else "ниже"} на {money(abs(operating))}.'
+    if net_change * operating < 0:
+        after = net_change - operating
+        text += (f' С учётом бонусов, инвестиций, финансирования и входящего остатка отклонение изменилось '
+                 f'ещё на {money(after, True)}, поэтому итог оказался {"выше" if net_change > 0 else "ниже"}.')
+    return text
+
+
+def payroll_tax_comparison(actual, baseline, index):
+    """A payroll-tax forecast can be booked under state duties. Compare like payments."""
+    item = 'Налоги Зп'
+    def split(details):
+        return {line: -value for (kind, line, name), value in details.items()
+                if kind == 'subitem' and name == item and line in VARIABLE_LINES + COMPARISON_FIXED_LINES}
+    a, b = split(actual), split(baseline)
+    duty = 'Гос. пошлина (ВПК)'
+    if not (a and b and max(abs(a.get(duty, 0)), abs(b.get(duty, 0))) >= .05):
+        return ''
+    if (a.get(duty, 0) - b.get(duty, 0)) * (a.get(item, 0) - b.get(item, 0)) >= 0:
+        return ''
+    for line in a.keys() | b.keys():
+        for detail in (actual, baseline):
+            if abs(sum(grouped(detail, [line], 'subitem').values()) - sum(grouped(detail, [line]).values())) >= .05:
+                return ''
+    base_label = 'В прогнозе' if index == 0 else 'Годом ранее'
+    return (f'{base_label} в строке госпошлины учтено {money(b.get(duty, 0))} налогов на зарплату, '
+            f'в факте — {money(a.get(duty, 0))}. Если собрать подстатью «{item}» по всем операционным расходам, '
+            f'получается {money(sum(a.values()))} против {money(sum(b.values()))}.')
+
+
+def cost_driver(line, delta, actual, baseline):
+    text = f'По статье «{line}» затраты {"выше" if delta > 0 else "ниже"} на {money(abs(delta))}'
+    for kind in (('dept', 'subitem') if line in SALARY_LINES else ('subitem', 'project')):
+        a, b = [grouped(source, [line], kind, sign=-1) for source in (actual, baseline)]
+        # Independent materialized views may briefly be on different refreshes.
+        if any(abs(sum(part.values()) - sum(grouped(src, [line], sign=-1).values())) >= .05
+               for part, src in ((a, actual), (b, baseline))):
+            continue
+        leader = next(((n, v) for n, v in movements(a, b) if v * delta > 0), None)
+        if not leader:
+            continue
+        name, amount = leader
+        if (name.casefold() in {line.casefold(), 'налоги', 'общее', 'прочие', 'общие', 'прогноз', 'факт'}
+                or name.startswith('(без ') or abs(amount) < .05):
+            continue
+        if kind == 'project':
+            text += f'. На проект «{name}» в отчёте отнесено на {money(abs(amount))} {"больше" if amount > 0 else "меньше"}'
+            break
+        prefix = {'dept': 'в подразделении', 'subitem': 'по подстатье'}[kind]
+        text += f', в том числе {prefix} «{name}» — на {money(abs(amount))} {"больше" if amount > 0 else "меньше"}'
+        break
+    return text + '.'
+
+
+def department_section(window):
+    departments = []
+    for source in window['details']:
+        payroll = grouped(source, SALARY_LINES, sign=-1)
+        depts = grouped(source, SALARY_LINES, 'dept', sign=-1)
+        departments.append(depts if depts and abs(sum(depts.values()) - sum(payroll.values())) < .05 else None)
+    actual = departments[0]
+    if actual is None:
+        return None
+    title = 'ФОТ по подразделениям'
+    intro = f'Постоянная и переменная части ФОТ вместе составили {money(sum(actual.values()))}.'
+    paragraphs = []
+    for i, baseline in enumerate(departments[1:]):
+        if baseline is None or window['metrics'][1]['deltas'][i] is None:
+            paragraphs.append({'label': window['comparisons'][i]['title'], 'text': 'Для сравнения по подразделениям недостаточно данных.'})
+            continue
+        delta = sum(actual.values()) - sum(baseline.values())
+        net = (f'Общий ФОТ {"выше" if delta > 0 else "ниже"} на {money(abs(delta))}.' if abs(delta) >= .05
+               else 'Общий ФОТ почти не изменился.')
+        changes = []
+        for name, amount in movements(actual, baseline, limit=2):
+            changes.append(f'По подразделению «{name}» учтено {money(actual.get(name, 0))} против '
+                           f'{money(baseline.get(name, 0))}, на {money(abs(amount))} {"больше" if amount > 0 else "меньше"}.')
+        text = ' '.join([net, *changes])
+        paragraphs.append({'label': window['comparisons'][i]['title'], 'text': text})
+    return {'title': title, 'intro': intro, 'paragraphs': paragraphs}
+
+
+def business_sections(window):
+    if not window['has_actual'] or 'details' not in window:
+        return []
+    actual, *baselines = window['details']
+    revenue, costs = window['metrics'][:2]
+    sections = []
+    for metric, title, lines in [(revenue, 'Выручка по проектам', REVENUE_LINES),
+                                 (costs, 'Операционные затраты по статьям', VARIABLE_LINES + COMPARISON_FIXED_LINES)]:
+        if metric['values'][0] is None:
+            continue
+        is_revenue = metric is revenue
+        intro = f'{"Выручка составила" if is_revenue else "Операционные затраты составили"} {money(metric["values"][0])}.'
+        if is_revenue:
+            channels = grouped(actual, lines, by_line=True)
+            channel_names = {'Выручка DCA (агентская)': 'агентское вознаграждение', 'Выручка DP (цессия)': 'поступления по купленным портфелям'}
+            parts = [f'{money(v)} — {channel_names.get(name, name.lower())}' for name, v in
+                     sorted(channels.items(), key=lambda pair: -abs(pair[1])) if abs(v) >= .05]
+            if parts:
+                intro += ' Из них ' + ', '.join(parts) + '.'
+        section = {'title': title, 'intro': intro, 'paragraphs': []}
+        for i, base in enumerate(baselines):
+            sentences = [metric_sentence(metric, i)]
+            if metric['deltas'][i] is not None:
+                if is_revenue:
+                    a, b = [grouped(s, lines) for s in (actual, base)]
+                    for name, delta in movements(a, b):
+                        comparison_period = 'в прогнозе' if i == 0 else 'годом ранее'
+                        project = f'По проекту «{name}»' if name != '(без проекта)' else 'Без привязки к проекту'
+                        if abs(b.get(name, 0)) < .05:
+                            sentences.append(f'{project} отражено {money(a[name])}, {comparison_period} выручка по нему не учтена.')
+                        elif abs(a.get(name, 0)) < .05:
+                            sentences.append(f'{project} выручка в факте нулевая против {money(b[name])} {comparison_period}.')
+                        else:
+                            sentences.append(f'{project} получено {money(a[name])} против {money(b[name])}, '
+                                             f'на {money(abs(delta))} {"больше" if delta > 0 else "меньше"}.')
+                else:
+                    a, b = [grouped(s, lines, by_line=True, sign=-1) for s in (actual, base)]
+                    sentences.extend(cost_driver(n, v, actual, base) for n, v in movements(a, b))
+                    tax_note = payroll_tax_comparison(actual, base, i)
+                    if tax_note:
+                        sentences.append(tax_note)
+            section['paragraphs'].append({'label': window['comparisons'][i]['title'], 'text': ' '.join(sentences)})
+        sections.append(section)
+    dept = department_section(window)
+    if dept:
+        sections.append(dept)
+    return sections
+
+
+def driver_text(leaders, delta):
+    sentences = []
+    for item in sorted(leaders, key=lambda a: a['delta'] * delta < 0):
+        name, change = item['name'], item['delta']
+        amount = money(abs(change))
+        if name == INVESTMENT_LINE:
+            phrase = f'На покупку портфелей направили на {amount} {"меньше" if change > 0 else "больше"}'
+        elif name in REVENUE_LINES:
+            label = {'Выручка DCA (агентская)': 'Агентское вознаграждение', 'Выручка DP (цессия)': 'Выручка по купленным портфелям'}.get(name, name)
+            phrase = f'{label} — на {amount} {"выше" if change > 0 else "ниже"}'
+        elif name in VARIABLE_LINES + COMPARISON_FIXED_LINES and name != 'Прочие Доходы':
+            phrase = f'По статье «{name}» расходы оказались на {amount} {"ниже" if change > 0 else "выше"}'
+        else:
+            phrase = f'По строке «{name}» вклад в отклонение составил {money(change, True)}'
+        sentences.append(phrase + '.')
+    return ' '.join(sentences)
 
 
 def prepare(review, allocation):
@@ -57,6 +233,7 @@ def prepare(review, allocation):
     for w, window in enumerate(review.get('windows', [])):
         actual = window['metrics'][-1]['values'][0]
         card = {'label': window['label'], 'title': window['title'], 'comparisons': [],
+                'sections': business_sections(window),
                 'headline': ('Фактических данных за период пока нет.' if actual is None else
                              f'Чистая прибыль / кэш флоу составила {money(actual)}.')}
         cards.append(card)
@@ -76,12 +253,21 @@ def prepare(review, allocation):
                 item['finding'] = f'Результат {"выше" if delta > 0 else "ниже"} {BASES[i]} на {money(abs(delta))}.'
             leaders = comp['drivers']['leaders']
             item['detail'] = driver_text(leaders, delta)
+            item['bridge'] = operating_bridge(delta, comp['profit_delta'])
+            if 'details' in window and any(a['name'] == INVESTMENT_LINE for a in leaders):
+                sources = (window['details'][0], window['details'][i + 1])
+                purchases = [grouped(source, [INVESTMENT_LINE], sign=-1) for source in sources]
+                movers = movements(*purchases, limit=1)
+                if movers and movers[0][0] not in ('(без проекта)', 'Общее'):
+                    portfolio, amount = movers[0]
+                    item['investment'] = (f'Крупнейшее изменение в покупке портфелей приходится на «{portfolio}». '
+                                          f'На покупку направлено на {money(abs(amount))} {"больше" if amount > 0 else "меньше"}.')
             if leaders:
                 cases[key] = {'period': window['label'], 'comparison': comp['title'],
                               'finding': item['finding'], 'actual': money(actual),
                               'articles': {chr(65 + n): {'name': a['name'], 'delta': round(a['delta'], 4)}
                                            for n, a in enumerate(leaders)}}
-    facts = {'partial': bool(review.get('partial')), 'allocation': allocation, 'cases': cases}
+    facts = {'edition': 2, 'partial': bool(review.get('partial')), 'allocation': allocation, 'cases': cases}
     digest = hashlib.sha256(json.dumps(facts, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     return cards, facts, digest
 

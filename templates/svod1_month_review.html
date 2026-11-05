@@ -50,9 +50,18 @@
             <p class="mb-2"><strong>{{ card.headline }}</strong></p>
             {% if review.windows[loop.index0].has_actual %}
             {% for item in card.comparisons %}
-            <p class="mb-1">{{ item.finding }} <span data-review-copy="{{ item.id }}">{{ item.detail }}</span></p>
+            <p class="mb-2">{{ item.finding }} {{ item.bridge }} <span data-review-copy="{{ item.id }}">{{ item.detail }}</span>{% if item.investment %} {{ item.investment }}{% endif %}</p>
             {% endfor %}
             {% endif %}
+            {% for section in card.sections %}
+            <section class="mt-3 border-top pt-3">
+                <h4 class="h6">{{ section.title }}</h4>
+                <p class="mb-2">{{ section.intro }}</p>
+                {% for para in section.paragraphs %}
+                <p class="mb-2"><strong>{{ para.label }}.</strong> {{ para.text }}</p>
+                {% endfor %}
+            </section>
+            {% endfor %}
         </div></article>
         {% endfor %}
     </div>

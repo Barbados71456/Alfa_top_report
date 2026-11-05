@@ -260,11 +260,11 @@ def svod1():
         if refresh:
             updated_at = datetime.now(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y в %H:%M:%S')
     except DatabaseError:
-        if not refresh:
+        if not refresh and allocation != 'no_alloc':
             raise
         app.logger.exception('Не удалось пересчитать итоги месяца по FinancialData')
         close_connection()
-        review = pr.svod1_month_review(year, month, allocation)
+        review = pr.svod1_month_review(year, month, allocation, cached_only=True)
         refresh_failed = True
     cards, _, digest = sr.prepare(review, allocation)
     commentary = sr.snapshot(digest)
