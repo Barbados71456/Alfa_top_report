@@ -661,14 +661,21 @@ def _comparison_delta(value_a, value_b):
     return delta, percent
 
 
-def svod1_month_review(year, month=None, allocation='all'):
+def svod1_month_review(year, month=None, allocation='all', *, live=False):
     """Факт месяца против прогноза и прошлогоднего факта, тыс. руб."""
     costs = VARIABLE_LINES + COMPARISON_FIXED_LINES
     lines = REVENUE_LINES + costs
+    # A manual recalculation can see a completed KNIME load before the periodic
+    # refresh of pl_monthly. The same line whitelist and sums apply to both sources.
+    source = 'reporting.pl_monthly'
+    if live:
+        source = '''(SELECT "Период" AS period, "Строка отчета" AS line,
+                            "п_ф" AS pf, "Распределение" AS allocation, "Сумма" AS amount
+                     FROM public."FinancialData") AS entries'''
     today = date.today().replace(day=1)
     if month is None:
         latest = query(
-            f'''SELECT max(period) AS period FROM reporting.pl_monthly
+            f'''SELECT max(period) AS period FROM {source}
                 WHERE pf = 'факт' AND line = ANY(%s) AND amount IS NOT NULL
                   AND period BETWEEN %s AND %s AND period < %s{_alloc_where(allocation)}''',
             (lines, date(year, 1, 1), date(year, 12, 1), today),
@@ -682,7 +689,7 @@ def svod1_month_review(year, month=None, allocation='all'):
     prior = date(year - 1, month, 1) if year > 1 else None
     rows = query(
         f'''SELECT period, pf, line, sum(amount) / 1000.0 AS value
-            FROM reporting.pl_monthly
+            FROM {source}
             WHERE ((period = %s AND pf IN ('факт', 'прогноз')) OR (period = %s AND pf = 'факт'))
               AND line = ANY(%s) AND amount IS NOT NULL{_alloc_where(allocation)}
             GROUP BY period, pf, line''', (period, prior, lines),

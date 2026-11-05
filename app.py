@@ -1,11 +1,13 @@
 import logging
 import os
 import threading
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from werkzeug.exceptions import BadRequest
+from psycopg2 import Error as DatabaseError
 from psycopg2.errors import UniqueViolation
 
 from config import Config
@@ -245,9 +247,25 @@ def svod1():
     pf = request.args.get('pf', 'факт')
     allocation = request.args.get('allocation', 'all')
     data = pr.svod1(year, pf, allocation)
-    review = pr.svod1_month_review(year, request.args.get('month', type=int), allocation)
-    return render_template('svod1.html', data=data, years=years, year=year, pf=pf,
-                           allocation=allocation, review=review)
+    month = request.args.get('month', type=int)
+    refresh = request.args.get('refresh_review') == '1'
+    updated_at = None
+    refresh_failed = False
+    try:
+        review = pr.svod1_month_review(year, month, allocation, live=refresh)
+        if refresh:
+            updated_at = datetime.now(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y в %H:%M:%S')
+    except DatabaseError:
+        if not refresh:
+            raise
+        app.logger.exception('Не удалось пересчитать итоги месяца по FinancialData')
+        close_connection()
+        review = pr.svod1_month_review(year, month, allocation)
+        refresh_failed = True
+    page = render_template('svod1.html', data=data, years=years, year=year, pf=pf,
+                           allocation=allocation, review=review, review_updated_at=updated_at,
+                           review_refresh_failed=refresh_failed)
+    return page, 200, {'Cache-Control': 'private, no-store'}
 
 
 @app.route('/api/cell_detail')

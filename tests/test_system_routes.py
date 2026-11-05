@@ -59,10 +59,16 @@ def test_single_comparison_column_does_not_use_three_column_default(web, monkeyp
     assert dashboard.call_args.args[1:3] == ([('факт', 2026)], [])
 
 
-def test_svod1_month_review_renders_with_independent_fact_scenario(web, monkeypatch):
+@pytest.fixture
+def month_review_web(web, monkeypatch):
     module, client, _ = web
     monkeypatch.setattr(module.pr, '_fetch_year', lambda *a: {})
     monkeypatch.setattr(module.pr, '_fetch_statya3_detail', lambda *a: {})
+    return web
+
+
+def test_svod1_month_review_renders_with_independent_fact_scenario(month_review_web, monkeypatch):
+    module, client, _ = month_review_web
     def comparison_query(sql, params):
         assert "allocation = 'до распределения'" in sql
         return [dict(period=date(2025, 10, 1), pf='факт', line='ФОТ постоянный', value=-12)]
@@ -72,6 +78,42 @@ def test_svod1_month_review_renders_with_independent_fact_scenario(web, monkeypa
     html = result.get_data(as_text=True)
     assert 'Итоги месяца для акционеров' in html and 'Октябрь 2025' in html
     assert 'Нет сопоставимых данных прогноза' in html and 'chartRevenue' in html
+
+
+def test_shareholder_refresh_reads_new_bookings_and_rewrites_conclusions(month_review_web, monkeypatch):
+    module, client, user = month_review_web
+    user['role'] = 'shareholder'
+    actual_revenues = iter([80, 120])
+
+    def bookings(sql, params):
+        assert 'public."FinancialData"' in sql and "allocation = 'до распределения'" in sql
+        assert params[:2] == (date(2025, 10, 1), date(2024, 10, 1))
+        return [dict(period=params[0], pf=pf, line=line, value=value)
+                for pf, revenue in [('факт', next(actual_revenues)), ('прогноз', 100)]
+                for line, value in [(module.pr.REVENUE_LINES[0], revenue), ('Аренда', -10)]]
+    monkeypatch.setattr(module.pr, 'query', bookings)
+    params = dict(year=2025, month=10, allocation='no_alloc', pf='план', refresh_review='1')
+    for direction in ['ниже', 'выше']:
+        result = client.get('/svod1', query_string=params)
+        assert result.status_code == 200 and result.cache_control.no_store
+        page = result.get_data(as_text=True)
+        assert 'Обновить выводы' in page and 'Пересчитано по данным базы' in page
+        assert f'Операционная прибыль {direction} на' in page
+
+
+def test_manual_review_db_error_shows_scheduled_data_without_success_stamp(month_review_web, monkeypatch):
+    module, client, _ = month_review_web
+
+    def bookings(sql, params):
+        if 'public."FinancialData"' in sql:
+            raise module.DatabaseError('test')
+        assert 'FROM reporting.pl_monthly' in sql
+        return []
+    monkeypatch.setattr(module.pr, 'query', bookings)
+    result = client.get('/svod1?year=2025&month=10&refresh_review=1')
+    page = result.get_data(as_text=True)
+    assert result.status_code == 200 and 'Попробуйте ещё раз' in page
+    assert 'Пересчитано по данным базы' not in page
 
 
 def test_disabled_user_cannot_keep_using_existing_session(web):
