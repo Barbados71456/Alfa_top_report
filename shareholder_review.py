@@ -16,7 +16,7 @@ from config import Config
 
 log = logging.getLogger(__name__)
 CACHE = (Path('/data') if Path('/data').is_dir() else Path(tempfile.gettempdir())) / 'svod1-commentary.sqlite3'
-LEASE = 110
+LEASE = 270
 BASES = ('прогноза', 'прошлого года')
 
 
@@ -96,13 +96,18 @@ delta — вклад статьи в отклонение кэш флоу в т�
 
 
 def generate(facts):
-    from openai import OpenAI
-    with OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY, timeout=75, max_retries=0) as client:
-        response = client.chat.completions.create(
-            model=Config.POLZA_AI_MODEL, max_tokens=2500,
-            messages=[{'role': 'system', 'content': PROMPT},
-                      {'role': 'user', 'content': json.dumps(facts, ensure_ascii=False)}],
-        )
+    from openai import OpenAI, NotFoundError, PermissionDeniedError
+    messages = [{'role': 'system', 'content': PROMPT},
+                {'role': 'user', 'content': json.dumps(facts, ensure_ascii=False)}]
+    with OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY, timeout=195, max_retries=0) as client:
+        try:
+            response = client.chat.completions.create(
+                model=Config.POLZA_AI_REVIEW_MODEL, max_tokens=1800, messages=messages)
+        except (NotFoundError, PermissionDeniedError):
+            if Config.POLZA_AI_REVIEW_MODEL == Config.POLZA_AI_MODEL:
+                raise
+            response = client.chat.completions.create(
+                model=Config.POLZA_AI_MODEL, max_tokens=2500, messages=messages)
     raw = (response.choices[0].message.content or '').strip()
     if raw.startswith('```'):
         raw = re.sub(r'^\`\`\`(?:json)?\s*|\s*\`\`\`$', '', raw, flags=re.I)

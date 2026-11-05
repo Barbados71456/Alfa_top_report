@@ -29,6 +29,7 @@ class Config:
     # Модель задаётся отдельно: у API-ключа Polza может быть список разрешённых моделей.
     POLZA_AI_API_KEY = os.getenv('POLZA_AI_API_KEY')
     POLZA_AI_MODEL = (os.getenv('POLZA_AI_MODEL') or '').strip() or 'openai/gpt-6-astra-pro'
+    POLZA_AI_REVIEW_MODEL = (os.getenv('POLZA_AI_REVIEW_MODEL') or '').strip() or 'openai/gpt-4.1-mini'
 
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True

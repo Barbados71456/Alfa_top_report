@@ -28,6 +28,14 @@
                     name="token" value="{{ session.review_token }}" class="btn btn-sm btn-primary text-nowrap">Обновить выводы</button>
         </form>
     </div>
+    {% if review_export %}
+    <form method="post" class="d-flex justify-content-end flex-wrap gap-2">
+        <input type="hidden" name="snapshot" value="{{ review_export }}">
+        <input type="hidden" name="edition" id="review-export-edition" value="">
+        <button type="submit" formaction="{{ url_for('download_svod1_review', kind='pdf') }}" class="btn btn-sm btn-outline-secondary">Скачать PDF</button>
+        <button type="submit" formaction="{{ url_for('download_svod1_review', kind='docx') }}" class="btn btn-sm btn-outline-secondary">Скачать Word (.docx)</button>
+    </form>
+    {% endif %}
     {% if review_updated_at %}<p class="small text-secondary mb-1" role="status">Пересчитано по данным базы {{ review_updated_at }} МСК.</p>{% endif %}
     {% if review_refresh_failed %}<p class="small text-danger mb-1" role="alert">Не удалось получить свежие данные. Показаны итоги последнего планового обновления. Попробуйте ещё раз.</p>{% endif %}
     {% if review.month is none %}

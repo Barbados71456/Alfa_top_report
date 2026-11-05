@@ -2,7 +2,7 @@
 (async function () {
     const status = document.getElementById('commentary-status');
     if (!status || !status.dataset.url) return;
-    const deadline = Date.now() + 120000;
+    const deadline = Date.now() + 280000;
     while (Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
@@ -15,6 +15,8 @@
                 const text = result.texts[element.dataset.reviewCopy];
                 if (text) element.textContent = text;
             }
+            const edition = document.getElementById('review-export-edition');
+            if (edition && result.edition) edition.value = result.edition;
             status.textContent = result.state === 'ready'
                 ? 'Пояснения подготовлены через Polza по данным этого отчёта.'
                 : 'Polza не обновила пояснения. Показаны выводы по текущим цифрам. Можно повторить обновление.';

@@ -241,6 +241,7 @@ def test_shareholder_cannot_use_any_write_route(web):
     for rule in module.app.url_map.iter_rules():
         if 'POST' not in rule.methods or rule.endpoint in {
             'login', 'my_profile_update', 'my_password_update', 'api_chat', 'refresh_svod1_review',
+            'download_svod1_review',
         }:
             continue
         values = {name: 1 if isinstance(converter, IntegerConverter) else 'test'
@@ -299,3 +300,32 @@ def test_review_button_posts_once_as_shareholder_and_get_never_calls_polza(month
     assert 'public."FinancialData"' in query.call_args.args[0]
     assert client.get(result.location).status_code == 200
     start.assert_called_once()
+
+
+def test_download_preserves_visible_version_and_period(month_review_web, monkeypatch):
+    from io import BytesIO
+    import re
+    from docx import Document
+
+    module, client, user = month_review_web
+    user['role'] = 'shareholder'
+    query = Mock(return_value=[dict(period=date(2025, 1, 1), pf=pf, line='Аренда', value=value)
+                               for pf, value in [('факт', -15), ('прогноз', -30)]])
+    monkeypatch.setattr(module.pr, 'query', query)
+    page = client.get('/svod1?year=2025&month=1&allocation=no_alloc').get_data(as_text=True)
+    token = re.search(r'name="snapshot" value="([^"]+)"', page)[1]
+    with module.app.app_context():
+        payload = module._review_signer('snapshot').loads(token)
+        edition = module._review_signer('edition').dumps([payload['digest'], {'month_forecast': 'Пояснение Polza.'}])
+        wrong_period = module._review_signer('edition').dumps(['another-period', {}])
+    query.reset_mock()
+    for kind, signature in [('pdf', b'%PDF-'), ('docx', b'PK')]:
+        result = client.post('/svod1/download/' + kind, data={'snapshot': token, 'edition': edition})
+        assert result.status_code == 200 and result.data.startswith(signature)
+        assert 'Alfa_itogi_2025-01.' + kind in result.headers['Content-Disposition']
+        assert result.cache_control.no_store
+    text = '\n'.join(p.text for p in Document(BytesIO(result.data)).paragraphs)
+    assert 'Без распределения затрат' in text and 'Пояснение Polza.' in text and 'С начала года' in text
+    assert client.post('/svod1/download/docx', data={'snapshot': token, 'edition': wrong_period}).status_code == 400
+    assert client.post('/svod1/download/pdf', data={'snapshot': 'modified'}).status_code == 400
+    query.assert_not_called()

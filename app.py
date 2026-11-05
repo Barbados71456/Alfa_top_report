@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+from itsdangerous import BadSignature, URLSafeSerializer
 from werkzeug.exceptions import BadRequest
 from psycopg2 import Error as DatabaseError
 from psycopg2.errors import UniqueViolation
@@ -25,6 +26,7 @@ import wallet_report as wr
 import audit
 import chat_assistant
 import shareholder_review as sr
+import shareholder_export
 import export
 from employee_directory import (
     MAX_FILE_SIZE,
@@ -269,12 +271,22 @@ def svod1():
     for card in cards:
         for finding in card['comparisons']:
             finding['detail'] = commentary['texts'].get(finding['id'], finding['detail'])
+    export_snapshot = None
+    if cards:
+        export_cards = [dict(card, gaps=window.get('gaps', []),
+                             comparisons=card['comparisons'] if window['has_actual'] else [])
+                        for card, window in zip(cards, review['windows'])]
+        export_snapshot = _review_signer('snapshot').dumps({
+            'cards': export_cards, 'digest': digest, 'period': cards[0]['label'],
+            'filename': f'Alfa_itogi_{year:04d}-{review["month"]:02d}', 'partial': review['partial'],
+            'allocation': 'Без распределения затрат' if allocation == 'no_alloc' else 'С распределением затрат',
+        })
     if 'review_token' not in session:
         session['review_token'] = secrets.token_urlsafe(24)
     page = render_template('svod1.html', data=data, years=years, year=year, pf=pf,
                            allocation=allocation, review=review, review_updated_at=updated_at,
                            review_refresh_failed=refresh_failed, review_cards=cards,
-                           commentary=commentary, review_digest=digest)
+                           commentary=commentary, review_digest=digest, review_export=export_snapshot)
     return page, 200, {'Cache-Control': 'private, no-store'}
 
 
@@ -315,7 +327,35 @@ def refresh_svod1_review():
 def svod1_commentary_status(digest):
     if len(digest) != 64 or any(ch not in '0123456789abcdef' for ch in digest):
         raise BadRequest('Некорректный идентификатор расчёта.')
-    return sr.snapshot(digest), 200, {'Cache-Control': 'private, no-store'}
+    status = sr.snapshot(digest)
+    if status['texts']:
+        status['edition'] = _review_signer('edition').dumps([digest, status['texts']])
+    return status, 200, {'Cache-Control': 'private, no-store'}
+
+
+def _review_signer(purpose):
+    return URLSafeSerializer(app.secret_key, salt='svod1-export-' + purpose)
+
+
+@app.post('/svod1/download/<kind>')
+@report_required
+def download_svod1_review(kind):
+    if kind not in shareholder_export.FORMATS:
+        return 'Неизвестный формат', 404
+    edits = {}
+    try:
+        snapshot = _review_signer('snapshot').loads(request.form.get('snapshot', ''))
+        if request.form.get('edition'):
+            digest, edits = _review_signer('edition').loads(request.form['edition'])
+            if snapshot['digest'] != digest:
+                raise BadSignature('Snapshot mismatch')
+    except BadSignature:
+        raise BadRequest('Откройте нужный месяц в «Свод1» и скачайте выводы ещё раз.')
+    output = shareholder_export.render(kind, snapshot, edits)
+    response = send_file(output, mimetype=shareholder_export.FORMATS[kind], as_attachment=True,
+                         download_name=f'{snapshot["filename"]}.{kind}')
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def _detail_lines():
