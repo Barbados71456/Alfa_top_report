@@ -11,6 +11,8 @@ import uuid
 from contextlib import closing
 from pathlib import Path
 
+import httpx
+
 from chat_assistant import BASE_URL
 from config import Config
 
@@ -39,8 +41,13 @@ def driver_text(leaders, delta):
     for sign in ((-1, 1) if delta < 0 else (1, -1)):
         names = [article_text(a) for a in leaders if a['delta'] * sign > 0]
         if names:
-            subject = 'Наибольший вклад в рост' if sign == 1 else 'Наибольший вклад в снижение'
-            clauses.append(f'{subject} {"внесла статья" if len(names) == 1 else "внесли статьи"} {" и ".join(names)}.')
+            if abs(delta) < .05:
+                phrase = 'Результат поддержали изменения' if sign > 0 else 'Этот эффект компенсировали изменения'
+            elif sign > 0:
+                phrase = 'Часть отставания компенсировали изменения' if delta < 0 else 'Прирост во многом связан с изменениями'
+            else:
+                phrase = 'На отставание сильнее всего повлияли изменения' if delta < 0 else 'Прирост частично сдержали изменения'
+            clauses.append(f'{phrase} по {"статье" if len(names) == 1 else "статьям"} {" и ".join(names)}.')
     return ' '.join(clauses)
 
 
@@ -99,7 +106,8 @@ def generate(facts):
     from openai import OpenAI, NotFoundError, PermissionDeniedError
     messages = [{'role': 'system', 'content': PROMPT},
                 {'role': 'user', 'content': json.dumps(facts, ensure_ascii=False)}]
-    with OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY, timeout=195, max_retries=0) as client:
+    timeout = httpx.Timeout(195, connect=8, write=15, pool=5)
+    with OpenAI(base_url=BASE_URL, api_key=Config.POLZA_AI_API_KEY, timeout=timeout, max_retries=0) as client:
         try:
             response = client.chat.completions.create(
                 model=Config.POLZA_AI_REVIEW_MODEL, max_tokens=1800, messages=messages)
@@ -159,14 +167,33 @@ def snapshot(digest):
     return {'state': state, 'texts': json.loads(body) if body else {}}
 
 
+def status_message(status):
+    state = status['state']
+    if state == 'pending':
+        return 'Polza готовит пояснения по свежим данным…'
+    if state == 'ready':
+        return 'Пояснения подготовлены через Polza по данным этого отчёта.'
+    errors = {
+        'connect_timeout': 'Сервер отчёта не смог установить соединение с Polza за отведённое время.',
+        'read_timeout': 'Сервер отчёта не дождался ответа Polza.',
+        'failed': 'Polza не обновила пояснения.',
+    }
+    if state in errors:
+        source = 'Показана предыдущая версия для тех же цифр.' if status['texts'] else 'Показаны выводы по расчёту.'
+        return f'{errors[state]} {source} Можно повторить обновление.'
+    return ''
+
+
 def _worker(digest, token, facts):
     try:
         texts = json.dumps(generate(facts), ensure_ascii=False)
         state = 'ready'
     except Exception as exc:
-        log.warning('Polza shareholder commentary failed (%s, status=%s)', type(exc).__name__,
-                    getattr(exc, 'status_code', None))
-        state, texts = 'failed', None
+        cause = exc.__cause__
+        log.warning('Polza shareholder commentary failed (%s, cause=%s, status=%s)', type(exc).__name__,
+                    type(cause).__name__, getattr(exc, 'status_code', None))
+        state = {httpx.ConnectTimeout: 'connect_timeout', httpx.ReadTimeout: 'read_timeout'}.get(type(cause), 'failed')
+        texts = None
     with closing(connection()) as db, db:
         db.execute('UPDATE commentary SET state=?, body=COALESCE(?,body) WHERE digest=? AND token=?',
                    (state, texts, digest, token))

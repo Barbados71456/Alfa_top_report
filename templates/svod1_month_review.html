@@ -58,10 +58,7 @@
     </div>
     <p id="commentary-status" role="status" class="small text-secondary mt-2 mb-1"
        {% if commentary.state == 'pending' %}data-url="{{ url_for('svod1_commentary_status', digest=review_digest) }}"{% endif %}>
-        {% if commentary.state == 'pending' %}Polza готовит пояснения по свежим данным…
-        {% elif commentary.state == 'ready' %}Пояснения подготовлены через Polza по данным этого отчёта.
-        {% elif commentary.state == 'failed' %}Polza не обновила пояснения. {{ 'Показана предыдущая версия для тех же цифр.' if commentary.texts else 'Показаны выводы по расчёту.' }} Можно повторить обновление.
-        {% endif %}
+        {{ commentary_message }}
     </p>
     {% if commentary.state == 'pending' %}
     <noscript><a href="{{ request.full_path }}#month-review">Посмотреть готовые пояснения</a></noscript>

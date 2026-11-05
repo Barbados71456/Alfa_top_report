@@ -17,9 +17,7 @@
             }
             const edition = document.getElementById('review-export-edition');
             if (edition && result.edition) edition.value = result.edition;
-            status.textContent = result.state === 'ready'
-                ? 'Пояснения подготовлены через Polza по данным этого отчёта.'
-                : 'Polza не обновила пояснения. Показаны выводы по текущим цифрам. Можно повторить обновление.';
+            status.textContent = result.message;
             return;
         } catch {
             // A transient network failure need not discard the current report.

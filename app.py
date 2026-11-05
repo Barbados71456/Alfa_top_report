@@ -286,7 +286,8 @@ def svod1():
     page = render_template('svod1.html', data=data, years=years, year=year, pf=pf,
                            allocation=allocation, review=review, review_updated_at=updated_at,
                            review_refresh_failed=refresh_failed, review_cards=cards,
-                           commentary=commentary, review_digest=digest, review_export=export_snapshot)
+                           commentary=commentary, commentary_message=sr.status_message(commentary),
+                           review_digest=digest, review_export=export_snapshot)
     return page, 200, {'Cache-Control': 'private, no-store'}
 
 
@@ -328,6 +329,7 @@ def svod1_commentary_status(digest):
     if len(digest) != 64 or any(ch not in '0123456789abcdef' for ch in digest):
         raise BadRequest('Некорректный идентификатор расчёта.')
     status = sr.snapshot(digest)
+    status['message'] = sr.status_message(status)
     if status['texts']:
         status['edition'] = _review_signer('edition').dumps([digest, status['texts']])
     return status, 200, {'Cache-Control': 'private, no-store'}
