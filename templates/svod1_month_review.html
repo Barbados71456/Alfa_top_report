@@ -56,7 +56,7 @@
             {% set rd = review.metrics[0].deltas[i] %}{% set cd = review.metrics[1].deltas[i] %}
             {% if comp.profit_delta is not none %}
             {% set profits = review.metrics[2]['values'] %}
-            <p class="mb-2">{% if profits[0] > 0 and profits[i + 1] < 0 %}Компания вышла из операционного убытка в прибыль. {% elif profits[0] < 0 and profits[i + 1] > 0 %}Компания получила операционный убыток при положительной прибыли в базе сравнения. {% endif %}Операционная прибыль {% if comp.profit_delta.value|abs < 0.05 %}на уровне базы сравнения{% else %}{{ 'выше' if comp.profit_delta.value > 0 else 'ниже' }} на <strong>{{ number(comp.profit_delta.value|abs) }} тыс. руб.</strong>{% endif %}.
+            <p class="mb-2">{% if profits[0] > 0 and profits[i + 1] < 0 %}Компания вышла из операционного убытка в прибыль. {% elif profits[0] < 0 and profits[i + 1] > 0 %}Компания получила операционный убыток при положительной прибыли в базе сравнения. {% endif %}Операционная прибыль {% if comp.profit_delta.value|abs < 0.05 %}на уровне базы сравнения{% else %}{{ 'выше' if comp.profit_delta.value > 0 else 'ниже' }} на <strong>{{ number(comp.profit_delta.value|abs) }} тыс. руб</strong>{% endif %}.
                 {% if rd.value|abs >= 0.05 and cd.value|abs >= 0.05 %}
                     {% if rd.value > 0 and cd.value > 0 %}{{ 'Прирост выручки перекрыл рост затрат.' if rd.value > cd.value else 'Прироста выручки хватило только на покрытие роста затрат.' if (rd.value - cd.value)|abs < 0.05 else 'Затраты выросли сильнее выручки.' }}
                     {% elif rd.value < 0 and cd.value < 0 %}{{ 'Экономия на затратах полностью покрыла снижение выручки.' if cd.value <= rd.value else 'Экономия на затратах лишь частично покрыла снижение выручки.' }}
