@@ -1,5 +1,6 @@
 import logging
 import os
+import secrets
 import threading
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -23,6 +24,7 @@ import cbr_report as cr
 import wallet_report as wr
 import audit
 import chat_assistant
+import shareholder_review as sr
 import export
 from employee_directory import (
     MAX_FILE_SIZE,
@@ -262,10 +264,58 @@ def svod1():
         close_connection()
         review = pr.svod1_month_review(year, month, allocation)
         refresh_failed = True
+    cards, _, digest = sr.prepare(review, allocation)
+    commentary = sr.snapshot(digest)
+    for card in cards:
+        for finding in card['comparisons']:
+            finding['detail'] = commentary['texts'].get(finding['id'], finding['detail'])
+    if 'review_token' not in session:
+        session['review_token'] = secrets.token_urlsafe(24)
     page = render_template('svod1.html', data=data, years=years, year=year, pf=pf,
                            allocation=allocation, review=review, review_updated_at=updated_at,
-                           review_refresh_failed=refresh_failed)
+                           review_refresh_failed=refresh_failed, review_cards=cards,
+                           commentary=commentary, review_digest=digest)
     return page, 200, {'Cache-Control': 'private, no-store'}
+
+
+@app.post('/svod1/refresh-review')
+@report_required
+def refresh_svod1_review():
+    token = session.get('review_token')
+    if not token or not secrets.compare_digest(request.form.get('token', ''), token):
+        raise BadRequest('Откройте «Свод1» заново и нажмите кнопку обновления.')
+    try:
+        validation.validate_report_args(request.form, 'svod1')
+        year = validation.integer(request.form.get('year'), 'Год', 1, 9999)
+    except ValueError as exc:
+        raise BadRequest(str(exc)) from exc
+    month = request.form.get('month', type=int)
+    allocation = request.form.get('allocation', 'all')
+    if allocation not in ('all', 'no_alloc'):
+        raise BadRequest('Некорректный режим распределения.')
+    params = dict(year=year, month=month, allocation=allocation, pf=request.form.get('pf', 'факт'))
+    try:
+        review = pr.svod1_month_review(year, month, allocation, live=True)
+    except DatabaseError:
+        app.logger.exception('Свежие данные для выводов недоступны')
+        flash('Не удалось получить свежие данные. Показана плановая версия отчёта.', 'warning')
+    else:
+        _, facts, digest = sr.prepare(review, allocation)
+        state = sr.start(digest, facts)
+        if state == 'unconfigured':
+            flash('Polza не подключена. Выводы сформированы по цифрам отчёта.', 'warning')
+        elif state == 'failed':
+            flash('Не удалось запустить Polza. Выводы сформированы по цифрам отчёта.', 'warning')
+        params.update(month=review['month'], refresh_review='1')
+    return redirect(url_for('svod1', **params, _anchor='month-review'), code=303)
+
+
+@app.get('/api/svod1/commentary/<digest>')
+@report_required
+def svod1_commentary_status(digest):
+    if len(digest) != 64 or any(ch not in '0123456789abcdef' for ch in digest):
+        raise BadRequest('Некорректный идентификатор расчёта.')
+    return sr.snapshot(digest), 200, {'Cache-Control': 'private, no-store'}
 
 
 def _detail_lines():

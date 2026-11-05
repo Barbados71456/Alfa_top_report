@@ -24,7 +24,8 @@
                 {% if review.month is none %}<option selected disabled>Выберите месяц</option>{% endif %}
                 {% for name in review.months %}<option value="{{ loop.index }}" {% if loop.index == review.month %}selected{% endif %}>{{ name }}</option>{% endfor %}
             </select>
-            <button type="submit" name="refresh_review" value="1" class="btn btn-sm btn-primary text-nowrap">Обновить выводы</button>
+            <button type="submit" formmethod="post" formaction="{{ url_for('refresh_svod1_review') }}"
+                    name="token" value="{{ session.review_token }}" class="btn btn-sm btn-primary text-nowrap">Обновить выводы</button>
         </form>
     </div>
     {% if review_updated_at %}<p class="small text-secondary mb-1" role="status">Пересчитано по данным базы {{ review_updated_at }} МСК.</p>{% endif %}
@@ -34,6 +35,30 @@
     {% else %}
     {% if review.partial %}<p class="small mt-2 mb-1">Месяц ещё идёт. Факт на текущую дату сопоставлен с полным месяцем прогноза и прошлого года.</p>{% endif %}
     {% if review.future %}<p class="small mt-2 mb-1">Выбран будущий месяц. Сравнение появится после поступления фактических данных за этот период.</p>{% endif %}
+    <div class="row g-3 mt-1" aria-label="Выводы для акционеров">
+        {% for card in review_cards %}
+        <article class="col-lg-6"><div class="border rounded p-3 h-100">
+            <h3 class="h6">{{ card.title }} <span class="fw-normal text-secondary">· {{ card.label }}</span></h3>
+            <p class="mb-2"><strong>{{ card.headline }}</strong></p>
+            {% if review.windows[loop.index0].has_actual %}
+            {% for item in card.comparisons %}
+            <p class="mb-1">{{ item.finding }} <span data-review-copy="{{ item.id }}">{{ item.detail }}</span></p>
+            {% endfor %}
+            {% endif %}
+        </div></article>
+        {% endfor %}
+    </div>
+    <p id="commentary-status" role="status" class="small text-secondary mt-2 mb-1"
+       {% if commentary.state == 'pending' %}data-url="{{ url_for('svod1_commentary_status', digest=review_digest) }}"{% endif %}>
+        {% if commentary.state == 'pending' %}Polza готовит пояснения по свежим данным…
+        {% elif commentary.state == 'ready' %}Пояснения подготовлены через Polza по данным этого отчёта.
+        {% elif commentary.state == 'failed' %}Polza не обновила пояснения. {{ 'Показана предыдущая версия для тех же цифр.' if commentary.texts else 'Показаны выводы по расчёту.' }} Можно повторить обновление.
+        {% endif %}
+    </p>
+    {% if commentary.state == 'pending' %}
+    <noscript><a href="{{ request.full_path }}#month-review">Посмотреть готовые пояснения</a></noscript>
+    <script src="{{ url_for('static', filename='shareholder-review.js') }}" defer></script>
+    {% endif %}
     {% for window in review.windows %}
     <section class="border-top mt-3 pt-3" aria-labelledby="review-window-{{ loop.index }}">
     <h3 id="review-window-{{ loop.index }}" class="h6 mb-2">{{ window.title }} <span class="fw-normal text-secondary">· {{ window.label }}</span></h3>

@@ -240,7 +240,7 @@ def test_shareholder_cannot_use_any_write_route(web):
     user['role'] = 'shareholder'
     for rule in module.app.url_map.iter_rules():
         if 'POST' not in rule.methods or rule.endpoint in {
-            'login', 'my_profile_update', 'my_password_update', 'api_chat',
+            'login', 'my_profile_update', 'my_password_update', 'api_chat', 'refresh_svod1_review',
         }:
             continue
         values = {name: 1 if isinstance(converter, IntegerConverter) else 'test'
@@ -276,3 +276,26 @@ def test_all_templates_compile(web):
     module, _, _ = web
     for template in module.app.jinja_env.list_templates():
         module.app.jinja_env.get_template(template)
+
+
+def test_review_button_posts_once_as_shareholder_and_get_never_calls_polza(month_review_web, monkeypatch, tmp_path):
+    module, client, user = month_review_web
+    user['role'] = 'shareholder'
+    monkeypatch.setattr(module.sr, 'CACHE', tmp_path / 'cache.sqlite')
+    query = Mock(return_value=[dict(period=date(2025, 1, 1), pf=pf, line='Аренда', value=value)
+                               for pf, value in [('факт', -15), ('прогноз', -30)]])
+    monkeypatch.setattr(module.pr, 'query', query)
+    start = Mock(return_value='pending')
+    monkeypatch.setattr(module.sr, 'start', start)
+    args = dict(year=2025, month=1, pf='прогноз', allocation='no_alloc')
+    assert client.get('/svod1', query_string=args).status_code == 200
+    start.assert_not_called()
+    assert client.post('/svod1/refresh-review', data=args).status_code == 400
+    with client.session_transaction() as session:
+        token = session['review_token']
+    result = client.post('/svod1/refresh-review', data=dict(args, token=token))
+    assert result.status_code == 303 and 'allocation=no_alloc' in result.location
+    start.assert_called_once()
+    assert 'public."FinancialData"' in query.call_args.args[0]
+    assert client.get(result.location).status_code == 200
+    start.assert_called_once()
