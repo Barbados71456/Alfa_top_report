@@ -661,6 +661,80 @@ def _comparison_delta(value_a, value_b):
     return delta, percent
 
 
+def svod1_month_review(year, month=None, allocation='all'):
+    """Факт месяца против прогноза и прошлогоднего факта, тыс. руб."""
+    costs = VARIABLE_LINES + COMPARISON_FIXED_LINES
+    lines = REVENUE_LINES + costs
+    today = date.today().replace(day=1)
+    if month is None:
+        latest = query(
+            f'''SELECT max(period) AS period FROM reporting.pl_monthly
+                WHERE pf = 'факт' AND line = ANY(%s) AND amount IS NOT NULL
+                  AND period BETWEEN %s AND %s AND period < %s{_alloc_where(allocation)}''',
+            (lines, date(year, 1, 1), date(year, 12, 1), today),
+        )[0]['period']
+        month = latest.month if latest else None
+    result = {'month': month, 'months': MONTHS_FULL_RU}
+    if month is None:
+        return result
+
+    period = date(year, month, 1)
+    prior = date(year - 1, month, 1) if year > 1 else None
+    rows = query(
+        f'''SELECT period, pf, line, sum(amount) / 1000.0 AS value
+            FROM reporting.pl_monthly
+            WHERE ((period = %s AND pf IN ('факт', 'прогноз')) OR (period = %s AND pf = 'факт'))
+              AND line = ANY(%s) AND amount IS NOT NULL{_alloc_where(allocation)}
+            GROUP BY period, pf, line''', (period, prior, lines),
+    )
+    values = defaultdict(dict)
+    for row in rows:
+        values[row['period'], row['pf']][row['line']] = float(row['value'])
+    current = values[period, 'факт'] if period <= today else {}
+    periods = (current, values[period, 'прогноз'], values[prior, 'факт'])
+
+    def amounts(names, sign):
+        # An absent scenario/metric is unknown. Individual absent lines within
+        # a populated metric have no booked amount in the monthly view.
+        return [sign * sum(source.get(n, 0) for n in names)
+                if any(n in source for n in names) else None for source in periods]
+
+    revenue = amounts(REVENUE_LINES, 1)
+    expense = amounts(costs, -1)
+    profit = [r - c if r is not None and c is not None else None for r, c in zip(revenue, expense)]
+
+    def metric(label, amounts, polarity):
+        deltas = []
+        for base in amounts[1:]:
+            if amounts[0] is None or base is None:
+                deltas.append(None)
+            else:
+                delta, pct = _comparison_delta(base, amounts[0])
+                deltas.append({'value': delta, 'pct': pct if base >= .005 else None})
+        return {'label': label, 'values': amounts, 'deltas': deltas, 'polarity': polarity}
+
+    metrics = [metric('Выручка', revenue, 1), metric('Затраты', expense, -1),
+               metric('Операционная прибыль', profit, 1)]
+    comparisons = []
+    for index, title in enumerate(('К прогнозу', 'К прошлому году')):
+        baseline = periods[index + 1]
+        groups = []
+        for row, names in zip(metrics[:2], (REVENUE_LINES, costs)):
+            changes = []
+            if row['deltas'][index] is not None:
+                for name in names:
+                    delta = (current.get(name, 0) - baseline.get(name, 0)) * row['polarity']
+                    if abs(delta) >= .05:
+                        changes.append({'name': name, 'delta': delta})
+            changes.sort(key=lambda item: (-abs(item['delta']), item['name']))
+            leaders = [next((item for item in changes if item['delta'] * direction > 0), None)
+                       for direction in (1, -1)]
+            groups.append({'metric': row, 'leaders': [item for item in leaders if item]})
+        comparisons.append({'title': title, 'groups': groups, 'profit_delta': metrics[2]['deltas'][index]})
+    return dict(result, metrics=metrics, comparisons=comparisons, partial=period == today,
+                future=period > today, has_actual=bool(current), month_name=MONTHS_FULL_RU[month - 1])
+
+
 def period_comparison(start_a, end_a, start_b, end_b, mode='period', projects=None, allocation='all'):
     """Сравнение двух произвольных периодов в структуре Dashboard2.
 

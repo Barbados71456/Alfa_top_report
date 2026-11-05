@@ -245,7 +245,9 @@ def svod1():
     pf = request.args.get('pf', 'факт')
     allocation = request.args.get('allocation', 'all')
     data = pr.svod1(year, pf, allocation)
-    return render_template('svod1.html', data=data, years=years, year=year, pf=pf, allocation=allocation)
+    review = pr.svod1_month_review(year, request.args.get('month', type=int), allocation)
+    return render_template('svod1.html', data=data, years=years, year=year, pf=pf,
+                           allocation=allocation, review=review)
 
 
 @app.route('/api/cell_detail')

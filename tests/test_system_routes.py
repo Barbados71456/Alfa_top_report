@@ -59,6 +59,21 @@ def test_single_comparison_column_does_not_use_three_column_default(web, monkeyp
     assert dashboard.call_args.args[1:3] == ([('факт', 2026)], [])
 
 
+def test_svod1_month_review_renders_with_independent_fact_scenario(web, monkeypatch):
+    module, client, _ = web
+    monkeypatch.setattr(module.pr, '_fetch_year', lambda *a: {})
+    monkeypatch.setattr(module.pr, '_fetch_statya3_detail', lambda *a: {})
+    def comparison_query(sql, params):
+        assert "allocation = 'до распределения'" in sql
+        return [dict(period=date(2025, 10, 1), pf='факт', line='ФОТ постоянный', value=-12)]
+    monkeypatch.setattr(module.pr, 'query', comparison_query)
+    result = client.get('/svod1', query_string=dict(year=2025, month=10, pf='план', allocation='no_alloc'))
+    assert result.status_code == 200
+    html = result.get_data(as_text=True)
+    assert 'Итоги месяца для акционеров' in html and 'Октябрь 2025' in html
+    assert 'Нет сопоставимых данных прогноза' in html and 'chartRevenue' in html
+
+
 def test_disabled_user_cannot_keep_using_existing_session(web):
     _, client, user = web
     user['is_active'] = False

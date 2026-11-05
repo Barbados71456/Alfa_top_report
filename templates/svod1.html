@@ -7,6 +7,7 @@
         <h1 class="page-title">Свод1, тыс. руб.</h1>
     </div>
     <form class="toolbar" method="get">
+        {% if request.args.get('month') %}<input type="hidden" name="month" value="{{ review.month }}">{% endif %}
         <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
         </select>
@@ -22,6 +23,8 @@
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_report', kind='svod1') }}?{{ request.query_string.decode() }}"><i class="bi bi-download"></i> Скачать Excel</a>
     </form>
 </div>
+
+{% include "svod1_month_review.html" %}
 
 <div class="row g-3">
     <div class="col-lg-8">

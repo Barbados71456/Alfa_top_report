@@ -1,0 +1,88 @@
+{% macro number(v, signed=false) -%}
+    {%- if v is none -%}—{%- else -%}
+    {{- ('+' if signed and v >= 0.05 else '') ~ ('{:,.1f}'.format(v if v|abs >= 0.05 else 0)|replace(',', ' ')|replace('.', ',')) -}}
+    {%- endif -%}
+{%- endmacro %}
+{% macro change(d, polarity) -%}
+    {% if d is none %}<span title="Нет данных для сравнения">—</span>{% else %}
+    <span class="fw-semibold {{ 'val-pos' if d.value * polarity >= 0.05 else 'val-neg' if d.value * polarity <= -0.05 else '' }}">{{ number(d.value, true) }}</span>
+    {% if d.pct is not none %}<small class="text-secondary text-nowrap">({{ number(d.pct, true) }} %)</small>{% endif %}
+    {% endif %}
+{%- endmacro %}
+<section class="card p-3 p-lg-4 mb-3" id="month-review" aria-labelledby="month-review-title">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
+        <div>
+            <h2 id="month-review-title" class="h5 mb-1">Итоги месяца для акционеров</h2>
+            <p class="text-secondary small mb-0">{% if review.month %}{{ review.month_name }} {{ year }} · {% endif %}Факт, тыс. руб. · {{ 'Без распределения затрат' if allocation == 'no_alloc' else 'С распределением затрат' }}</p>
+        </div>
+        <form method="get" action="{{ url_for('svod1') }}#month-review" class="d-flex gap-2 align-items-center">
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="pf" value="{{ pf }}">
+            <input type="hidden" name="allocation" value="{{ allocation }}">
+            <label class="small" for="review-month">Месяц</label>
+            <select name="month" id="review-month" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% if review.month is none %}<option selected disabled>Выберите месяц</option>{% endif %}
+                {% for name in review.months %}<option value="{{ loop.index }}" {% if loop.index == review.month %}selected{% endif %}>{{ name }}</option>{% endfor %}
+            </select>
+            <noscript><button class="btn btn-sm btn-outline-secondary">Показать</button></noscript>
+        </form>
+    </div>
+    {% if review.month is none %}
+    <p class="mb-0 mt-2">За {{ year }} год пока нет факта за завершившийся месяц.</p>
+    {% else %}
+    {% if review.partial %}<p class="small mt-2 mb-1">Месяц ещё идёт. Факт на текущую дату сопоставлен с полным месяцем прогноза и прошлого года.</p>{% endif %}
+    {% if not review.has_actual %}<p class="small mt-2 mb-1">{{ 'Выбран будущий месяц.' if review.future else 'За выбранный месяц нет факта.' }} Выводы появятся, когда будут доступны фактические данные за этот период.</p>{% endif %}
+    <div class="table-responsive my-2">
+        <table class="table table-sm align-middle mb-0 text-end">
+            <caption class="visually-hidden">Сравнение за {{ review.month_name|lower }} {{ year }} года, тыс. руб.</caption>
+            <thead><tr>
+                <th scope="col" class="text-start">Показатель</th><th scope="col">Факт</th>
+                <th scope="col">Прогноз</th><th scope="col">Δ к прогнозу</th>
+                <th scope="col">Факт {{ year - 1 }}</th><th scope="col">Δ год к году</th>
+            </tr></thead>
+            <tbody>{% for row in review.metrics %}
+            <tr><th scope="row" class="text-start">{{ row.label }}</th>
+                <td class="text-nowrap">{{ number(row['values'][0]) }}</td>
+                <td class="text-nowrap">{{ number(row['values'][1]) }}</td><td>{{ change(row.deltas[0], row.polarity) }}</td>
+                <td class="text-nowrap">{{ number(row['values'][2]) }}</td><td>{{ change(row.deltas[1], row.polarity) }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% if review.has_actual %}
+    <div class="row g-3 mt-0">
+        {% for comp in review.comparisons %}{% set i = loop.index0 %}
+        <div class="col-xl-6"><div class="border rounded p-3 h-100">
+            <h3 class="h6 mb-2">{{ comp.title }}</h3>
+            {% set rd = review.metrics[0].deltas[i] %}{% set cd = review.metrics[1].deltas[i] %}
+            {% if comp.profit_delta is not none %}
+            {% set profits = review.metrics[2]['values'] %}
+            <p class="mb-2">{% if profits[0] > 0 and profits[i + 1] < 0 %}Компания вышла из операционного убытка в прибыль. {% elif profits[0] < 0 and profits[i + 1] > 0 %}Компания получила операционный убыток при положительной прибыли в базе сравнения. {% endif %}Операционная прибыль {% if comp.profit_delta.value|abs < 0.05 %}на уровне базы сравнения{% else %}{{ 'выше' if comp.profit_delta.value > 0 else 'ниже' }} на <strong>{{ number(comp.profit_delta.value|abs) }} тыс. руб.</strong>{% endif %}.
+                {% if rd.value|abs >= 0.05 and cd.value|abs >= 0.05 %}
+                    {% if rd.value > 0 and cd.value > 0 %}{{ 'Прирост выручки перекрыл рост затрат.' if rd.value > cd.value else 'Прироста выручки хватило только на покрытие роста затрат.' if (rd.value - cd.value)|abs < 0.05 else 'Затраты выросли сильнее выручки.' }}
+                    {% elif rd.value < 0 and cd.value < 0 %}{{ 'Экономия на затратах полностью покрыла снижение выручки.' if cd.value <= rd.value else 'Экономия на затратах лишь частично покрыла снижение выручки.' }}
+                    {% elif rd.value > 0 %}Рост выручки и снижение затрат увеличили прибыль.
+                    {% else %}На прибыль одновременно повлияли снижение выручки и рост затрат.{% endif %}
+                {% endif %}
+            </p>
+            {% elif rd is none and cd is none %}
+            <p class="small text-secondary mb-0">{{ 'Нет сопоставимых данных прогноза за этот месяц.' if i == 0 else 'Нет сопоставимого факта за тот же месяц прошлого года.' }}</p>
+            {% else %}<p class="small text-secondary mb-2">Для сравнения прибыли нужны и выручка, и затраты в обоих периодах.</p>{% endif %}
+            {% for group in comp.groups %}{% set delta = group.metric.deltas[i] %}
+                {% if delta is not none %}
+                <div class="{{ 'mt-2' if not loop.first else '' }}">
+                    <strong class="small">{{ group.metric.label }}</strong>
+                    {% if group.leaders %}
+                    <ul class="small list-unstyled mb-0">
+                        {% for item in group.leaders %}<li class="d-flex justify-content-between gap-2">
+                            <span>{{ 'Основной рост' if item.delta > 0 else 'Основное снижение' }} · {{ item.name }}</span>
+                            <span class="text-nowrap {{ 'val-pos' if item.delta * group.metric.polarity > 0 else 'val-neg' }}">{{ number(item.delta, true) }}</span>
+                        </li>{% endfor %}
+                    </ul>
+                    {% else %}<span class="small text-secondary">Без изменений с точностью до 0,1 тыс. руб.</span>{% endif %}
+                </div>{% endif %}
+            {% endfor %}
+        </div></div>{% endfor %}
+    </div>{% endif %}
+    <p class="small text-secondary mb-0 mt-3">Затраты показаны как сумма переменных и постоянных расходов без остатка на начало периода. Операционная прибыль — выручка за вычетом этих затрат, до бонусов, инвестиций и финансирования. Для каждого сравнения выделены статьи с наибольшим ростом и снижением.</p>
+    {% endif %}
+</section>
