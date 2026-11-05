@@ -94,6 +94,56 @@ def test_dashboards_include_one_off_purchase_in_variable_expenses(monkeypatch):
     assert calls and all(ONE_OFF_PURCHASE_LINE in lines for lines in calls)
 
 
+def test_dashboard2_reconciles_month_ytd_and_deltas_to_svod1(monkeypatch):
+    pl = pl_report
+    series = [('факт', 2025), ('прогноз', 2026), ('факт', 2026)]
+    postings = {
+        pl.REVENUE_LINES[0]: (200, 70), pl.OPENING_BALANCE_LINE: (9, 0),
+        pl.ONE_OFF_PORTFOLIO_PURCHASE_LINE: (-5, -8), pl.FIXED_LINES[0]: (-20, -70),
+        pl.BONUS_LINES[0]: (-4, 0), pl.BONUS_LINES[1]: (-3, -2),
+        pl.INVESTMENT_LINE: (-16, -40), pl.INTERNAL_TRANSFER_LINE: (4, -1),
+        'Возврат тела займа': (-2, -8), 'Займ приход': (8, 12),
+    }
+
+    def by_year(year, pf, allocation):
+        scale = 1 + series.index((pf, year))
+        amounts = {}
+        for line, (january, october) in postings.items():
+            amounts[line] = _months(january * scale)
+            amounts[line][10] = october * scale
+        return amounts
+
+    def batched(lines, years, month, pf, dim, projects, allocation):
+        assert (month, dim, projects, allocation) == (10, 'line', ['Портфель'], 'no_alloc')
+        monthly, cumulative = {}, {}
+        for year in years:
+            for line, values in by_year(year, pf, allocation).items():
+                if line in lines:
+                    monthly[year, line] = values[month]
+                    cumulative[year, line] = sum(values[m] for m in range(1, month + 1))
+        return monthly, cumulative
+
+    monkeypatch.setattr(pl, '_fetch_year', by_year)
+    monkeypatch.setattr(pl, '_fetch_statya3_detail', lambda *args: {})
+    monkeypatch.setattr(pl, '_batched_fetch', batched)
+    data = pl.dashboard2(10, series, [(2, 0), (2, 1)], ['Портфель'], 'no_alloc')
+    summaries = [pl.svod1(year, pf, 'no_alloc')['rows'] for pf, year in series]
+    assert [row['label'] for row in data['rows']] == [row['label'] for row in summaries[0]]
+    for index, row in enumerate(data['rows']):
+        if row['kind'] == 'header':
+            continue
+        for field, expected in [('month', [s[index]['vals'][9] for s in summaries]),
+                                ('ytd', [sum(s[index]['vals'][:10]) for s in summaries])]:
+            assert row[f'series_{field}'] == expected
+            assert row[f'delta_{field}'] == [expected[2] - expected[0], expected[2] - expected[1]]
+    final = data['rows'][-1]
+    assert final['detail_group'] == 'net_profit'
+    assert final['series_month'] == [-47, -94, -141]
+    for name, _, rows in pl.export_dashboard(data, 'Dashboard2'):
+        field = 'month' if 'Месяц' in name else 'ytd'
+        assert rows[-1] == [final['label'], *final[f'series_{field}'], *final[f'delta_{field}']]
+
+
 def test_overview_uses_one_off_purchase_as_variable_expense(monkeypatch):
     monkeypatch.setattr(
         pl_report,

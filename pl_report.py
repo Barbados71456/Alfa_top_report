@@ -79,7 +79,14 @@ FINANCING_LINES = [
     'Дивиденды учредителям',
 ]
 
-ALL_LINES = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES + BONUS_LINES + [INVESTMENT_LINE] + FINANCING_LINES
+PROFIT_LINES = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
+AFTER_BONUS_LINES = PROFIT_LINES + BONUS_LINES
+ALL_LINES = AFTER_BONUS_LINES + [INVESTMENT_LINE] + FINANCING_LINES
+PROFIT_DETAIL_GROUPS = {
+    'profit': PROFIT_LINES,
+    'after_bonus': AFTER_BONUS_LINES,
+    'net_profit': ALL_LINES,
+}
 
 SECTIONS = [
     ('  ВЫРУЧКА', REVENUE_LINES, 'Итого выручка'),
@@ -588,33 +595,48 @@ def dashboard2(month, series, deltas, projects=None, allocation='all'):
     """Dashboard2: Свод1-строки за один месяц, настраиваемые колонки сравнения
     (series = [(pf, year), ...], deltas = [(i, j), ...] => series[i]-series[j]),
     опционально отфильтровано по проектам. Кол-во SQL = 2 × число разных pf в series."""
-    all_lines = REVENUE_LINES + VARIABLE_LINES + FIXED_LINES
     by_pf = defaultdict(set)
     for pf, year in series:
         by_pf[pf].add(year)
 
     month_map, ytd_map = {}, {}
     for pf, years_set in by_pf.items():
-        m, y = _batched_fetch(all_lines, sorted(years_set), month, pf, dim='line', projects=projects, allocation=allocation)
+        m, y = _batched_fetch(ALL_LINES, sorted(years_set), month, pf, dim='line', projects=projects, allocation=allocation)
         for (yr, line), v in m.items():
             month_map[(pf, yr, line)] = v
         for (yr, line), v in y.items():
             ytd_map[(pf, yr, line)] = v
 
+    def comparison_row(label, lines, bold=False):
+        mm = {(pf, yr): sum(month_map.get((pf, yr, line), 0.0) for line in lines) for pf, yr in series}
+        ym = {(pf, yr): sum(ytd_map.get((pf, yr, line), 0.0) for line in lines) for pf, yr in series}
+        return _series_row(label, series, deltas, mm, ym, bold=bold, lines=lines, project=projects)
+
     rows = []
-    for header, lines, total_label in SECTIONS:
+
+    def add_section(header, lines):
         rows.append({'kind': 'header', 'label': header})
         for line in lines:
-            mm = {(pf, yr): month_map.get((pf, yr, line), 0.0) for pf, yr in series}
-            ym = {(pf, yr): ytd_map.get((pf, yr, line), 0.0) for pf, yr in series}
-            row = _series_row(line, series, deltas, mm, ym, lines=[line], project=projects)
+            row = comparison_row(line, [line])
             if _is_all_zero(row['series_month']) and _is_all_zero(row['series_ytd']):
                 continue
             rows.append(row)
 
-        mm = {(pf, yr): sum(month_map.get((pf, yr, l), 0.0) for l in lines) for pf, yr in series}
-        ym = {(pf, yr): sum(ytd_map.get((pf, yr, l), 0.0) for l in lines) for pf, yr in series}
-        rows.append(_series_row(total_label, series, deltas, mm, ym, bold=True, lines=lines, project=projects))
+    def add_profit(label, group):
+        row = comparison_row(label, PROFIT_DETAIL_GROUPS[group], bold=True)
+        row['detail_group'] = group
+        rows.append(row)
+
+    for header, lines, total_label in SECTIONS:
+        add_section(header, lines)
+        rows.append(comparison_row(total_label, lines, bold=True))
+    add_profit('ПРИБЫЛЬ', 'profit')
+    add_section('  БОНУСЫ МЕНЕДЖЕРОВ (% от ЧП) — с июня 2026', BONUS_LINES)
+    add_profit('Прибыль после бонусов', 'after_bonus')
+    add_section('  ИНВЕСТИЦИИ В ПОРТФЕЛИ', [INVESTMENT_LINE])
+    add_section('  ФИНАНСИРОВАНИЕ', FINANCING_LINES)
+    rows.append(comparison_row('Итого финансирование', FINANCING_LINES, bold=True))
+    add_profit('💰 ЧИСТАЯ ПРИБЫЛЬ / КЭШ ФЛОУ', 'net_profit')
     return {'rows': rows, 'series': series, 'deltas': deltas, 'month_name': MONTHS_RU[month - 1]}
 
 

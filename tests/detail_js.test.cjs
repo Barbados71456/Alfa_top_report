@@ -61,3 +61,14 @@ test('source strings are escaped in tooltip and deviation HTML', () => {
     assert.ok(!html.includes('<img'));
     assert.ok(html.includes('&lt;img'));
 });
+
+test('dashboard profit totals use a compact group in both detail requests', () => {
+    const {context, urls} = setup();
+    const common = {label: 'Profit', lineGroup: 'net_profit', mode: 'ytd'};
+    context.showCellDetail({...common, year: 2026, month: 10, pf: 'факт'});
+    context.showDeviationDetail({...common, a: 'факт:2026:10', b: 'прогноз:2026:10'});
+    for (const url of urls) {
+        assert.equal(url.searchParams.get('line_group'), 'net_profit');
+        assert.equal(url.searchParams.has('line'), false);
+    }
+});

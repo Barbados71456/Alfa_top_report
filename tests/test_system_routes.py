@@ -143,6 +143,22 @@ def test_expired_api_session_returns_json(web):
     assert response.is_json
 
 
+@pytest.mark.parametrize('endpoint,params', [
+    ('cell_detail', {'year': 2026, 'month': 10}),
+    ('deviation_detail', {'a': 'факт:2026:10', 'b': 'прогноз:2026:10'}),
+])
+def test_dashboard_profit_detail_expands_compact_group(web, monkeypatch, endpoint, params):
+    module, client, _ = web
+    detail = Mock(return_value={})
+    monkeypatch.setattr(module.pr, endpoint, detail)
+    path = '/api/' + endpoint
+    response = client.get(path, query_string=dict(params, line_group='net_profit', mode='ytd'))
+    assert response.status_code == 200
+    assert detail.call_args.args[0] == module.pr.ALL_LINES
+    assert detail.call_args.kwargs['mode'] == 'ytd'
+    assert client.get(path, query_string=dict(params, line_group='unknown')).status_code == 400
+
+
 def test_healthcheck_does_not_disclose_connection_details(web, monkeypatch):
     module, client, _ = web
     monkeypatch.setattr(module, 'query', Mock(side_effect=RuntimeError('private-host password=secret')))

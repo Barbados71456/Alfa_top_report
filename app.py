@@ -268,10 +268,19 @@ def svod1():
     return page, 200, {'Cache-Control': 'private, no-store'}
 
 
+def _detail_lines():
+    group = request.args.get('line_group')
+    if group is None:
+        return request.args.getlist('line')
+    if group not in pr.PROFIT_DETAIL_GROUPS:
+        raise BadRequest('Неизвестная группа статей')
+    return pr.PROFIT_DETAIL_GROUPS[group]
+
+
 @app.route('/api/cell_detail')
 @report_required
 def api_cell_detail():
-    lines = request.args.getlist('line')
+    lines = _detail_lines()
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
     pf = request.args.get('pf', 'факт')
@@ -344,7 +353,7 @@ def unitpl():
 @app.route('/api/deviation_detail')
 @report_required
 def api_deviation_detail():
-    lines = request.args.getlist('line')
+    lines = _detail_lines()
     projects = request.args.getlist('project') or None
     allocation = request.args.get('allocation', 'all')
     a = request.args.get('a', '')

@@ -47,7 +47,8 @@ function initAmountCells(root) {
 
         td.addEventListener('click', () => {
             showCellDetail({
-                lines: JSON.parse(td.dataset.lines),
+                lines: td.dataset.lines ? JSON.parse(td.dataset.lines) : [],
+                lineGroup: td.dataset.lineGroup,
                 year: td.dataset.year,
                 month: td.dataset.month,
                 pf: td.dataset.pf,
@@ -64,6 +65,14 @@ function initAmountCells(root) {
 
 let detailModalInstance = null;
 
+function setDetailLines(params, opts) {
+    if (opts.lineGroup) {
+        params.set('line_group', opts.lineGroup);
+    } else {
+        opts.lines.forEach(line => params.append('line', line));
+    }
+}
+
 function showCellDetail(opts) {
     const modalEl = document.getElementById('detailModal');
     detailModalInstance = detailModalInstance || new bootstrap.Modal(modalEl);
@@ -76,7 +85,7 @@ function showCellDetail(opts) {
 
     const params = new URLSearchParams({ year: opts.year, month: opts.month, pf: opts.pf,
         mode: opts.mode || 'month', allocation: opts.allocation || 'all' });
-    opts.lines.forEach(l => params.append('line', l));
+    setDetailLines(params, opts);
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
     if (opts.employee) opts.employee.forEach(e => params.append('employee', e));
 
@@ -159,7 +168,8 @@ function initDeltaCells(root) {
         td.dataset.deltaInit = '1';
         td.addEventListener('click', () => {
             showDeviationDetail({
-                lines: JSON.parse(td.dataset.lines),
+                lines: td.dataset.lines ? JSON.parse(td.dataset.lines) : [],
+                lineGroup: td.dataset.lineGroup,
                 projects: td.dataset.projects ? JSON.parse(td.dataset.projects) : null,
                 a: td.dataset.a,
                 b: td.dataset.b,
@@ -183,7 +193,7 @@ function showDeviationDetail(opts) {
 
     const params = new URLSearchParams({ a: opts.a, b: opts.b,
         mode: opts.mode || 'month', allocation: opts.allocation || 'all' });
-    opts.lines.forEach(l => params.append('line', l));
+    setDetailLines(params, opts);
     if (opts.projects) opts.projects.forEach(p => params.append('project', p));
 
     fetch('/api/deviation_detail?' + params.toString())
